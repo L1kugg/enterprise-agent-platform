@@ -58,5 +58,6 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
+config/
 node_modules/
 dist/

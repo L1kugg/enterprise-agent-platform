@@ -18,7 +18,7 @@ Spring AI `1.0.0-M6` 保持为当前可复现演示基线。官方稳定线已�
 
 | 组件 | 目标 |
 |---|---|
-| Spring AI BOM | 1.1.x stable line |
+| Spring AI BOM | 1.1.x 稳定线 |
 | Starter 命名 | `spring-ai-starter-*` |
 | 验证标准 | `mvn -DskipTests compile`、`mvn test`、集成测试、demo smoke、回归评测 |
 

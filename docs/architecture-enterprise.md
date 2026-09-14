@@ -1,52 +1,52 @@
-# Enterprise Architecture Notes
+# 企业架构说明
 
-## 1. Bounded Contexts
+## 1. 限界上下文
 
-- Conversation Context: chat, memory, history query
-- Knowledge Context: upload, parse, chunk, embed, retrieve
-- Security Context: api key lifecycle, jwt, permission checks
-- Operations Context: metrics, logs, tracing, alerting, drills
+- 会话上下文：聊天、记忆、历史查询
+- 知识上下文：上传、解析、切片、向量化、检索
+- 安全上下文：API Key 生命周期、JWT、权限校验
+- 运维上下文：指标、日志、链路追踪、告警、演练
 
-## 2. Data Ownership
+## 2. 数据归属
 
 - MySQL:
-  - `conversation` (chat history)
-  - `ingestion_job` (async job state)
+  - `conversation`（聊天历史）
+  - `ingestion_job`（异步任务状态）
   - `users/roles/permissions/api_keys/audit_log`
-  - business tables (`course/school/course_reservation`)
-- Vector Store:
-  - knowledge chunks and metadata
-- Local or object storage:
-  - original uploaded files
+  - 业务表（`course/school/course_reservation`）
+- 向量存储：
+  - 知识切片与元数据
+- 本地或对象存储：
+  - 上传的原始文件
 
-## 3. Reliability Design
+## 3. 可靠性设计
 
-- Idempotent ingestion by `X-Idempotency-Key`
-- Retry with bounded attempts and delay backoff
-- DLQ sink for terminal failures
-- Queue backend abstraction (Redis Stream / RabbitMQ)
+- 通过 `X-Idempotency-Key` 实现幂等入库
+- 重试次数有上限并带延迟退避
+- 终态失败写入 DLQ
+- 队列后端抽象（Redis Stream / RabbitMQ）
 
-## 4. Security Design
+## 4. 安全设计
 
-- API Key for machine access bootstrap
-- JWT for request-level authn/authz
-- Refresh token rotation
-- Tenant-scoped API key lifecycle (`X-Tenant-Id`)
-- Tenant + principal composite rate limiting
-- RBAC + route-level permission checks
-- Audit log retention scheduler
+- API Key 用于机器访问引导
+- JWT 用于请求级认证/授权
+- Refresh Token 轮换
+- 租户级 API Key 生命周期（`X-Tenant-Id`）
+- tenant + principal 复合维度限流
+- RBAC + 路由级权限校验
+- 审计日志保留策略定时任务
 
-## 5. Scalability Design
+## 5. 可扩展性设计
 
-- Stateless API instances can be horizontally scaled
-- Async ingestion decouples upload and vectorization cost
-- Vector backend can switch from local/simple to pgvector
-- Model router supports profile-based cost/quality routing
-- Observability stack enables saturation and error trend diagnosis
+- 无状态 API 实例可水平扩展
+- 异步入库解耦上传与向量化成本
+- 向量后端可从本地 simple 切换到 pgvector
+- 模型路由支持按 profile 的成本/质量路由
+- 可观测性栈支持饱和度与错误趋势诊断
 
-## 6. Operational Recommendations
+## 6. 运维建议
 
-- Keep `chatId` stable in clients to preserve conversation continuity
-- Set separate rate limits for chat and ingestion endpoints
-- Run periodic regression tests before and after dependency upgrades
-- Keep alert thresholds versioned together with code
+- 客户端保持 `chatId` 稳定，以保证会话连续性
+- 为聊天与入库端点设置独立限流
+- 依赖升级前后定期执行回归测试
+- 告警阈值与代码一同纳入版本管理

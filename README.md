@@ -522,7 +522,7 @@ docker compose -f docker-compose.observability.yml up -d
 - `/actuator/health`（含 Kubernetes liveness/readiness 探针）
 - `/actuator/prometheus`（HTTP 延迟、RAG 管线、JVM、HikariCP 等指标）
 - Grafana 预置仪表盘：Request Rate / P95 Latency / Error Rate / RAG Pipeline / Ingestion / JVM Heap / HikariCP Pool
-- 仪表盘文件：[`observability/grafana/dashboard.json`](observability/grafana/dashboard.json)，导入方式见 [docs/operations.md](docs/operations.md#2-grafana-dashboard-bundle)
+- 仪表盘文件：[`observability/grafana/dashboard.json`](observability/grafana/dashboard.json)，导入方式见 [docs/operations.md](docs/operations.md#2-grafana-仪表盘包)
 
 ### 日志
 

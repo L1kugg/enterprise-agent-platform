@@ -1,22 +1,22 @@
-# Roadmap
+# 路线图
 
-This roadmap tracks release-oriented improvements for KnowledgeOps Agent. Items may change as the project receives usage feedback and operational evidence.
+本路线图跟踪 KnowledgeOps Agent 面向发布的改进项。条目可能随项目收到的使用反馈与运维证据而调整。
 
-## v1.1.0 Focus
+## v1.1.0 重点
 
-The v1.1.0 cycle is focused on making the platform easier to deploy, observe, and extend in production-like environments.
+v1.1.0 周期聚焦于让平台在类生产环境中更易部署、观测与扩展。
 
-| Area | Item | Outcome |
+| 领域 | 条目 | 产出 |
 |---|---|---|
-| Security | OIDC/SAML SSO integration design | Enterprise identity integration path is documented and ready for implementation |
-| Retrieval | Pluggable reranker interface | Teams can compare rerankers without rewriting the RAG pipeline |
-| Observability | Grafana dashboard bundle | Operators get ready-made dashboards for API latency, ingestion, retrieval, and errors |
-| Deployment | Helm chart and Kubernetes guide | Users can move from Docker Compose to Kubernetes with clear defaults |
-| Agents | MCP tool bridge exploration | External tools can be connected through a standard agent-tool integration path |
+| 安全 | OIDC/SAML SSO 接入设计 | 企业身份接入路径已形成文档，可进入实现阶段 |
+| 检索 | 可插拔 reranker 接口 | 团队无需重写 RAG 管线即可对比不同 reranker |
+| 可观测性 | Grafana 仪表盘打包 | 运维人员获得开箱即用的 API 延迟、入库、检索与错误仪表盘 |
+| 部署 | Helm chart 与 Kubernetes 指南 | 用户可凭借清晰的默认配置从 Docker Compose 迁移到 Kubernetes |
+| Agent | MCP 工具桥接探索 | 外部工具可通过标准化的 agent-tool 集成路径接入 |
 
-## Backlog
+## 待办清单
 
-- Automated alert remediation scripts.
-- Larger multi-hop and hallucination evaluation sets.
-- Deployment evidence reports with screenshots and capacity notes.
-- More frontend console workflows for ingestion, audit, and cost governance.
+- 自动化告警处置脚本。
+- 更大规模的多跳与幻觉评测集。
+- 附带截图与容量说明的部署证据报告。
+- 更多面向入库、审计与成本治理的前端控制台工作流。

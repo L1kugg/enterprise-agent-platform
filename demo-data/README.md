@@ -1,16 +1,16 @@
-# Demo Data
+# 演示数据
 
-This directory contains small, reviewable sample documents for local RAG validation.
+本目录包含小体积、便于审查的示例文档，用于本地 RAG 验证。
 
-| File | Purpose |
+| 文件 | 用途 |
 |---|---|
-| `heat-safety-policy.txt` | Source text for the heat safety RAG scenario. |
-| `heat-safety-policy.pdf` | Upload this PDF through `/ingestion/upload/{chatId}` or the PDF endpoint. |
+| `heat-safety-policy.txt` | 高温安全 RAG 场景的源文本。 |
+| `heat-safety-policy.pdf` | 通过 `/ingestion/upload/{chatId}` 或 PDF 端点上传该文件。 |
 
-The sample content is intentionally non-sensitive and designed to exercise:
+示例内容刻意保持非敏感性，用于验证以下能力：
 
-- PDF upload and async ingestion.
-- Retrieval hit with citations.
-- Evidence snippet display.
-- Empty-result fallback behavior.
-- Tenant isolation checks.
+- PDF 上传与异步入库。
+- 带引用的检索命中。
+- 证据片段展示。
+- 空结果回退行为。
+- 租户隔离校验。

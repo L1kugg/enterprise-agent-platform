@@ -1,74 +1,74 @@
-# KnowledgeOps Agent Documentation
+# KnowledgeOps Agent 文档
 
-KnowledgeOps Agent is an enterprise Spring AI RAG platform for tenant-isolated retrieval, asynchronous document ingestion, governed agent workflows, audit-ready security, production observability, and regression evaluation.
+KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，覆盖租户隔离检索、异步入库、受治理的 Agent 工作流、可审计的安全体系、生产级可观测性与回归评测。
 
-![KnowledgeOps Agent architecture](assets/architecture-overview.svg)
+![KnowledgeOps Agent 架构](assets/architecture-overview.svg)
 
-## Choose Your Path
+## 按需选择路径
 
-| Goal | Start here | What you get |
+| 目标 | 从这里开始 | 覆盖内容 |
 |---|---|---|
-| Run it locally | [Getting Started](getting-started.md) | Docker Compose startup, health checks, auth token flow, and teardown |
-| Walk through the demo | [Reproducible Demo Script](demo-script.md) | Demo data, PDF upload, async ingestion, RAG questions, tenant and permission checks |
-| Call the API | [API Recipes](api-recipes.md) | Copyable curl examples for chat, RAG, ingestion, ReAct, and observability |
-| Understand the system | [Enterprise Architecture](architecture-enterprise.md), [Agent Harness](architecture-agent-harness.md) | Service boundaries, agent tool execution, data flow, security, and observability architecture |
-| Deploy it | [Enterprise Deployment Guide](deployment-enterprise.md) | Production topology, release checks, environment variables, and rollout notes |
-| Operate it | [Operations Manual](operations.md) | Metrics, logs, traces, alerting, incident drills, and regression checks |
-| Track future work | [Roadmap](roadmap.md) | v1.1.0 focus areas and backlog |
+| 本地运行 | [快速上手](getting-started.md) | Docker Compose 启动、健康检查、鉴权 token 流程、环境清理 |
+| 走一遍 Demo | [可复现 Demo 脚本](demo-script.md) | Demo 数据、PDF 上传、异步入库、RAG 问答、租户与权限校验 |
+| 调用 API | [API 示例](api-recipes.md) | 可直接复制的 curl 示例：chat、RAG、入库、ReAct、可观测 |
+| 理解系统架构 | [企业架构](architecture-enterprise.md)、[Agent Harness](architecture-agent-harness.md) | 服务边界、Agent 工具执行、数据流、安全与可观测架构 |
+| 部署上线 | [企业部署指南](deployment-enterprise.md) | 生产拓扑、发布检查项、环境变量与发布要点 |
+| 日常运维 | [运维手册](operations.md) | 指标、日志、链路追踪、告警、故障演练与回归检查 |
+| 跟踪后续规划 | [路线图](roadmap.md) | v1.1.0 重点方向与待办事项 |
 
-## Recommended First 15 Minutes
+## 建议的前 15 分钟上手路径
 
-1. Start with [Getting Started](getting-started.md) and run `./scripts/demo.sh`.
-2. Open [Reproducible Demo Script](demo-script.md) and upload `demo-data/heat-safety-policy.pdf`.
-3. Use [API Recipes](api-recipes.md) to exchange the demo API key for a JWT.
-4. Try `/ai/chat`, `/ingestion/upload/{chatId}`, then `/ai/pdf/chat`.
-5. Review [Enterprise Architecture](architecture-enterprise.md) before changing data flow or security boundaries.
-6. Check [Operations Manual](operations.md) before changing queue, vector store, or observability settings.
+1. 从 [快速上手](getting-started.md) 开始，运行 `./scripts/demo.sh`。
+2. 打开 [可复现 Demo 脚本](demo-script.md)，上传 `demo-data/heat-safety-policy.pdf`。
+3. 使用 [API 示例](api-recipes.md)，用演示 API Key 换取 JWT。
+4. 依次尝试 `/ai/chat`、`/ingestion/upload/{chatId}`、`/ai/pdf/chat`。
+5. 调整数据流或安全边界前，先阅读 [企业架构](architecture-enterprise.md)。
+6. 调整队列、向量存储或可观测配置前，先查阅 [运维手册](operations.md)。
 
-## Visual Proof
+## 可视化验证
 
-| Surface | Preview |
+| 界面 | 预览 |
 |---|---|
-| Console workspace | ![Console overview](assets/console-overview.png) |
-| RAG answer with citations | ![RAG answer with citations](assets/rag-answer-citations.png) |
+| 控制台工作区 | ![控制台总览](assets/console-overview.png) |
+| 带引用的 RAG 回答 | ![带引用的 RAG 回答](assets/rag-answer-citations.png) |
 
-## Documentation Map
+## 文档导航
 
-| Section | Documents |
+| 分类 | 文档 |
 |---|---|
-| Product overview | [Project README](https://github.com/however-yir/knowledgeops-agent#readme), [Roadmap](roadmap.md) |
-| Local evaluation | [Getting Started](getting-started.md), [Reproducible Demo Script](demo-script.md), [API Recipes](api-recipes.md) |
-| Architecture and deployment | [Enterprise Architecture](architecture-enterprise.md), [Agent Workflow](architecture-agent-workflow.md), [Agent Harness](architecture-agent-harness.md), [Enterprise Deployment Guide](deployment-enterprise.md) |
-| Operations | [Operations Manual](operations.md), [Distributed and Observability Drill](drills/distributed-and-observability-drill.md), [Runbook Template](drills/runbook_template.md) |
-| Technical talking points | [Evidence Checklist](talking-points/evidence-checklist.md) |
+| 项目概览 | [项目 README](https://github.com/however-yir/knowledgeops-agent#readme)、[路线图](roadmap.md) |
+| 本地体验 | [快速上手](getting-started.md)、[可复现 Demo 脚本](demo-script.md)、[API 示例](api-recipes.md) |
+| 架构与部署 | [企业架构](architecture-enterprise.md)、[Agent 工作流](architecture-agent-workflow.md)、[Agent Harness](architecture-agent-harness.md)、[企业部署指南](deployment-enterprise.md) |
+| 运维 | [运维手册](operations.md)、[分布式与可观测演练](drills/distributed-and-observability-drill.md)、[演练模板](drills/runbook_template.md) |
+| 技术讲解要点 | [证据清单](talking-points/evidence-checklist.md) |
 
-## Platform Capabilities
+## 平台能力
 
-| Area | Coverage |
+| 领域 | 覆盖范围 |
 |---|---|
-| AI workflows | Chat, PDF RAG, ReAct trace, governed agent harness, MCP adapter runtime, trusted workspace runtime, tool calling, conversation history |
-| Ingestion | Redis Stream or RabbitMQ queues, retries, DLQ, idempotency, status tracking |
-| Security | API Key, JWT, refresh tokens, RBAC, tenant isolation, rate limiting, audit logs |
-| Operations | Docker Compose, Flyway, Prometheus, Loki, Tempo, Alertmanager, structured logs |
-| Quality | CI, unit tests, integration tests, regression evaluation, k6 load tests |
+| AI 工作流 | Chat、PDF RAG、ReAct 轨迹、受治理的 agent harness、MCP 适配运行时、trusted workspace 运行时、工具调用、会话历史 |
+| 入库 | Redis Stream 或 RabbitMQ 队列、重试、DLQ、幂等、状态追踪 |
+| 安全 | API Key、JWT、Refresh Token、RBAC、租户隔离、限流、审计日志 |
+| 运维 | Docker Compose、Flyway、Prometheus、Loki、Tempo、Alertmanager、结构化日志 |
+| 质量 | CI、单元测试、集成测试、回归评测、k6 压测 |
 
-## Runtime Links
+## 运行时入口
 
-These links are available after the local stack is running:
+本地容器栈启动后，以下入口可用：
 
-| Surface | URL |
+| 界面 | URL |
 |---|---|
-| Frontend console | `http://localhost:8088` |
-| Backend API | `http://localhost:8080` |
+| 前端控制台 | `http://localhost:8088` |
+| 后端 API | `http://localhost:8080` |
 | Swagger UI | `http://localhost:8080/swagger-ui/index.html` |
 | OpenAPI JSON | `http://localhost:8080/v3/api-docs` |
-| Health | `http://localhost:8080/actuator/health` |
-| Prometheus metrics | `http://localhost:8080/actuator/prometheus` |
-| RabbitMQ console | `http://localhost:15672` |
+| 健康检查 | `http://localhost:8080/actuator/health` |
+| Prometheus 指标 | `http://localhost:8080/actuator/prometheus` |
+| RabbitMQ 控制台 | `http://localhost:15672` |
 
-## Release and Community
+## 版本与社区
 
-- Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
-- Roadmap milestone: [v1.1.0](https://github.com/however-yir/knowledgeops-agent/milestone/1)
-- Discussions: [GitHub Discussions](https://github.com/however-yir/knowledgeops-agent/discussions)
-- Source repository: [however-yir/knowledgeops-agent](https://github.com/however-yir/knowledgeops-agent)
+- 最新版本：[v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- 路线图里程碑：[v1.1.0](https://github.com/however-yir/knowledgeops-agent/milestone/1)
+- 讨论区：[GitHub Discussions](https://github.com/however-yir/knowledgeops-agent/discussions)
+- 源码仓库：[however-yir/knowledgeops-agent](https://github.com/however-yir/knowledgeops-agent)

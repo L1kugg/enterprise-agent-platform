@@ -8,8 +8,8 @@ KnowledgeOps Agent 通过 Prometheus + Grafana + Loki + Tempo 实现全链路可
 docker compose -f docker-compose.observability.yml up -d
 ```
 
-- Grafana: http://localhost:3000 (admin/admin)
-- Prometheus: http://localhost:9090
+- Grafana：http://localhost:3000 (admin/admin)
+- Prometheus：http://localhost:9090
 
 ## 核心指标
 

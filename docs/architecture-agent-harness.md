@@ -3,13 +3,13 @@
 Agent Harness 将 ReAct 循环中的工具执行从业务 service 中抽出，形成统一的动作执行层：
 
 ```text
-model decision
+模型决策
   -> AgentAction
   -> ActionPolicyGuard
   -> AgentRuntime
   -> AgentObservation
-  -> AgentWorkflowEngine events
-  -> trace / final answer
+  -> AgentWorkflowEngine 事件
+  -> trace / 最终答案
 ```
 
 ## 当前范围
@@ -17,7 +17,7 @@ model decision
 当前实现是 Harness MVP：内置业务工具默认可用；MCP 与 Workspace runtime 已接入，但都要求
 `AgentAction.trustedRuntimeAccess=true`。普通 ReAct 对话创建的 action 默认没有该权限，因此不会因为模型输出伪造而执行文件、命令或外部工具。受信动作必须先走 `/ai/harness/actions/preview` 生成一次性确认 token，再走 `/ai/harness/actions/execute/{token}` 执行。
 
-| Component | Responsibility |
+| 组件 | 职责 |
 |---|---|
 | `AgentAction` | 标准化模型输出的 action 名称、参数、tenant、chat、task、step 上下文 |
 | `ActionSchemaRegistry` | 固化 action schema：runtime、必填字段、可选字段、敏感字段、是否要求 trusted runtime |
@@ -46,7 +46,7 @@ model decision
 
 Harness 当前注册的 action：
 
-| Action | Runtime | Trust | Required input |
+| Action | Runtime | 信任级别 | 必填输入 |
 |---|---|---|---|
 | `query_school` | builtin | default | - |
 | `query_course` | builtin | default | - |
@@ -56,13 +56,13 @@ Harness 当前注册的 action：
 | `workspace_list_files` | workspace | trusted | - |
 | `workspace_read_file` | workspace | trusted | `path` |
 | `workspace_search_text` | workspace | trusted | `query` |
-| `workspace_propose_patch` | workspace | trusted | `path` plus `content` or `patch` |
-| `workspace_apply_patch` | workspace | trusted | `path` plus `content` or `patch` |
+| `workspace_propose_patch` | workspace | trusted | `path` 以及 `content` 或 `patch` |
+| `workspace_apply_patch` | workspace | trusted | `path` 以及 `content` 或 `patch` |
 | `workspace_run_shell` | workspace | trusted | `command` |
 
 不符合 schema 的 action 会在 runtime 之前被拒绝，并返回 `source=policy` 的 observation。
 
-## Policy and configuration
+## 策略与配置
 
 `app.agent-harness` 控制 runtime 边界：
 
@@ -146,13 +146,13 @@ public interface McpToolAdapter {
 
 生产环境如果要开放更强的文件或 shell 能力，下一步应把 `WorkspaceRuntime` 移到独立 sandbox 服务中。
 
-## Evaluation
+## 评测
 
 Harness 测试覆盖：
 
 - schema 校验与 policy 拒绝
 - 内置工具 runtime
-- MCP adapter dispatch
+- MCP adapter 分发
 - workspace 读/搜/写/命令边界
 - trusted action preview / execute API
 - unified diff propose / apply
