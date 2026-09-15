@@ -27,3 +27,4 @@ storage:
       path: /tmp/tempo/wal
     block:
       bloom_filter_false_positive: 0.05
+      index_downsample_bytes: 1000

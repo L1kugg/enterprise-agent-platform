@@ -1,27 +1,27 @@
-# 企业部署指南
+# Enterprise Deployment Guide
 
-## 1. 目标拓扑
+## 1. Target Topology
 
-推荐的生产基线配置：
+Recommended baseline for production:
 
-- API 服务：2-3 个无状态实例
-- MySQL：主从或托管高可用版本
-- Redis：哨兵/集群模式
-- RabbitMQ：镜像队列或托管消息服务
-- 向量存储：PostgreSQL + pgvector（独立实例）
-- 可观测性：Prometheus + Loki + Tempo + Alertmanager
+- API service: 2-3 stateless instances
+- MySQL: managed HA or primary-replica
+- Redis: sentinel/cluster mode
+- RabbitMQ: mirrored queues or managed MQ
+- Vector storage: PostgreSQL + pgvector (dedicated)
+- Observability: Prometheus + Loki + Tempo + Alertmanager
 
-## 2. 必需环境变量
+## 2. Required Environment Variables
 
-必填项：
+Mandatory:
 
 - `OPENAI_API_KEY`
-- `APP_JWT_SECRET`（32 字节以上）
+- `APP_JWT_SECRET` (32+ bytes)
 - `DB_URL`
 - `DB_USERNAME`
 - `DB_PASSWORD`
 
-强烈建议：
+Strongly recommended:
 
 - `APP_SECURITY_ENABLED=true`
 - `APP_RATE_LIMIT_ENABLED=true`
@@ -30,39 +30,39 @@
 - `APP_VECTOR_STORE_BACKEND=pgvector`
 - `APP_REQUIRE_PGVECTOR=true`
 
-## 3. 发布顺序
+## 3. Release Sequence
 
-1. 构建镜像：
+1. Build image:
    - `docker build -t knowledgeops-agent:<tag> .`
-2. 执行数据库迁移（由 Flyway 在启动时执行，或在流水线阶段执行）。
-3. 部署金丝雀实例。
-4. 验证：
+2. Apply DB migration (Flyway at startup or pipeline stage).
+3. Deploy canary instance.
+4. Verify:
    - `/actuator/health`
    - `/actuator/prometheus`
-   - 关键 API（`/ai/chat`、`/ai/pdf/chat`、`/auth/token`）
-5. 逐步切流。
-6. 执行部署后冒烟测试与回归测试。
+   - key APIs (`/ai/chat`, `/ai/pdf/chat`, `/auth/token`)
+5. Shift traffic gradually.
+6. Run post-deploy smoke + regression.
 
-## 4. 回滚策略
+## 4. Rollback Strategy
 
-- 保留上一版本镜像 tag 处于可用状态。
-- 优先回滚服务镜像。
-- 涉及 schema 变更时，发布前确保迁移向后兼容。
-- 队列堆积激增时，暂停入库消费者并逐步消化积压。
+- Keep previous image tag warm.
+- Roll back service image first.
+- For schema changes, ensure backward-compatible migration before release.
+- If queue backlog spikes, pause ingestion consumers and drain gradually.
 
-## 5. SLO 建议
+## 5. SLO Suggestions
 
-- Chat API 可用性：>= 99.9%
-- `/ai/chat` p95 延迟：<= 1500 ms
-- 入库失败率（5 分钟窗口）：<= 5%
-- critical 告警 MTTR：<= 30 分钟
+- Chat API availability: >= 99.9%
+- `/ai/chat` p95 latency: <= 1500 ms
+- Ingestion failure ratio (5m): <= 5%
+- MTTR for critical alerts: <= 30 min
 
-## 6. 生产前检查清单
+## 6. Pre-Production Checklist
 
-- [ ] 密钥已从 Vault/KMS/Secret Manager 加载
-- [ ] API Key 签发/吊销流程已验证
-- [ ] JWT 刷新流程已验证
-- [ ] 入库重试 + DLQ 已验证
-- [ ] 仪表盘与告警路由已验证
-- [ ] 压测基线已记录
-- [ ] 备份与恢复已演练（MySQL + 向量存储）
+- [ ] Secrets loaded from Vault/KMS/Secret Manager
+- [ ] API Key issue/revoke flow verified
+- [ ] JWT refresh flow verified
+- [ ] Ingestion retry + DLQ verified
+- [ ] Dashboard and alert routes verified
+- [ ] Load test baseline recorded
+- [ ] Backup and restore tested (MySQL + vector storage)

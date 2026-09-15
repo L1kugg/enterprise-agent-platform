@@ -1,60 +1,60 @@
-# 故障演练 Runbook 模板
+# Fault Drill Runbook Template
 
-## 1. 演练元信息
+## 1. Drill Metadata
 
-- 演练名称：
-- 日期：
-- 执行人：
-- 环境：
-- 版本 / Commit：
+- Drill Name:
+- Date:
+- Operator:
+- Environment:
+- Version / Commit:
 
-## 2. 目标
+## 2. Objective
 
-- 主 SLO/SLA 目标：
-- 假设：
-- 成功标准：
+- Primary SLO/SLA objective:
+- Hypothesis:
+- Success criteria:
 
-## 3. 范围与前置条件
+## 3. Scope and Preconditions
 
-- 纳入演练的服务：
-- 纳入演练的依赖：
-- 基线指标快照已完成：`yes/no`
-- 已通知干系人：`yes/no`
-- 回滚负责人已确认：`yes/no`
+- Services in scope:
+- Dependencies in scope:
+- Baseline metrics snapshot completed: `yes/no`
+- Stakeholders notified: `yes/no`
+- Rollback owner confirmed: `yes/no`
 
-## 4. 演练流程
+## 4. Drill Procedure
 
-1. 开始时间：
-2. 触发动作：
-3. 观察关键指标：
-4. 观察日志/链路追踪：
-5. 验证告警链路：
-6. 恢复动作：
-7. 结束时间：
+1. Start time:
+2. Trigger action:
+3. Observe key metrics:
+4. Observe logs/traces:
+5. Validate alerting path:
+6. Recovery action:
+7. End time:
 
-## 5. 证据
+## 5. Evidence
 
-- 面板截图：
-- 告警截图（触发 + 恢复）：
-- Trace ID 列表：
-- 关键日志片段：
-- k6 汇总/报告路径：
+- Dashboard screenshots:
+- Alert screenshots (firing + resolved):
+- Trace IDs:
+- Key log snippets:
+- k6 summary/report paths:
   - `reports/performance/distributed-k6-summary.json`
   - `reports/performance/k6-report.md`
 
-## 6. 结果
+## 6. Results
 
-| 指标 | 基线 | 演练峰值 | 目标 | 结果 |
+| Indicator | Baseline | Drill Peak | Target | Result |
 |---|---:|---:|---:|---|
-| p95 延迟（ms） |  |  |  |  |
-| 错误率（%） |  |  |  |  |
-| 队列积压 |  |  |  |  |
-| 入库失败率（%） |  |  |  |  |
+| p95 latency (ms) |  |  |  |  |
+| error rate (%) |  |  |  |  |
+| queue lag |  |  |  |  |
+| ingestion failure ratio (%) |  |  |  |  |
 
-## 7. 结论与跟进
+## 7. Findings and Follow-up
 
-- 符合预期的部分：
-- 出现问题的部分：
-- 根因：
-- 跟进事项：
-- 负责人与截止日期：
+- What worked:
+- What failed:
+- Root cause:
+- Follow-up actions:
+- Owner and due date:

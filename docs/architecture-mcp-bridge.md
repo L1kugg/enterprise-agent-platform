@@ -22,16 +22,16 @@ flowchart LR
         RL[ReAct Loop]
     end
 
-    subgraph BRIDGE[MCP 桥接]
+    subgraph MCP Bridge
         REG[McpToolRegistry]
         PROXY[McpToolProxy]
         TRANSPORT[TransportManager]
     end
 
-    subgraph SRV[MCP 服务器]
-        S1[stdio 服务器 A<br/>如 database-query]
-        S2[stdio 服务器 B<br/>如 code-runner]
-        S3[SSE 服务器 C<br/>如 calendar-api]
+    subgraph MCP Servers
+        S1[stdio Server A<br/>e.g. database-query]
+        S2[stdio Server B<br/>e.g. code-runner]
+        S3[SSE Server C<br/>e.g. calendar-api]
     end
 
     AWE --> RL --> TL

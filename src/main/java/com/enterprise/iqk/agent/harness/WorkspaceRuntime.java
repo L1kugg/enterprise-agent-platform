@@ -128,7 +128,13 @@ public class WorkspaceRuntime implements AgentRuntime {
                     .limit(Math.max(1, harnessProperties.getWorkspace().getMaxSearchFiles()))
                     .toList();
             for (Path path : candidates) {
-                if (matches.size() >= maxMatches || Files.size(path) > 1_000_000) {
+                // Already collected enough matches; stop walking the candidate
+                // list instead of continuing to open and skip every remaining
+                // file.
+                if (matches.size() >= maxMatches) {
+                    break;
+                }
+                if (Files.size(path) > 1_000_000) {
                     continue;
                 }
                 List<String> lines;
@@ -156,6 +162,24 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
+        // Cap the proposed file size the same way readFile caps read size.
+        // Without this an LLM-driven agent invocation of workspace_propose_patch
+        // could submit a multi-megabyte content / patch and cause the worker
+        // to allocate a matching string, then applyPatch to write the file.
+        int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
+        if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "content exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (patch.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "patch exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (Files.exists(path) && Files.isRegularFile(path)
+                && Files.size(path) > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "existing file exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
         String oldContent = Files.exists(path) && Files.isRegularFile(path)
                 ? Files.readString(path, StandardCharsets.UTF_8)
                 : "";
@@ -179,12 +203,27 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
+        // Cap the same way proposePatch does so a caller cannot bypass the
+        // preview cap by going straight to apply.
+        int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
+        if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "content exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (patch.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "patch exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
         String nextContent = content;
         if (StringUtils.hasText(patch)) {
             String oldContent = Files.exists(path) && Files.isRegularFile(path)
                     ? Files.readString(path, StandardCharsets.UTF_8)
                     : "";
             nextContent = diffService.apply(oldContent, patch);
+        }
+        if (nextContent.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "resulting content exceeds maxFileBytes (" + maxFileBytes + ")");
         }
         Path parent = path.getParent();
         if (parent != null) {
@@ -212,26 +251,31 @@ public class WorkspaceRuntime implements AgentRuntime {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspaceRoot.toFile());
         Process process = builder.start();
-        CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getInputStream()));
-        CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getErrorStream()));
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
+        try {
+            CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getInputStream()));
+            CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getErrorStream()));
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                return Map.of("status", "error", "message", "command timed out");
+            }
+            ProcessOutput stdoutOutput = stdout.join();
+            ProcessOutput stderrOutput = stderr.join();
+            String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
+            String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
+            return Map.of(
+                    "exitCode", process.exitValue(),
+                    "stdout", stdoutText,
+                    "stderr", stderrText,
+                    "output", stdoutText + stderrText,
+                    "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
+            );
+        } finally {
+            // No-op for an already-exited process; guarantees the child is reaped even
+            // when waitFor is interrupted, so no handle is left behind.
             process.destroyForcibly();
-            return Map.of("status", "error", "message", "command timed out");
         }
-        ProcessOutput stdoutOutput = stdout.join();
-        ProcessOutput stderrOutput = stderr.join();
-        String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
-        String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
-        return Map.of(
-                "exitCode", process.exitValue(),
-                "stdout", stdoutText,
-                "stderr", stderrText,
-                "output", stdoutText + stderrText,
-                "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
-        );
     }
 
     private Map<String, Object> fileSummary(Path path) {
@@ -305,20 +349,113 @@ public class WorkspaceRuntime implements AgentRuntime {
             return command.size() == 1;
         }
         if ("ls".equals(executable) || "rg".equals(executable)) {
-            return true;
+            // Non-flag arguments are filesystem paths (for rg the first non-flag token
+            // is the pattern, which can only fail closed); reject anything resolving
+            // outside the workspace root so the shell cannot be used to read host files.
+            return argsWithinWorkspace(command.subList(1, command.size()));
         }
         if ("git".equals(executable)) {
             return command.size() >= 2
-                    && harnessProperties.getWorkspace().getAllowedGitSubcommands().contains(command.get(1));
+                    && harnessProperties.getWorkspace().getAllowedGitSubcommands().contains(command.get(1))
+                    && argsAreSafeGitFlags(command.subList(2, command.size()));
         }
         if ("mvn".equals(executable)) {
             return command.stream().anyMatch("test"::equals)
-                    && command.stream().allMatch(token -> "mvn".equals(token)
-                    || "test".equals(token)
-                    || "-q".equals(token)
-                    || token.startsWith("-D"));
+                    && command.stream().allMatch(this::isAllowedMvnTestToken);
         }
         return false;
+    }
+
+    /**
+     * mvn test allow-list: -q, -D&lt;name&gt;=&lt;value&gt; where the property
+     * name starts with one of the known-safe prefixes. Without this, a
+     * prompt-injected or misconfigured LLM-driven agent invocation of
+     * workspace_run_shell could pass
+     *   mvn test -DargLine="-javaagent:/tmp/evil.jar"
+     *   mvn test -Dsurefire.suiteXmlFiles=/tmp/evil.xml
+     * to make the Surefire test JVM load a hostile Java agent or run a
+     * custom suite XML — bypassing the workspace sandbox from inside the
+     * test process.
+     */
+    private static final java.util.Set<String> SAFE_MVN_PROPERTY_PREFIXES = java.util.Set.of(
+            // Surefire test selection knobs the user would actually want to
+            // pass through. Anything else (argLine, exec.executable,
+            // surefire.suiteXmlFiles, maven.compiler, etc.) can influence
+            // the test JVM classpath or execution and is refused.
+            "test=",
+            "groups=",
+            "excludedGroups=",
+            "failIfNoTests=",
+            "skipTests=",
+            "maven.test.skip="
+    );
+
+    private boolean isAllowedMvnTestToken(String token) {
+        if ("mvn".equals(token) || "test".equals(token) || "-q".equals(token)) {
+            return true;
+        }
+        if (token.startsWith("-D")) {
+            String property = token.substring(2);
+            for (String prefix : SAFE_MVN_PROPERTY_PREFIXES) {
+                if (property.startsWith(prefix)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * git flag deny-list: every flag passed to a whitelisted git subcommand
+     * must not match any of these. The main concern is --output which makes
+     * git log / git show write to a host path, defeating the workspace
+     * sandbox. --exec / --upload-pack / --receive-pack accept an
+     * attacker-controlled command and are also refused.
+     */
+    private static final java.util.Set<String> UNSAFE_GIT_FLAGS = java.util.Set.of(
+            "--output", "-o", "--exec", "--upload-pack", "--receive-pack",
+            "--ssh-command");
+
+    private boolean argsAreSafeGitFlags(java.util.List<String> args) {
+        return args.stream().filter(a -> a.startsWith("-"))
+                .map(this::stripOptionValue)
+                .noneMatch(UNSAFE_GIT_FLAGS::contains);
+    }
+
+    private String stripOptionValue(String arg) {
+        int eq = arg.indexOf('=');
+        return eq < 0 ? arg : arg.substring(0, eq);
+    }
+
+    private boolean argsWithinWorkspace(List<String> args) {
+        for (String arg : args) {
+            if (arg.startsWith("-")) {
+                // Reject options that cause the underlying tool to execute
+                // commands or read arbitrary host files. ripgrep's --pre and
+                // --pre-glob run a shell command before each file is
+                // searched; --hostname-bin and --regexp-file read files
+                // from the host filesystem. ls / git do not currently have
+                // equivalents, so the option-list approach keeps the
+                // allow-list narrow.
+                String normalized = stripOptionValue(arg);
+                if (normalized.startsWith("--pre")
+                        || normalized.startsWith("--pre-glob")
+                        || normalized.equals("--hostname-bin")
+                        || normalized.equals("--regexp-file")) {
+                    return false;
+                }
+                continue;
+            }
+            try {
+                Path resolved = workspaceRoot.resolve(arg).normalize();
+                if (!resolved.startsWith(workspaceRoot)) {
+                    return false;
+                }
+            } catch (Exception ex) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private int maxCommandOutputBytes() {

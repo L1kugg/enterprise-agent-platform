@@ -30,6 +30,9 @@ public class TrustedActionService {
 
         String token = "ta-" + UUID.randomUUID().toString().replace("-", "");
         Instant expiresAt = Instant.now().plus(TOKEN_TTL);
+        // Sweep tokens whose TTL elapsed without ever being executed; otherwise the
+        // pending map keeps growing for the lifetime of the process.
+        pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
         pendingActions.put(token, new PendingTrustedAction(action, expiresAt));
         return new TrustedActionPreviewResponse(
                 1,
@@ -40,9 +43,17 @@ public class TrustedActionService {
         );
     }
 
-    public AgentObservation execute(String token) {
-        PendingTrustedAction pending = pendingActions.remove(token);
-        if (pending == null) {
+    public AgentObservation execute(String token, String tenantId) {
+        // Opportunistically drop expired tokens here as well: the preview
+        // path is the only place that sweeps the map, so an operator that
+        // only ever calls execute (e.g. an automated confirm loop) would
+        // otherwise let expired tokens accumulate until the next preview.
+        pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
+        PendingTrustedAction pending = pendingActions.get(token);
+        if (pending == null || !pending.action().tenantId().equals(tenantId)) {
+            return AgentObservation.error("trusted-action", "trusted action token not found", 0);
+        }
+        if (!pendingActions.remove(token, pending)) {
             return AgentObservation.error("trusted-action", "trusted action token not found", 0);
         }
         if (pending.expiresAt().isBefore(Instant.now())) {

@@ -1,5 +1,6 @@
 package com.enterprise.iqk.graph;
 
+import com.enterprise.iqk.util.SqlLikeUtils;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,7 +27,7 @@ public class GraphService {
      */
     public List<KgEntityRecord> searchEntities(String tenantId, String keyword, int limit) {
         if (!StringUtils.hasText(keyword)) return List.of();
-        return entityMapper.searchByName(tenantId, keyword.trim(), Math.max(1, limit));
+        return entityMapper.searchByName(tenantId, SqlLikeUtils.escapeForLike(keyword.trim()), Math.max(1, limit));
     }
 
     /**
@@ -41,7 +42,7 @@ public class GraphService {
             String neighborId = rel.getSourceEntityId().equals(entityId)
                     ? rel.getTargetEntityId() : rel.getSourceEntityId();
             KgEntityRecord entity = entityCache.computeIfAbsent(neighborId,
-                    id -> entityMapper.findByEntityId(id));
+                    id -> entityMapper.findByEntityId(tenantId, id));
             if (entity == null) continue;
             boolean outgoing = rel.getSourceEntityId().equals(entityId);
             neighbors.add(GraphNeighbor.builder()
@@ -59,7 +60,7 @@ public class GraphService {
      */
     public List<KgFactRecord> searchFacts(String tenantId, String keyword, int limit) {
         if (!StringUtils.hasText(keyword)) return List.of();
-        return factMapper.searchByKeyword(tenantId, keyword.trim(), Math.max(1, limit));
+        return factMapper.searchByKeyword(tenantId, SqlLikeUtils.escapeForLike(keyword.trim()), Math.max(1, limit));
     }
 
     /**

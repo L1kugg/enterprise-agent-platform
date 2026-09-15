@@ -1,66 +1,73 @@
-# 运维手册
+# Operations Guide
 
-## 1. 可观测性栈启动
+## 1. Observability Stack Startup
 
 ```bash
 docker compose -f docker-compose.observability.yml up -d
 ```
 
-访问入口：
+Access endpoints:
 
-- Prometheus：`http://localhost:9090`
-- Loki：`http://localhost:3100`
-- Tempo：`http://localhost:3200`
-- Alertmanager：`http://localhost:9093`
+- Prometheus: `http://localhost:9090`
+- Loki: `http://localhost:3100`
+- Tempo: `http://localhost:3200`
+- Alertmanager: `http://localhost:9093`
 
-## 2. Grafana 仪表盘包
+## 2. Grafana Dashboard Bundle
 
-预置的 Grafana 仪表盘位于 `observability/grafana/dashboard.json`。
+A pre-built Grafana dashboard is available at `observability/grafana/dashboard.json`.
 
-**导入方式：**
-1. 打开 Grafana → Dashboards → Import
-2. 上传 `dashboard.json` 或粘贴其内容
-3. 选择 Prometheus 数据源
-4. 点击 Import
+**Import:**
+1. Open Grafana → Dashboards → Import
+2. Upload `dashboard.json` or paste its contents
+3. Select your Prometheus data source
+4. Click Import
 
-**包含面板：**
-- Request Rate / P95 Latency / Error Rate（HTTP 层）
-- RAG Pipeline Latency（检索、重排、管线 p95）
-- ReAct Stream Latency（总延迟、首 token p95）
-- Ingestion Jobs（提交、成功、失败速率）
+**Panels included:**
+- Request Rate / P95 Latency / Error Rate (HTTP layer)
+- RAG Pipeline Latency (retrieval, rerank, pipeline p95)
+- ReAct Stream Latency (total, first-token p95)
+- Ingestion Jobs (submitted, success, failed rates)
 - Ingestion Duration P95
-- JVM Heap Usage（含阈值告警）
-- HikariCP Pool（活跃、空闲、等待连接数）
+- JVM Heap Usage (with threshold alerts)
+- HikariCP Pool (active, idle, pending connections)
 - Tool Query P95 by Tool
 
-## 3. 核心告警
+## 3. Core Alerts
 
-- `HighHttpP95Latency`：p95 > 1.5s 持续 5 分钟
-- `IngestionFailureRateHigh`：入库失败率 > 5%
+- `HighHttpP95Latency`: p95 > 1.5s for 5m
+- `IngestionFailureRateHigh`: ingestion failed ratio > 5%
 
-## 4. 队列后端模式
+## 4. Queue Backend Modes
 
-- Redis Stream：`APP_INGESTION_QUEUE_BACKEND=redis_stream`
-- RabbitMQ：`APP_INGESTION_QUEUE_BACKEND=rabbitmq`
-- DB 轮询兜底：`APP_INGESTION_QUEUE_BACKEND=db_polling`
+- Redis Stream: `APP_INGESTION_QUEUE_BACKEND=redis_stream`
+- RabbitMQ: `APP_INGESTION_QUEUE_BACKEND=rabbitmq`
+- DB polling fallback: `APP_INGESTION_QUEUE_BACKEND=db_polling`
 
-终态失败任务进入 DLQ 流/队列。
+All backends consume jobs automatically when `APP_INGESTION_WORKER_ENABLED=true`
+(default). With the worker disabled (e.g. the dev profile), db_polling jobs stay
+PENDING until an admin triggers `POST /ingestion/jobs/process?jobId=...` manually.
 
-## 5. 日志采集
+Terminal failures enter DLQ stream/queue.
 
-- 应用日志文件：`logs/knowledgeops-agent.log`
-- Promtail 抓取 `logs/*.log` 并推送到 Loki
-- 链路与请求关联字段：`trace_id`、`request_id`、`chat_id`
+## 5. Log Shipping
 
-## 6. 夜间回归评测
+- Application log file: `logs/knowledgeops-agent.log`
+- Promtail scrapes `logs/*.log` and pushes to Loki
+- Trace and request correlation fields: `trace_id`, `request_id`, `chat_id`
+
+## 6. Nightly Evaluator Contract Check
 
 ```bash
 python3 scripts/generate_eval_dataset.py
-python3 scripts/generate_eval_predictions.py
-python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
+python3 scripts/generate_eval_contract_fixture.py --dataset evaluation/dataset.large.json --output evaluation/predictions.contract.json
+python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.contract.json --report-dir reports/evaluation-contract --threshold 0.75
 ```
 
-## 7. 性能验证
+This scheduled job validates the evaluator contract only. Model-quality evidence
+comes from `eval_live_runner.py` plus `run_regression.py --require-live-predictions`.
+
+## 7. Performance Validation
 
 ```bash
 k6 run performance/k6/chat_ingestion_load.js -e BASE_URL=http://localhost:8080
@@ -68,10 +75,10 @@ k6 run performance/k6/distributed_chat_ingestion.js -e BASE_URL=http://localhost
 python3 performance/k6/generate_report.py --summary reports/performance/distributed-k6-summary.json
 ```
 
-## 8. 故障排查手册
+## 8. Incident Triage Playbook
 
-1. 确认应用健康端点与各依赖可用性。
-2. 检查入库队列堆积与失败任务。
-3. 按 `trace_id` 串联关联日志。
-4. 在 Prometheus 中查看 p95 延迟与错误率突增。
-5. SLA 持续恶化时触发降级或回滚。
+1. Verify app health endpoint and dependency availability.
+2. Check ingestion queue lag and failed jobs.
+3. Correlate logs by `trace_id`.
+4. Review p95 latency and error spikes in Prometheus.
+5. Trigger fallback or rollback if SLA continues to degrade.

@@ -40,6 +40,8 @@ reports/regression/latest.json
 reports/regression/latest.md
 evaluation/predictions.generated.json
 evaluation/predictions.live.json
+evaluation/ragproof/baseline.json
+reports/ragproof/
 logs/*.log
 coverage/
 tmp/
@@ -58,6 +60,8 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
-config/
 node_modules/
 dist/
+
+# Local work files (not part of the project, kept out of source control).
+考研入警准备手册.txt

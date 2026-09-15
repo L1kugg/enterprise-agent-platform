@@ -1,4 +1,4 @@
-# 智能问答与知识检索平台简历升级清单
+# Intelligent Q&A Knowledge Retrieval Platform Resume Upgrade Checklist
 
 ## 1. 功能
 - [x] 聊天 / 工具调用 / PDF RAG / 会话历史
@@ -26,6 +26,6 @@
 
 ## 4. 测试
 - [x] Controller / Service / Security / Ingestion 测试
-- [x] 回归数据集 + 报告流水线
+- [x] Regression dataset + report pipeline
 - [x] ModelRouter 单元测试
 - [ ] 更大规模多跳与幻觉评测集

@@ -2,12 +2,10 @@ package com.enterprise.iqk.agent.research;
 
 import com.enterprise.iqk.agent.workflow.AgentWorkflowEngine;
 import com.enterprise.iqk.agent.workflow.WorkflowState;
-import com.enterprise.iqk.rag.HybridRagAnswerService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.security.TenantContext;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -43,7 +41,7 @@ public class DeepResearchService {
             var planStep = workflowEngine.startStep(task.getTaskId(), "ResearchPlanner", 1,
                     Map.of("topic", request.getTopic()));
             ResearchPlannerAgent.ResearchPlan plan = plannerAgent.plan(
-                    request.getTopic(), normalizedTenant, request.getModelProfile());
+                    request.getTopic(), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(planStep.getStepId(), "COMPLETED",
                     Map.of("subQuestions", plan.subQuestions(), "strategy", plan.strategy()),
                     plan, null, null, null, 0, 0,
@@ -63,9 +61,10 @@ public class DeepResearchService {
 
                 StringBuilder finding = new StringBuilder("## " + subQ + "\n\n");
                 for (ScoredDocument doc : retrieval.documents()) {
+                    String content = doc.getContent() == null ? "" : doc.getContent();
                     finding.append("- [").append(doc.getSourceType()).append("] ")
                             .append(doc.getTitle()).append(": ")
-                            .append(doc.getContent().substring(0, Math.min(200, doc.getContent().length())))
+                            .append(content, 0, Math.min(200, content.length()))
                             .append("\n");
                 }
                 findings.add(finding.toString());
@@ -82,7 +81,7 @@ public class DeepResearchService {
             var writeStep = workflowEngine.startStep(task.getTaskId(), "ReportWriter", stepNum,
                     Map.of("topic", request.getTopic()));
             String report = writerAgent.writeReport(request.getTopic(),
-                    String.join("\n\n", findings), normalizedTenant, request.getModelProfile());
+                    String.join("\n\n", findings), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(writeStep.getStepId(), "COMPLETED",
                     Map.of("reportLength", report.length()), report,
                     null, null, null, 0, 0, 0, null);
@@ -98,17 +97,12 @@ public class DeepResearchService {
                     .status("DONE")
                     .build();
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Deep research failed for task {}", task.getTaskId(), e);
             workflowEngine.failTask(task.getTaskId(), e.getMessage());
             workflowEngine.recordTaskMetrics("DEEP_RESEARCH", "FAILED",
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs));
-            return DeepResearchResult.builder()
-                    .taskId(task.getTaskId())
-                    .topic(request.getTopic())
-                    .report("Research failed: " + e.getMessage())
-                    .status("FAILED")
-                    .build();
+            throw e;
         }
     }
 

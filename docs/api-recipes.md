@@ -1,8 +1,8 @@
-# API 示例
+# API Recipes
 
-以下示例假设本地 Docker Compose 服务栈已运行在 `http://localhost:8080`。
+These recipes assume the local Docker Compose stack is running on `http://localhost:8080`.
 
-## 通用请求头
+## Common Headers
 
 ```bash
 export BASE_URL=http://localhost:8080
@@ -10,13 +10,17 @@ export API_KEY=<local-demo-api-key>
 export TENANT_ID=default
 ```
 
-大多数本地示例可直接使用预置的 API Key：
+Most local examples can use the seeded API key:
 
 ```bash
 -H "X-API-Key: $API_KEY" -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-如需基于 JWT 的调用，请将 `API_KEY` 设置为 `.env.example` 中的开发预置值，并先用 API Key 换取 JWT：
+When security is enabled, the API key or JWT tenant is authoritative and the
+tenant header cannot switch authorization scope. The header remains in these
+recipes for local demo correlation and must match the API key during token exchange.
+
+For JWT-based calls, set `API_KEY` to the seeded development value from `.env.example`, then exchange the API key first:
 
 ```bash
 curl -X POST "$BASE_URL/auth/token" \
@@ -24,7 +28,7 @@ curl -X POST "$BASE_URL/auth/token" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-## 对话
+## Chat
 
 ```bash
 curl "$BASE_URL/ai/chat?prompt=Summarize%20KnowledgeOps%20Agent&chatId=demo-chat" \
@@ -32,13 +36,13 @@ curl "$BASE_URL/ai/chat?prompt=Summarize%20KnowledgeOps%20Agent&chatId=demo-chat
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-可选查询参数：
+Optional query parameters:
 
 - `modelProfile=economy`
 - `modelProfile=balanced`
 - `modelProfile=quality`
 
-## 上传 PDF 用于入库
+## Upload a PDF for Ingestion
 
 ```bash
 curl -X POST "$BASE_URL/ingestion/upload/demo-rag" \
@@ -48,7 +52,7 @@ curl -X POST "$BASE_URL/ingestion/upload/demo-rag" \
   -F "file=@demo-data/heat-safety-policy.pdf"
 ```
 
-查看返回的 `jobId`：
+Check the returned `jobId`:
 
 ```bash
 curl "$BASE_URL/ingestion/jobs/<jobId>" \
@@ -56,7 +60,7 @@ curl "$BASE_URL/ingestion/jobs/<jobId>" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-列出某个会话最近的入库任务：
+List recent ingestion jobs for a chat:
 
 ```bash
 curl "$BASE_URL/ingestion/jobs?chatId=demo-rag&limit=20" \
@@ -64,7 +68,7 @@ curl "$BASE_URL/ingestion/jobs?chatId=demo-rag&limit=20" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-## 调用 PDF RAG 问答接口
+## Ask the PDF RAG Endpoint
 
 ```bash
 curl "$BASE_URL/ai/pdf/chat?prompt=What%20are%20the%20key%20points%3F&chatId=demo-rag" \
@@ -72,11 +76,11 @@ curl "$BASE_URL/ai/pdf/chat?prompt=What%20are%20the%20key%20points%3F&chatId=dem
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-当存在匹配的知识来源时，响应中会包含答案文本与引用信息。
+The response includes answer text and citation lines when matching sources are available.
 
-## ReAct 智能体
+## ReAct Agent
 
-JSON 响应：
+JSON response:
 
 ```bash
 curl -X POST "$BASE_URL/ai/react/chat" \
@@ -86,7 +90,7 @@ curl -X POST "$BASE_URL/ai/react/chat" \
   -d '{"prompt":"Find the next useful operations check","chatId":"react-demo","modelProfile":"balanced"}'
 ```
 
-SSE 流式响应：
+SSE stream:
 
 ```bash
 curl -N -X POST "$BASE_URL/ai/react/chat/stream" \
@@ -96,7 +100,7 @@ curl -N -X POST "$BASE_URL/ai/react/chat/stream" \
   -d '{"prompt":"Explain the ingestion pipeline","chatId":"react-stream-demo"}'
 ```
 
-## 历史与审计
+## History and Audit
 
 ```bash
 curl "$BASE_URL/ai/history/chat" \
@@ -108,11 +112,11 @@ curl "$BASE_URL/audit/logs" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-## 健康检查与可观测
+## Health and Observability
 
 ```bash
 curl "$BASE_URL/actuator/health"
 curl "$BASE_URL/actuator/prometheus"
 ```
 
-日志、链路追踪、告警与演练流程请继续阅读[运维手册](operations.md)。
+For logs, traces, alerting, and drill workflows, continue with [Operations Manual](operations.md).

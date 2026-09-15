@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -25,7 +27,7 @@ public class ResearchPlannerAgent {
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
 
-    public ResearchPlan plan(String topic, String tenantId, String modelProfile) {
+    public ResearchPlan plan(String topic, String conversationId, String tenantId, String modelProfile) {
         String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n".formatted(topic);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
@@ -34,6 +36,7 @@ public class ResearchPlannerAgent {
 
         String raw = chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .system("You are a research planner. Decompose complex topics into sub-questions. Return JSON only.")
                 .user(prompt)
                 .call()
@@ -45,15 +48,30 @@ public class ResearchPlannerAgent {
         try {
             String json = extractJson(raw);
             Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-            @SuppressWarnings("unchecked")
-            List<String> subQuestions = (List<String>) parsed.getOrDefault("subQuestions", List.of());
-            @SuppressWarnings("unchecked")
-            List<String> keywords = (List<String>) parsed.getOrDefault("keywords", List.of());
-            String strategy = (String) parsed.getOrDefault("strategy", "breadth_first");
+            List<String> subQuestions = toStringList(parsed.get("subQuestions"));
+            if (subQuestions.isEmpty()) {
+                subQuestions = List.of(topic);
+            }
+            List<String> keywords = toStringList(parsed.get("keywords"));
+            String strategy = parsed.get("strategy") instanceof String s ? s : "breadth_first";
             return new ResearchPlan(subQuestions, keywords, strategy);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return new ResearchPlan(List.of(topic), List.of(), "direct");
         }
+    }
+
+    /**
+     * Defensive extraction: the model may return non-string list entries (numbers,
+     * nested objects), which would otherwise blow up with ClassCastException later.
+     */
+    private static List<String> toStringList(Object raw) {
+        if (!(raw instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .map(String::valueOf)
+                .filter(StringUtils::hasText)
+                .toList();
     }
 
     private String extractJson(String raw) {
