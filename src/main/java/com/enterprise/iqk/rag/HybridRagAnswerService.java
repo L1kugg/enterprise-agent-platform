@@ -3,6 +3,7 @@ package com.enterprise.iqk.rag;
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.RagFactMemoryRecorder;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.CitationService;
 import com.enterprise.iqk.retrieval.EvidenceItem;
@@ -40,6 +41,7 @@ public class HybridRagAnswerService {
     private final RagProperties ragProperties;
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
+    private final RagFactMemoryRecorder ragFactMemoryRecorder;
 
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
                                    String conversationId, String modelProfile) {
@@ -69,6 +71,11 @@ public class HybridRagAnswerService {
 
             // Step 2: Evidence judging
             List<EvidenceItem> evidence = evidenceJudgeService.judge(retrievedDocs, prompt);
+
+            // Step 2.5: persist high-confidence evidence as tenant fact
+            // memory (best-effort; capped and confidence-gated inside the
+            // recorder so it can never slow down or break the pipeline)
+            ragFactMemoryRecorder.recordFacts(normalizedTenantId, evidence);
 
             // Step 3: Build citations
             List<CitationItem> citations = citationService.buildCitations(evidence);
