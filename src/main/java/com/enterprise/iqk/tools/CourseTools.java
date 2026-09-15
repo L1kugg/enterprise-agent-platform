@@ -2,7 +2,9 @@ package com.enterprise.iqk.tools;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.enterprise.iqk.domain.Course;
 import com.enterprise.iqk.domain.CourseReservation;
 import com.enterprise.iqk.domain.School;
@@ -41,10 +43,14 @@ public class CourseTools {
             // agent contract, so the tenant filter is applied here from
             // TenantContext (set by the auth filter on the request thread).
             String tenantId = TenantContext.currentTenantId();
-            QueryWrapper<Course> qw = new QueryWrapper<>();
-            qw.eq("tenant_id", tenantId);
-            qw.le(safeQuery.getEdu() != null, "edu", safeQuery.getEdu());
-            qw.eq(StrUtil.isNotBlank(safeQuery.getType()), "type", safeQuery.getType());
+            LambdaQueryWrapper<Course> qw = new LambdaQueryWrapper<>();
+            qw.eq(Course::getTenantId, tenantId);
+            if (safeQuery.getEdu() != null) {
+                qw.le(Course::getEdu, safeQuery.getEdu());
+            }
+            if (StrUtil.isNotBlank(safeQuery.getType())) {
+                qw.eq(Course::getType, safeQuery.getType());
+            }
 
             if (CollUtil.isNotEmpty(safeQuery.getSorts())) {
                 for (CourseQuery.Sort sort : safeQuery.getSorts()) {
@@ -52,7 +58,7 @@ public class CourseTools {
                         continue;
                     }
                     boolean isAsc = sort.getIsAsc() == null || sort.getIsAsc();
-                    qw.orderBy(true, isAsc, sort.getField());
+                    qw.orderBy(true, isAsc, getSortColumn(sort.getField()));
                 }
             }
             return courseService.list(qw);
@@ -92,6 +98,20 @@ public class CourseTools {
             courseReservationService.save(reservation);
             return reservation.getId().toString();
         });
+    }
+
+    /**
+     * Map an allow-listed sort field to a type-safe column reference so the
+     * ORDER BY clause can never be built from a raw client string.
+     */
+    private SFunction<Course, ?> getSortColumn(String field) {
+        return switch (field) {
+            case "price" -> Course::getPrice;
+            case "duration" -> Course::getDuration;
+            case "edu" -> Course::getEdu;
+            case "id" -> Course::getId;
+            default -> Course::getId;
+        };
     }
 
     private <T> T instrument(String toolName, Supplier<T> operation) {
