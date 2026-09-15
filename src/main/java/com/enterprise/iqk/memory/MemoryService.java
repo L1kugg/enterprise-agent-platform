@@ -92,15 +92,19 @@ public class MemoryService {
     }
 
     /**
-     * Query all relevant memories for a user:
-     * - Recent short-term memories
-     * - Long-term profile/preferences
-     * - High-confidence facts
+     * 构建进入生成上下文的记忆快照：近期会话要点 + 用户画像 + 高置信事实。
+     * 召回即留痕 —— 每条被召回的记忆都会写入 USE 事件，
+     * 使记忆从写入、召回到失效的全程都可以在 memory_event 里追溯。
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId) {
         List<MemoryItemRecord> shortMem = queryShortMemory(tenantId, userId, 5);
         List<MemoryItemRecord> longMem = queryLongMemory(tenantId, userId, 10);
         List<MemoryItemRecord> facts = queryFactMemory(tenantId, 0.7, 5);
+
+        List<MemoryItemRecord> recalled = new java.util.ArrayList<>(shortMem);
+        recalled.addAll(longMem);
+        recalled.addAll(facts);
+        recalled.forEach(m -> emitEvent(m.getMemoryId(), "USE", "recalled into generation context"));
 
         StringBuilder context = new StringBuilder();
         if (!longMem.isEmpty()) {

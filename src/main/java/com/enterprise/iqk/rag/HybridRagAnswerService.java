@@ -3,6 +3,8 @@ package com.enterprise.iqk.rag;
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.MemoryItemRecord;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.memory.RagFactMemoryRecorder;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.CitationService;
@@ -22,7 +24,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,6 +46,7 @@ public class HybridRagAnswerService {
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
     private final RagFactMemoryRecorder ragFactMemoryRecorder;
+    private final MemoryService memoryService;
 
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
                                    String conversationId, String modelProfile) {
@@ -83,6 +88,14 @@ public class HybridRagAnswerService {
             // Step 4: Build context from top evidence
             String context = buildContext(retrievedDocs);
 
+            // Step 4.5: 召回记忆（用户画像 / 近期会话要点 / 高置信事实）
+            // 注入生成上下文。尽力而为：召回失败只记日志，绝不中断 RAG 管线。
+            MemoryService.MemoryContextSnapshot memorySnapshot =
+                    recallMemory(normalizedTenantId, chatId);
+            String memorySection = memorySnapshot != null
+                    && StringUtils.hasText(memorySnapshot.contextText())
+                    ? "\n\n已知记忆:\n" + memorySnapshot.contextText().trim() : "";
+
             // Step 5: Generate answer via LLM
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(
                     modelProfile, "rag_hybrid", normalizedTenantId, chatId);
@@ -93,7 +106,7 @@ public class HybridRagAnswerService {
                     .options(ChatOptions.builder().model(decision.model())
                             .temperature(ragProperties.getTemperature()).build())
                     .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
-                    .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
+                    .user("用户问题:%n%s%n%n上下文:%n%s%s%n".formatted(prompt, context, memorySection))
                 .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                     .call()
                     .content();
@@ -111,7 +124,7 @@ public class HybridRagAnswerService {
                     .citations(citations)
                     .evidence(evidence)
                     .traceId(traceId)
-                    .memoryUsed(List.of())
+                    .memoryUsed(memoryUsedLabels(memorySnapshot))
                     .retrievalStats(HybridRagResult.RetrievalStats.builder()
                             .totalRetrieved(retrievalResult.totalBeforeDedup())
                             .afterDedup(retrievalResult.totalAfterDedup())
@@ -131,6 +144,33 @@ public class HybridRagAnswerService {
                     .register(meterRegistry)
                     .increment();
         }
+    }
+
+    /** 记忆召回：任何失败都返回 null，按"无记忆可用"降级。 */
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String chatId) {
+        try {
+            return memoryService.buildContext(tenantId, chatId);
+        } catch (Exception ex) {
+            log.warn("记忆召回失败（不影响 RAG 管线）: chatId={}, reason={}", chatId, ex.toString());
+            return null;
+        }
+    }
+
+    /** 把本次实际注入上下文的记忆整理为可展示标签（type + 内容摘要）。 */
+    private List<String> memoryUsedLabels(MemoryService.MemoryContextSnapshot snapshot) {
+        if (snapshot == null) {
+            return List.of();
+        }
+        List<String> labels = new ArrayList<>();
+        snapshot.shortMemories().forEach(m -> labels.add(label("short", m)));
+        snapshot.longMemories().forEach(m -> labels.add(label("long", m)));
+        snapshot.facts().forEach(m -> labels.add(label("fact", m)));
+        return labels;
+    }
+
+    private String label(String type, MemoryItemRecord memory) {
+        String content = memory.getContent() == null ? "" : memory.getContent().replaceAll("\\s+", " ").trim();
+        return type + ": " + (content.length() <= 80 ? content : content.substring(0, 80) + "…");
     }
 
     private String buildContext(List<ScoredDocument> docs) {
