@@ -103,9 +103,8 @@ public class AgentWorkflowEngine {
     }
 
     /**
-     * Persist the conclusion of a successful task as task-scoped memory
-     * (30-day TTL, bound to the taskId). Best-effort: memory failures are
-     * swallowed so they can never affect task completion itself.
+     * 任务成功完成后，把结论写入 task 记忆（30 天过期、绑定 taskId）。
+     * 尽力而为：记忆失败只记日志，绝不影响任务完成本身。
      */
     private void persistTaskConclusion(String taskId, String finalOutput) {
         if (!StringUtils.hasText(finalOutput)) {

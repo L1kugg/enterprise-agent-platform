@@ -40,7 +40,7 @@ class RagFactMemoryRecorderTest {
         ArgumentCaptor<Double> confidence = ArgumentCaptor.forClass(Double.class);
         verify(memoryService, times(2)).saveFactMemory(anyString(), isNull(), anyString(),
                 anyString(), confidence.capture());
-        // 0.42 never reaches memory; the two qualifying facts inherit their scores
+        // 0.42 的低置信证据永远进不了记忆；两条达阈值的继承各自分数
         assertThat(confidence.getAllValues()).containsExactly(0.92, 0.70);
     }
 

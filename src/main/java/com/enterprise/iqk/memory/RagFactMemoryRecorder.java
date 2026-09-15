@@ -9,22 +9,20 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 
 /**
- * Persists high-confidence RAG evidence as tenant-scoped fact memory.
+ * 把高置信度的 RAG 证据写入租户级 fact 记忆。
  *
- * Facts are the only tenant-wide memory layer: they represent statements
- * the knowledge base can back with a citation, and they are recalled by
- * confidence threshold (see MemoryService#buildContext, floor 0.7). The
- * write threshold intentionally matches that recall floor, and each fact
- * inherits the composite evidence score as its confidence so low-quality
- * evidence never reaches generation context. Writes are best-effort and
- * capped per request to keep memory growth bounded.
+ * fact 是唯一按租户共享的记忆层：保存的是知识库能给出引用佐证的陈述，
+ * 召回时按置信度过滤（见 MemoryService#buildContext，门槛 0.7）。
+ * 写入门槛与召回门槛保持一致，每条事实继承证据综合分作为置信度，
+ * 低质量证据永远进不了生成上下文。
+ * 写入是尽力而为的，且每次请求有条数上限，防止记忆表无界增长。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RagFactMemoryRecorder {
 
-    /** Matches the recall floor used by MemoryService#buildContext. */
+    /** 与 MemoryService#buildContext 的召回门槛保持一致。 */
     static final double FACT_CONFIDENCE_THRESHOLD = 0.7;
 
     private static final int MAX_FACTS_PER_REQUEST = 3;

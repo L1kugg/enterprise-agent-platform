@@ -72,9 +72,9 @@ public class HybridRagAnswerService {
             // Step 2: Evidence judging
             List<EvidenceItem> evidence = evidenceJudgeService.judge(retrievedDocs, prompt);
 
-            // Step 2.5: persist high-confidence evidence as tenant fact
-            // memory (best-effort; capped and confidence-gated inside the
-            // recorder so it can never slow down or break the pipeline)
+            // Step 2.5：把高置信证据写入租户级 fact 记忆
+            //（尽力而为；recorder 内部做了置信度门槛与条数上限，
+            // 绝不会拖慢或中断 RAG 管线）
             ragFactMemoryRecorder.recordFacts(normalizedTenantId, evidence);
 
             // Step 3: Build citations

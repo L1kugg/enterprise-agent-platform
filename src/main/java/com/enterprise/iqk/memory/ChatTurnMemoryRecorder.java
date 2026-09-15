@@ -6,13 +6,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Persists a per-turn short-term memory once a chat stream completes.
+ * 对话流正常结束后，把本轮问答摘要写入会话级 short 记忆。
  *
- * Short memory is conversation-scoped by design: the platform has no
- * per-user auth in the chat path, so the chatId acts as the memory's user
- * key and the source field records the conversation it belongs to.
- * Persistence is best-effort — a memory failure must never break the chat
- * response or the cost recording that shares the same terminal hook.
+ * short 记忆按会话（chatId）作用域存储：平台对话链路没有独立的用户身份，
+ * 因此 chatId 同时充当记忆的 user 键，source 字段记录所属会话。
+ * 写入是尽力而为的 —— 记忆失败绝不能影响对话响应，
+ * 也不能影响共享同一个流结束钩子的计费逻辑。
  */
 @Slf4j
 @Component

@@ -2,6 +2,7 @@ package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
+import com.enterprise.iqk.memory.MemoryExtractionService;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
@@ -47,6 +48,7 @@ public class ChatController {
 
     private final ChatHistoryRepository chatHistoryRepository;
     private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
+    private final MemoryExtractionService memoryExtractionService;
 
     @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
@@ -135,11 +137,12 @@ public class ChatController {
                         long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
                         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
                     }
-                    // Persist this turn as conversation-scoped short memory.
-                    // Best-effort only: failures are swallowed inside the
-                    // recorder so they can never break the stream teardown.
+                    // 本轮结束后写入会话级 short 记忆，并异步提交画像提取
+                    // （命中才升级 long）。两者都是尽力而为：异常在各自
+                    // 内部吞掉，绝不影响流收尾与计费。
                     if (signal == SignalType.ON_COMPLETE) {
                         chatTurnMemoryRecorder.recordTurn(tenantId, chatId, prompt, outputCollector.toString());
+                        memoryExtractionService.submitAsync(tenantId, chatId, prompt, outputCollector.toString());
                     }
                 });
     }

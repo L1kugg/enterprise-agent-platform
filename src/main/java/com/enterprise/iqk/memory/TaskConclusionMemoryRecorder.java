@@ -6,13 +6,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Persists the conclusion of a completed agent task as task-scoped memory.
+ * 任务完成后，把任务结论写入 task 记忆。
  *
- * Task memory keeps intermediate conclusions (research findings, resolved
- * support cases) bound to their taskId with a 30-day TTL, so a follow-up
- * request can recall what an earlier task concluded. The chatId is stored
- * as the user key when the task originated from a conversation. Writes are
- * best-effort — a memory failure must never affect task completion.
+ * task 记忆保存中间结论（研究发现、客服处理方案），绑定 taskId、
+ * 30 天过期，后续请求可以召回早前任务的结论。
+ * 任务来源于会话时，chatId 作为 user 键存储。
+ * 写入是尽力而为的 —— 记忆失败绝不能影响任务完成本身。
  */
 @Slf4j
 @Component

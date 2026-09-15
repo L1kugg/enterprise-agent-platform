@@ -25,7 +25,7 @@ class ChatTurnMemoryRecorderTest {
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
         verify(memoryService).saveShortMemory(anyString(), anyString(), content.capture(), anyString());
         assertThat(content.getValue()).startsWith("Q: ").contains("\nA: ");
-        // prompt capped at 200 chars, answer capped at 400, plus separators
+        // 提问截断到 200 字符、回答截断到 400 字符，外加分隔符
         assertThat(content.getValue().length()).isLessThanOrEqualTo(4 + 201 + 3 + 401);
     }
 
@@ -38,7 +38,7 @@ class ChatTurnMemoryRecorderTest {
 
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
         verify(memoryService).saveShortMemory(anyString(), anyString(), content.capture(), anyString());
-        // newlines inside the answer would break the "Q:/A:" line format
+        // 回答中的换行会破坏 "Q:/A:" 行格式，需要先规范化
         assertThat(content.getValue()).isEqualTo("Q: hello world\nA: answer with newlines");
     }
 
