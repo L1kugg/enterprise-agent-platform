@@ -1,6 +1,7 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -44,6 +46,7 @@ public class ChatController {
     private final TenantCostService tenantCostService;
 
     private final ChatHistoryRepository chatHistoryRepository;
+    private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
 
     @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
@@ -131,6 +134,12 @@ public class ChatController {
                     if (recorded.compareAndSet(false, true)) {
                         long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
                         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
+                    }
+                    // Persist this turn as conversation-scoped short memory.
+                    // Best-effort only: failures are swallowed inside the
+                    // recorder so they can never break the stream teardown.
+                    if (signal == SignalType.ON_COMPLETE) {
+                        chatTurnMemoryRecorder.recordTurn(tenantId, chatId, prompt, outputCollector.toString());
                     }
                 });
     }
