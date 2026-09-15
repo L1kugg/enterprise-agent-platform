@@ -1,5 +1,6 @@
 package com.enterprise.iqk.agent.workflow;
 
+import com.enterprise.iqk.memory.TaskConclusionMemoryRecorder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ class AgentWorkflowEngineTenantIsolationTest {
     private AgentTaskMapper taskMapper;
     private AgentStepMapper stepMapper;
     private AgentEventMapper eventMapper;
+    private TaskConclusionMemoryRecorder taskConclusionMemoryRecorder;
     private AgentWorkflowEngine engine;
 
     @BeforeEach
@@ -30,12 +32,14 @@ class AgentWorkflowEngineTenantIsolationTest {
         taskMapper = mock(AgentTaskMapper.class);
         stepMapper = mock(AgentStepMapper.class);
         eventMapper = mock(AgentEventMapper.class);
+        taskConclusionMemoryRecorder = mock(TaskConclusionMemoryRecorder.class);
         engine = new AgentWorkflowEngine(
                 taskMapper,
                 stepMapper,
                 eventMapper,
                 new ObjectMapper(),
-                new SimpleMeterRegistry()
+                new SimpleMeterRegistry(),
+                taskConclusionMemoryRecorder
         );
     }
 
@@ -151,6 +155,27 @@ class AgentWorkflowEngineTenantIsolationTest {
         when(taskMapper.findByTaskId("missing")).thenReturn(null);
         assertThat(engine.currentState("missing")).isNull();
 
+    }
+
+    @Test
+    void persistsTaskConclusionMemoryOnlyWhenTaskDone() {
+        AgentTaskRecord task = AgentTaskRecord.builder()
+                .taskId("task-mem")
+                .tenantId("tenant-a")
+                .type("RESEARCH")
+                .userInput("topic")
+                .chatId("chat-9")
+                .build();
+        when(taskMapper.findByTaskId("task-mem")).thenReturn(task);
+
+        engine.completeTask("task-mem", WorkflowState.DONE, "final report");
+        engine.completeTask("task-mem", WorkflowState.FAILED, "boom");
+        engine.failTask("task-mem", "boom");
+
+        verify(taskConclusionMemoryRecorder).recordConclusion(
+                "tenant-a", "task-mem", "RESEARCH", "topic", "final report", "chat-9");
+        verify(taskConclusionMemoryRecorder, never()).recordConclusion(
+                "tenant-a", "task-mem", "RESEARCH", "topic", "boom", "chat-9");
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.enterprise.iqk.agent.workflow;
 
+import com.enterprise.iqk.memory.TaskConclusionMemoryRecorder;
 import com.enterprise.iqk.security.TenantContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -29,6 +30,7 @@ public class AgentWorkflowEngine {
     private final AgentEventMapper eventMapper;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final TaskConclusionMemoryRecorder taskConclusionMemoryRecorder;
 
     // ── Task lifecycle ───────────────────────────────────────────
 
@@ -95,6 +97,31 @@ public class AgentWorkflowEngine {
         taskMapper.completeTask(taskId, finalStatus.name(), finalOutput);
         emitEvent(taskId, null, "TASK_COMPLETED",
                 Map.of("status", finalStatus.name()));
+        if (finalStatus == WorkflowState.DONE) {
+            persistTaskConclusion(taskId, finalOutput);
+        }
+    }
+
+    /**
+     * Persist the conclusion of a successful task as task-scoped memory
+     * (30-day TTL, bound to the taskId). Best-effort: memory failures are
+     * swallowed so they can never affect task completion itself.
+     */
+    private void persistTaskConclusion(String taskId, String finalOutput) {
+        if (!StringUtils.hasText(finalOutput)) {
+            return;
+        }
+        try {
+            AgentTaskRecord task = taskMapper.findByTaskId(taskId);
+            if (task == null) {
+                return;
+            }
+            taskConclusionMemoryRecorder.recordConclusion(
+                    task.getTenantId(), taskId, task.getType(),
+                    task.getUserInput(), finalOutput, task.getChatId());
+        } catch (Exception ex) {
+            log.warn("task conclusion memory skipped: taskId={}, reason={}", taskId, ex.toString());
+        }
     }
 
     public void failTask(String taskId, String errorMessage) {
