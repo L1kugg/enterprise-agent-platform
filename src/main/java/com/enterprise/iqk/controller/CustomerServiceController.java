@@ -37,10 +37,9 @@ public class CustomerServiceController {
         String conversationId = ConversationIdHelper.build("service", chatId);
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "service", tenantId, chatId);
-        // Cost governance: same pattern as WorkflowReactAgentService.callModel
-        // (assert before send, record after call) so the synchronous
-        // /ai/service endpoint counts the same as the streaming ReAct
-        // endpoints.
+        // 成本治理：与 WorkflowReactAgentService.callModel 采用相同模式
+        // （发送前校验、调用后记账），使同步的 /ai/service 端点与流式
+        // ReAct 端点计入相同的统计口径。
         long inputTokens = tenantCostService.estimateTokens(prompt);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         // 2.请求模型

@@ -61,8 +61,8 @@ public class IngestionWorker {
                         Duration.ofMillis(Math.max(500, ingestionProperties.getPollIntervalMs()))
                 );
                 if (records.isEmpty()) {
-                    // Reclaim messages left pending by crashed/slow workers so jobs do
-                    // not stay RUNNING forever; guarded by app.ingestion.redis.claim-idle-ms.
+                    // 认领因 worker 崩溃或过慢而滞留在 pending 状态的消息，
+                    // 避免任务永远停在 RUNNING；由 app.ingestion.redis.claim-idle-ms 控制。
                     records = ingestionQueue.claimIdle(
                             consumerName,
                             Duration.ofMillis(ingestionProperties.getRedis().getClaimIdleMs()),
@@ -74,16 +74,15 @@ public class IngestionWorker {
                 }
                 for (IngestionQueueMessage msg : records) {
                     try {
-                        // Read tenant from the job itself; this thread has no MDC
-                        // and the SQL now requires the owning tenant to claim the row.
+                        // 从任务记录本身读取租户：该线程没有 MDC，
+                        // 且 SQL 现在要求以任务所属租户的身份认领记录。
                         IngestionJob job = ingestionJobMapper.findByJobId(msg.getJobId());
                         String ownerTenant = job == null ? null : job.getTenantId();
                         IngestionProcessResult processed = ingestionService.processQueuedJob(
                                 msg.getJobId(), ownerTenant, msg.getTraceId());
                         if (processed.isPicked()) {
-                            // Only ack when the job moved to a terminal status; otherwise
-                            // leave it pending so the idle-claimer can retry instead of
-                            // losing transient failures.
+                            // 只有任务进入终态才 ack；否则保留 pending 状态，
+                            // 让空闲认领逻辑重试，而不是丢失瞬时失败。
                             ingestionQueue.ack(consumerName, msg.getRecordId());
                         }
                     } catch (RuntimeException ex) {
@@ -112,8 +111,8 @@ public class IngestionWorker {
     }
 
     /**
-     * Consumer for the db_polling backend: without it, submitted jobs would stay
-     * PENDING forever unless an admin manually called POST /ingestion/jobs/process.
+     * db_polling 后端的消费者：没有它，已提交的任务会永远停在 PENDING，
+     * 除非管理员手动调用 POST /ingestion/jobs/process。
      */
     @Scheduled(fixedDelayString = "${app.ingestion.poll-interval-ms:2000}")
     public void pollDatabaseJobs() {

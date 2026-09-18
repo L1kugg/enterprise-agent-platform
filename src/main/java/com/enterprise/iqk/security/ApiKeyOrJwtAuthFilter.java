@@ -85,8 +85,8 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
                     return jwtIdentity;
                 }
             } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
-                // Expired or malformed JWT must not abort the request with a 500;
-                // fall through and try the API key credential instead.
+                // 过期或格式错误的 JWT 不应使请求以 500 中止；
+                // 继续向下执行，改为尝试 API key 凭据。
             }
         }
         return apiKeyAuthService.authenticate(request.getHeader(API_KEY_HEADER));

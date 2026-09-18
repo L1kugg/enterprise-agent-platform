@@ -48,11 +48,11 @@ async function findPlaywrightPackageDir() {
         await fs.access(path.join(moduleDir, "package.json"));
         return moduleDir;
       } catch {
-        // Try the next npx cache entry.
+        // 尝试下一个 npx 缓存条目。
       }
     }
   } catch {
-    // Fall through to the normal module resolution error.
+    // 继续走正常的模块解析报错路径。
   }
   return "";
 }
@@ -76,7 +76,7 @@ async function firstExistingPath(paths) {
       await fs.access(candidate);
       return candidate;
     } catch {
-      // Try the next browser path.
+      // 尝试下一个浏览器路径。
     }
   }
   return "";

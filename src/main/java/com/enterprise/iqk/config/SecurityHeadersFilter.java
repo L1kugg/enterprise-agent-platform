@@ -10,7 +10,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Adds enterprise security response headers to all HTTP responses.
+ * 为所有 HTTP 响应添加企业级安全响应头。
  */
 @Component
 public class SecurityHeadersFilter extends OncePerRequestFilter {

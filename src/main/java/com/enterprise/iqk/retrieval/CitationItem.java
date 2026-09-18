@@ -10,13 +10,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CitationItem {
-    private int index;           // citation number in answer, e.g. [1]
+    private int index;           // 答案中的引用编号，例如 [1]
     private String sourceType;
     private String title;
     private String url;
     private String chunkId;
     private double confidence;   // 0-1
-    private String excerpt;      // quoted text from source
+    private String excerpt;      // 从来源摘录的原文
 
     public int getId() {
         return index;

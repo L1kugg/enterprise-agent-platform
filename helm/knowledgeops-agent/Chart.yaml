@@ -1,6 +1,6 @@
 apiVersion: v2
 name: knowledgeops-agent
-description: KnowledgeOps Agent Java service
+description: KnowledgeOps Agent Java 服务
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

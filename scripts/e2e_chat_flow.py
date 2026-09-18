@@ -80,10 +80,10 @@ def stream_sse(url, body, headers, timeout=40.0):
                 data_lines = []
                 continue
 
-            # Spring WebFlux may wrap our preformatted SSE payload as:
+            # Spring WebFlux 可能会把我们预格式化的 SSE 负载包装成：
             # data:event: token
             # data:data: {"token":"..."}
-            # Keep compatibility with both wrapped and raw SSE layouts.
+            # 需同时兼容包装形式与原始 SSE 布局。
             if line.startswith("data:event:"):
                 event_name = line[len("data:event:"):].strip() or "message"
             elif line.startswith("data:data:"):
@@ -92,7 +92,7 @@ def stream_sse(url, body, headers, timeout=40.0):
                 event_name = line[len("event:"):].strip() or "message"
             elif line.startswith("data:"):
                 payload = line[len("data:"):].strip()
-                # ignore empty heartbeat "data:" lines
+                # 忽略空的心跳 "data:" 行
                 if payload:
                     data_lines.append(payload)
 

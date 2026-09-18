@@ -34,6 +34,7 @@ curl http://localhost:8080/ai/research/tasks/{taskId}/report \
 ```
 
 **验证点**：
+
 | 检查项 | 预期结果 |
 |---|---|
 | 任务创建 | 返回 taskId，status=CREATED→PLANNING→...→DONE |
@@ -68,6 +69,7 @@ bash scripts/quick-start-mac.sh
 | 转人工 | "我要投诉课程质量问题" | ROUTE→COMPLAINT 或 HUMAN_HANDOFF | ROUTE→DATA→STOP |
 
 **验证点**：
+
 | 检查项 | 预期结果 |
 |---|---|
 | 路由 JSON | RouteAgent 返回 `{"intent":"BUY","confidence":0.91,"nextAgent":"BUY",...}` |
@@ -136,6 +138,7 @@ curl -X POST http://localhost:8080/ai/workflow/react/chat \
 ```
 
 **验证点**：
+
 | 检查项 | 预期结果 |
 |---|---|
 | PDF 上传 | 返回 jobId，状态 pending→running→success |

@@ -65,7 +65,7 @@ def evaluate(dataset, predictions):
             "details": details,
         }
 
-    # Compute overall
+    # 计算整体汇总
     total_all = sum(m["total"] for m in metrics.values())
     passed_all = sum(m["passed"] for m in metrics.values())
     failed_all = sum(m["failed"] for m in metrics.values())
@@ -114,7 +114,7 @@ def render_markdown(metrics, threshold=0.60):
                 lines.append(f"| {d['id']} | {icon} {d['result']} | {note} |")
             lines.append("")
 
-    # Overall summary
+    # 整体汇总
     overall = metrics.get("overall", {})
     lines.append(f"## 📊 Overall")
     lines.append(f"")

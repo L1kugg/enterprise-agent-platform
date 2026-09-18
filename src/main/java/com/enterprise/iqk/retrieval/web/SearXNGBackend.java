@@ -14,10 +14,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * SearXNG self-hosted search backend.
+ * SearXNG 自托管搜索后端。
  * <p>
- * Requires a running SearXNG instance with JSON format enabled.
- * Docker quick-start:
+ * 需要一个已启用 JSON 格式输出的 SearXNG 实例。
+ * Docker 快速启动：
  * <pre>
  * docker run -d --name searxng -p 8888:8080 \
  *   -e SEARXNG_BASE_URL=http://localhost:8888/ \
@@ -30,7 +30,7 @@ public class SearXNGBackend implements WebSearchBackend {
 
     private final WebSearchProperties properties;
     private final ObjectMapper objectMapper;
-    // volatile + double-checked initialization: see BingSearchBackend.
+    // volatile + 双重检查初始化：参见 BingSearchBackend。
     private volatile RestTemplate restTemplate;
 
     public SearXNGBackend(WebSearchProperties properties, ObjectMapper objectMapper) {
@@ -80,7 +80,7 @@ public class SearXNGBackend implements WebSearchBackend {
                         .title((String) r.getOrDefault("title", ""))
                         .url((String) r.getOrDefault("url", ""))
                         .snippet((String) r.getOrDefault("content", ""))
-                        .score(1.0 - (i * 0.1)) // rank-based scoring
+                        .score(1.0 - (i * 0.1)) // 基于排名的评分
                         .build());
             }
             return searchResults;

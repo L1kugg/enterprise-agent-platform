@@ -38,10 +38,10 @@ public class CourseTools {
     public List<Course> queryCourse(@ToolParam(required = false, description = "需要查询的课程的条件") CourseQuery query) {
         return instrument("query_course", () -> {
             CourseQuery safeQuery = query == null ? new CourseQuery() : query;
-            // Tenant isolation: V17 added tenant_id to the course table;
-            // the @Tool signature cannot be changed without breaking the
-            // agent contract, so the tenant filter is applied here from
-            // TenantContext (set by the auth filter on the request thread).
+            // 租户隔离：V17 给课程表加了 tenant_id；
+            // @Tool 方法签名一旦改动就会破坏 agent 契约，
+            // 所以这里从 TenantContext（由认证过滤器在请求线程上设置）
+            // 取出租户并在此处应用过滤条件。
             String tenantId = TenantContext.currentTenantId();
             LambdaQueryWrapper<Course> qw = new LambdaQueryWrapper<>();
             qw.eq(Course::getTenantId, tenantId);
@@ -84,9 +84,8 @@ public class CourseTools {
             @ToolParam(required = false, description = "学生预留的备注信息") String remark
     ) {
         return instrument("add_course_reservation", () -> {
-            // Tag the reservation with the caller's tenant so the row cannot
-            // be read or counted by any other tenant through listByMap or
-            // admin tooling.
+            // 给预约记录打上调用方租户的标记，使其他租户
+            // 无法通过 listByMap 或管理工具读取或统计到该行。
             String tenantId = TenantContext.currentTenantId();
             CourseReservation reservation = new CourseReservation();
             reservation.setTenantId(tenantId);
@@ -101,8 +100,8 @@ public class CourseTools {
     }
 
     /**
-     * Map an allow-listed sort field to a type-safe column reference so the
-     * ORDER BY clause can never be built from a raw client string.
+     * 将白名单内的排序字段映射为类型安全的列引用，
+     * 确保 ORDER BY 子句永远不会由客户端原始字符串拼出。
      */
     private SFunction<Course, ?> getSortColumn(String field) {
         return switch (field) {

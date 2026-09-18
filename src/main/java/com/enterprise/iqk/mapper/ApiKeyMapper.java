@@ -68,9 +68,9 @@ public interface ApiKeyMapper extends BaseMapper<ApiKeyRecord> {
                @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
-     * Explicit SQL on purpose: MyBatis-Plus updateById skips null fields
-     * (NOT_NULL strategy), so revoked_at / revoked_reason could never be
-     * cleared when reviving a bootstrapped key.
+     * 特意使用显式 SQL：MyBatis-Plus 的 updateById 会跳过 null 字段
+     * （NOT_NULL 策略），若走通用更新，恢复预置密钥时
+     * revoked_at / revoked_reason 将永远无法被清空。
      */
     @Update("""
             UPDATE api_keys

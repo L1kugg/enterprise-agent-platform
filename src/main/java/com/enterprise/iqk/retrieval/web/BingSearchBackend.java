@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Bing Search API v7 backend.
+ * Bing Search API v7 后端。
  * <p>
- * Requires a Bing Search API subscription key from Azure.
+ * 需要 Azure 提供的 Bing Search API 订阅密钥。
  */
 @Slf4j
 @Component
@@ -27,11 +27,10 @@ public class BingSearchBackend implements WebSearchBackend {
 
     private final WebSearchProperties properties;
     private final ObjectMapper objectMapper;
-    // volatile + double-checked initialization: concurrent first-callers
-    // would otherwise see partially constructed factories with mismatched
-    // timeouts, or one of the two RestTemplate instances would be silently
-    // dropped while both threads raced through the `if (restTemplate == null)`
-    // branch.
+    // volatile + 双重检查初始化：否则并发的首次调用方
+    // 可能看到超时配置不一致的半构造工厂，或者当两个线程
+    // 同时进入 `if (restTemplate == null)` 分支时，其中一个
+    // RestTemplate 实例会被悄悄丢弃。
     private volatile RestTemplate restTemplate;
 
     public BingSearchBackend(WebSearchProperties properties, ObjectMapper objectMapper) {

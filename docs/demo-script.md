@@ -1,23 +1,23 @@
-# Reproducible Demo Script
+# 可复现演示脚本
 
-This script is designed for a 5 to 8 minute local walkthrough. It proves that KnowledgeOps Agent is a deployable Spring AI RAG platform, not a single-endpoint demo.
+本脚本面向 5 到 8 分钟的本地演示，用于证明 KnowledgeOps Agent 是一个可部署的 Spring AI RAG 平台，而不是单端点演示。
 
-## 1. Start the Stack
+## 1. 启动技术栈
 
 ```bash
 ./scripts/demo.sh
 ```
 
-Expected result:
+预期结果：
 
-- Frontend console: `http://localhost:8088`
-- Backend API: `http://localhost:8080`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Smoke test prints `e2e chat flow success`
+- 前端控制台：`http://localhost:8088`
+- 后端 API：`http://localhost:8080`
+- Swagger UI：`http://localhost:8080/swagger-ui/index.html`
+- 冒烟测试输出 `e2e chat flow success`
 
-## 2. Prepare Headers
+## 2. 准备请求头
 
-Use the seeded local API key from `.env.example` or the console authentication card.
+使用 `.env.example` 或控制台认证卡片中预置的本地 API Key。
 
 ```bash
 export BASE_URL=http://localhost:8080
@@ -26,7 +26,7 @@ export TENANT_ID=tenant-acme
 export CHAT_ID=heat-safety-demo
 ```
 
-## 3. Upload the Demo PDF
+## 3. 上传演示 PDF
 
 ```bash
 curl -X POST "$BASE_URL/ingestion/upload/$CHAT_ID" \
@@ -35,9 +35,9 @@ curl -X POST "$BASE_URL/ingestion/upload/$CHAT_ID" \
   -F "file=@demo-data/heat-safety-policy.pdf"
 ```
 
-For idempotency validation, repeat the upload with your own non-sensitive idempotency header value and confirm the job is not duplicated.
+如需验证幂等性，可使用自己的非敏感幂等请求头值重复上传，并确认任务没有重复创建。
 
-Record the returned `jobId`.
+记录返回的 `jobId`。
 
 ```bash
 curl "$BASE_URL/ingestion/jobs?chatId=$CHAT_ID&limit=5" \
@@ -45,7 +45,7 @@ curl "$BASE_URL/ingestion/jobs?chatId=$CHAT_ID&limit=5" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-If the queue worker is disabled in a local profile, process one job manually:
+如果本地 profile 中禁用了队列 worker，可以手动处理一个任务：
 
 ```bash
 curl -X POST "$BASE_URL/ingestion/jobs/process?jobId=<jobId>" \
@@ -53,20 +53,20 @@ curl -X POST "$BASE_URL/ingestion/jobs/process?jobId=<jobId>" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-## 4. Run the Walkthrough Questions
+## 4. 执行演示问题
 
-| Scenario | Question or action | Expected signal |
+| 场景 | 问题或操作 | 预期信号 |
 |---|---|---|
-| PDF upload | Upload `demo-data/heat-safety-policy.pdf` | Ingestion job is created with queue backend and job status. |
-| Async ingestion | Query `/ingestion/jobs?chatId=heat-safety-demo` | Job reaches `SUCCEEDED` or exposes retry/error details. |
-| Retrieval hit | `Summarize heat exposure control requirements.` | Answer refers to hydration breaks, rotation, recovery areas, and supervisor review. |
-| Citation source | `Which source supports the no-fabrication rule?` | Answer includes citations such as `source=heat-safety-policy.pdf`. |
-| Evidence snippets | Ask through the console RAG workflow | Citation chips and evidence snippets are visible in the answer. |
-| Empty fallback | `What is the travel reimbursement policy?` | Assistant says the current knowledge base has no matching content. |
-| Tenant isolation | Repeat the same RAG question with another `X-Tenant-Id` | No cross-tenant policy content is returned. |
-| Permission failure | Call a protected admin route without valid auth | Request is rejected and can be inspected through audit logs. |
+| PDF 上传 | 上传 `demo-data/heat-safety-policy.pdf` | 摄取任务创建成功，包含队列后端和任务状态。 |
+| 异步摄取 | 查询 `/ingestion/jobs?chatId=heat-safety-demo` | 任务达到 `SUCCEEDED`，或暴露重试/错误详情。 |
+| 检索命中 | `Summarize heat exposure control requirements.` | 回答涉及补水休息、轮岗、恢复区域和主管复核。 |
+| 引用来源 | `Which source supports the no-fabrication rule?` | 回答包含引用，例如 `source=heat-safety-policy.pdf`。 |
+| 证据片段 | 通过控制台 RAG 工作流提问 | 回答中可见引用标签和证据片段。 |
+| 空结果兜底 | `What is the travel reimbursement policy?` | 助手提示当前知识库没有匹配内容。 |
+| 租户隔离 | 使用另一个 `X-Tenant-Id` 重复同一个 RAG 问题 | 不返回跨租户的策略内容。 |
+| 权限失败 | 不带有效认证调用受保护的管理路由 | 请求被拒绝，并可通过审计日志核查。 |
 
-## 5. Verify Runtime Evidence
+## 5. 核验运行时证据
 
 ```bash
 ./scripts/demo.sh verify
@@ -78,14 +78,14 @@ python3 scripts/run_regression.py \
   --citation-hit-threshold 0.70
 ```
 
-Useful surfaces after the walkthrough:
+演示结束后可用的观测入口：
 
-- API health: `http://localhost:8080/actuator/health`
-- Prometheus metrics: `http://localhost:8080/actuator/prometheus`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Runtime logs: `./scripts/demo.sh logs`
+- API 健康检查：`http://localhost:8080/actuator/health`
+- Prometheus 指标：`http://localhost:8080/actuator/prometheus`
+- Swagger UI：`http://localhost:8080/swagger-ui/index.html`
+- 运行时日志：`./scripts/demo.sh logs`
 
-## 6. Clean Up
+## 6. 清理环境
 
 ```bash
 ./scripts/demo.sh down

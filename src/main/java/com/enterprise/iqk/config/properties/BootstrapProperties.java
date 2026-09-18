@@ -4,12 +4,11 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Operator-provided bootstrap credential for deployments where repository
- * committed demo keys have been revoked (Flyway V15) and production must not
- * seed them. Binding prefix {@code app.bootstrap} maps
- * APP_BOOTSTRAP_API_KEY / APP_BOOTSTRAP_KEY_NAME / APP_BOOTSTRAP_TENANT_ID
- * so the Python runtime and the cross-runtime contract stack share one
- * environment surface.
+ * 由运维人员提供的引导凭据，适用于仓库中提交的演示密钥已被吊销
+ * （Flyway V15）、且生产环境不得再植入这些密钥的部署场景。
+ * 绑定前缀 {@code app.bootstrap} 映射
+ * APP_BOOTSTRAP_API_KEY / APP_BOOTSTRAP_KEY_NAME / APP_BOOTSTRAP_TENANT_ID，
+ * 使 Python 运行时与跨运行时契约测试栈共享同一套环境变量接口。
  */
 @Data
 @ConfigurationProperties(prefix = "app.bootstrap")

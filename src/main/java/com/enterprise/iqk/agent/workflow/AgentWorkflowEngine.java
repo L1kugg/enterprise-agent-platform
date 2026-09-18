@@ -32,7 +32,7 @@ public class AgentWorkflowEngine {
     private final MeterRegistry meterRegistry;
     private final TaskConclusionMemoryRecorder taskConclusionMemoryRecorder;
 
-    // ── Task lifecycle ───────────────────────────────────────────
+    // ── 任务生命周期 ───────────────────────────────────────────
 
     public AgentTaskRecord startTask(String tenantId, String type, String userInput,
                                      String modelProfile, String chatId, String sessionId) {
@@ -128,7 +128,7 @@ public class AgentWorkflowEngine {
         emitEvent(taskId, null, "TASK_FAILED", Map.of("error", errorMessage));
     }
 
-    // ── State management ─────────────────────────────────────────
+    // ── 状态管理 ─────────────────────────────────────────
 
     public void transitionStatus(String taskId, WorkflowState from, WorkflowState to) {
         if (!from.canTransitionTo(to)) {
@@ -156,7 +156,7 @@ public class AgentWorkflowEngine {
         }
     }
 
-    // ── Event sourcing ───────────────────────────────────────────
+    // ── 事件溯源 ───────────────────────────────────────────
 
     public void emitEvent(String taskId, String stepId, String eventType, Map<String, Object> payload) {
         try {
@@ -174,7 +174,7 @@ public class AgentWorkflowEngine {
         }
     }
 
-    // ── Metrics ──────────────────────────────────────────────────
+    // ── 指标 ──────────────────────────────────────────────────
 
     public void recordStepMetrics(String agentName, String status, long latencyMs) {
         Timer.builder("agent.workflow.step.latency")
@@ -210,7 +210,7 @@ public class AgentWorkflowEngine {
                 .increment();
     }
 
-    // ── Query ────────────────────────────────────────────────────
+    // ── 查询 ────────────────────────────────────────────────────
 
     public WorkflowTaskVO getTask(String tenantId, String taskId) {
         AgentTaskRecord task = taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
@@ -240,7 +240,7 @@ public class AgentWorkflowEngine {
                 .toList();
     }
 
-    // ── Conversion helpers ───────────────────────────────────────
+    // ── 转换辅助方法 ───────────────────────────────────────
 
     private WorkflowTaskVO toTaskVO(AgentTaskRecord t, List<AgentStepRecord> steps,
                                      List<AgentEventRecord> events) {

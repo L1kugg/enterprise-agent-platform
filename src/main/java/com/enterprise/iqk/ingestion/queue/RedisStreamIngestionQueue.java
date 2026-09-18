@@ -129,7 +129,7 @@ public class RedisStreamIngestionQueue implements IngestionQueue {
         String streamKey = ingestionProperties.getRedis().getStreamKey();
         String group = ingestionProperties.getRedis().getConsumerGroup();
         try {
-            // ensure stream exists
+            // 确保 stream 存在
             redisTemplate.opsForStream().add(streamKey, Map.of("init", "1"));
             redisTemplate.opsForStream().createGroup(streamKey, ReadOffset.latest(), group);
             log.info("Created redis stream consumer group: {}", group);

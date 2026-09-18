@@ -84,7 +84,7 @@ public class ModelRouter {
                     .createdAt(LocalDateTime.now())
                     .build());
         } catch (Exception ignored) {
-            // exposure logging should never break routing path
+            // 曝光日志记录绝不能阻断路由主流程
         }
     }
 

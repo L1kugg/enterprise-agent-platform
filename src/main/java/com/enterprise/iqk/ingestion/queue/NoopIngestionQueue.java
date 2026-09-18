@@ -11,12 +11,12 @@ import java.util.List;
 public class NoopIngestionQueue implements IngestionQueue {
     @Override
     public void publishJob(String jobId, String traceId) {
-        // noop
+        // 空实现
     }
 
     @Override
     public void publishDlq(String jobId, String traceId, String reason) {
-        // noop
+        // 空实现
     }
 
     @Override
@@ -26,11 +26,11 @@ public class NoopIngestionQueue implements IngestionQueue {
 
     @Override
     public void ack(String consumerName, String recordId) {
-        // noop
+        // 空实现
     }
 
     @Override
     public void ensureConsumerGroup() {
-        // noop
+        // 空实现
     }
 }

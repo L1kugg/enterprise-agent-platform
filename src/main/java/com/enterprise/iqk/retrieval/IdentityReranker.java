@@ -5,8 +5,8 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Default no-op reranker that passes through documents unchanged.
- * Used when no LLM reranker is configured or available.
+ * 默认的空操作重排器，直接原样返回文档。
+ * 在未配置或不可用 LLM 重排器时使用。
  */
 @Component
 public class IdentityReranker implements Reranker {

@@ -27,10 +27,10 @@ public class ApiKeyLifecycleService {
     }
 
     /**
-     * Provision an operator-supplied credential (bootstrap / contract stacks).
-     * Idempotent: an already-active key with the same name is left untouched;
-     * a revoked row with the same hash is revived instead of colliding with
-     * the UNIQUE key_hash constraint.
+     * 供操作员提供的凭据（bootstrap / contract 技术栈）进行开通。
+     * 幂等操作：同名且仍处于活跃状态的 key 保持不变；
+     * 与其哈希相同的已吊销记录会被重新启用，而不是与
+     * UNIQUE key_hash 约束冲突。
      */
     public ApiKeyIssueResult provision(String rawKey, String keyName, String roleName, String tenantId) {
         String normalizedTenant = normalizeTenant(tenantId);
@@ -41,15 +41,15 @@ public class ApiKeyLifecycleService {
         String rawHash = HashUtils.sha256Hex(rawKey);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = now.plusDays(Math.max(1, securityProperties.getApiKeyExpireDays()));
-        // Revive by key_hash rather than key_name: the revoked row may keep
-        // the original seed key_name (V7 'demo-admin-key-2026') while the
-        // operator provisions a different APP_BOOTSTRAP_KEY_NAME, and the
-        // UNIQUE key_hash constraint is what forces us onto that row.
+        // 依据 key_hash 而非 key_name 重新启用：已吊销的记录可能仍保留
+        // 最初的种子 key_name（V7 'demo-admin-key-2026'），而操作员开通时
+        // 传入的是另一个 APP_BOOTSTRAP_KEY_NAME，正是 UNIQUE key_hash
+        // 约束迫使我们定位到那条记录。
         ApiKeyRecord latest = apiKeyMapper.findByKeyHash(rawHash);
         if (latest != null) {
-            // Explicit revive SQL: MyBatis-Plus updateById skips null fields,
-            // so revoked_at / revoked_reason would stay set and the revived
-            // key would never match findActive queries again.
+            // 使用显式的 revive SQL：MyBatis-Plus 的 updateById 会跳过 null 字段，
+            // 导致 revoked_at / revoked_reason 保持原值，重新启用的 key
+            // 将永远无法再匹配 findActive 查询。
             apiKeyMapper.revive(latest.getId(), keyName, normalizedTenant, roleName, expiresAt, now);
             return new ApiKeyIssueResult(rawKey, keyName, normalizedTenant, expiresAt);
         }

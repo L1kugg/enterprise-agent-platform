@@ -9,8 +9,8 @@ import org.springframework.core.env.Profiles;
 import java.util.Set;
 
 /**
- * Validates critical security properties at startup.
- * Fails fast if prod-relevant settings are missing or insecure.
+ * 在启动时校验关键安全配置项。
+ * 若生产环境相关配置缺失或不安全，则快速失败。
  */
 @Configuration
 public class AppStartupValidator {
@@ -21,7 +21,7 @@ public class AppStartupValidator {
             "replace-me-with-real-secret",
             "change-me",
             "changeme",
-            // former docker-compose fallback; publicly known, must never pass validation
+            // 原 docker-compose 中的回退值；已对外公开，绝不能通过校验
             "local-demo-secret-change-for-prod-2026"
     );
 

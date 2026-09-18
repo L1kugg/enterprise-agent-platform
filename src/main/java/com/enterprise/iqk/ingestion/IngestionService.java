@@ -54,8 +54,8 @@ public class IngestionService {
     private final MeterRegistry meterRegistry;
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
-    // Serializes SimpleVectorStore snapshot writes across the worker pool so that
-    // concurrent jobs cannot interleave writes to the same snapshot file.
+    // 在整个 worker 线程池范围内串行化 SimpleVectorStore 快照写入，
+    // 避免并发任务交错写入同一个快照文件。
     private final Object snapshotLock = new Object();
 
     public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
@@ -135,12 +135,12 @@ public class IngestionService {
                     .errorMessage("jobId missing")
                     .build();
         }
-        // Tenant scoping is required for both call paths:
-        //  - HTTP controllers reach here through the MDC-scoped TenantContext filter.
-        //  - Background workers (Redis / RabbitMQ / db_polling) run on threads without
-        //    an MDC, so they must pass the job's tenantId explicitly.
-        // Falling back to MDC keeps existing call sites working while the SQL now
-        // refuses to claim a job owned by another tenant.
+        // 两条调用路径都必须带租户作用域：
+        //  - HTTP 控制器经由基于 MDC 的 TenantContext 过滤器进入这里；
+        //  - 后台 worker（Redis / RabbitMQ / db_polling）运行的线程没有 MDC，
+        //    必须显式传入任务所属的 tenantId。
+        // 回退到 MDC 是为了让既有调用点继续可用，而 SQL 现在会拒绝
+        // 认领属于其他租户的任务。
         String claimTenantId = StringUtils.hasText(tenantId)
                 ? TenantContext.normalize(tenantId)
                 : TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
@@ -313,8 +313,8 @@ public class IngestionService {
             }
             Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
             synchronized (snapshotLock) {
-                // Write to a temp file and atomically replace the snapshot so a crash
-                // or concurrent reader never observes a half-written file.
+                // 先写入临时文件再原子替换快照，保证崩溃或并发读取方
+                // 永远不会看到写了一半的文件。
                 simpleVectorStore.save(tmp.toFile());
                 try {
                     Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

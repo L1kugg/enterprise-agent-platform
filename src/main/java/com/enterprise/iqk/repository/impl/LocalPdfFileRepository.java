@@ -44,9 +44,9 @@ public class LocalPdfFileRepository implements FileRepository {
             log.error("Resource filename is null or blank.");
             return false;
         }
-        // NOTE: this repository currently has no injection point (nothing injects
-        // FileRepository); kept defensive: strip any path components so a crafted
-        // original filename ("../../etc/cron.d/x") cannot escape the storage location.
+        // 注意：该仓库类目前没有注入点（没有任何地方注入 FileRepository）；
+        // 此处保持防御式处理：剥离文件名中的路径部分，使构造的原始文件名
+        // （如 "../../etc/cron.d/x"）无法逃逸到存储目录之外。
         Path fileNameOnly = Path.of(filename).getFileName();
         if (fileNameOnly == null) {
             log.error("Resource filename does not contain a file name component: {}", filename);

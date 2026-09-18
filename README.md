@@ -1,4 +1,4 @@
-# KnowledgeOps Agent | Enterprise Spring AI RAG Platform | 智能问答与知识运营平台
+# KnowledgeOps Agent | 企业级 Spring AI RAG 平台 | 智能问答与知识运营平台
 
 [![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/however-yir/knowledgeops-agent)](https://github.com/however-yir/knowledgeops-agent/releases)
@@ -7,11 +7,11 @@
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
-> **Matrix role:** `knowledgeops-agent` is the platform baseline: enterprise Spring AI RAG, agent workflow state, memory persistence primitives, evidence, tenant isolation, security, and observability. Business agents such as [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) build on this layer.
+> **矩阵角色：** `knowledgeops-agent` 是平台基线：企业级 Spring AI RAG、Agent 工作流状态、记忆持久化基础能力、证据链、租户隔离、安全与可观测性。[`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) 等业务 Agent 构建在这一层之上。
 >
-> **Spring AI baseline:** the code is intentionally pinned to `1.0.0-M6` as the verified implementation baseline; migration to the current `1.1.x` stable line is tracked in [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md).
+> **Spring AI 基线：** 代码有意锁定在 `1.0.0-M6`，作为已验证的实现基线；向当前 `1.1.x` 稳定线的迁移在 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md) 中跟踪。
 
-KnowledgeOps Agent is a production-oriented platform prototype built on Spring AI. It combines **Agent Workflow Engine**, **Hybrid Retrieval (vector + keyword + graph + web)**, **Knowledge Graph**, **Long/Short-term Memory persistence**, **DeepResearch**, tenant-isolated RAG, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, and Prometheus/Loki/Tempo observability. Capability status and default-path limitations are documented below.
+KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
 
 > 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
 
@@ -19,33 +19,33 @@ KnowledgeOps Agent is a production-oriented platform prototype built on Spring A
 
 ![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
 
-## Why It Is More Than a Demo
+## 为什么它不止是一个 Demo
 
-| Proof point | Repository evidence |
+| 证明点 | 仓库证据 |
 |---|---|
-| Enterprise RAG | PDF upload, async ingestion jobs, tenant-scoped retrieval, answer citations, evidence snippets |
-| Tenant and permission boundary | API Key, JWT, refresh token lifecycle, RBAC permissions, tenant headers, audit logging |
-| Operations baseline | Docker Compose, Flyway migrations, structured logs, Prometheus metrics, Loki logs, Tempo traces, Alertmanager rules |
-| Quality evidence | RAG Evaluation Studio, Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build; framework-agnostic external eval via [ragproof](https://github.com/however-yir/ragproof) |
-| Extensible AI workflow | Spring AI chat, ReAct trace payloads, SSE token streaming, model routing, tool execution hooks |
+| 企业级 RAG | PDF 上传、异步入库任务、租户隔离检索、答案引用、证据片段 |
+| 租户与权限边界 | API Key、JWT、Refresh Token 生命周期、RBAC 权限、租户请求头、审计日志 |
+| 运维基线 | Docker Compose、Flyway 迁移、结构化日志、Prometheus 指标、Loki 日志、Tempo 链路追踪、Alertmanager 规则 |
+| 质量证据 | RAG Evaluation Studio、单元测试、Testcontainers 集成测试、JaCoCo、回归评测、端到端 smoke 日志、Docker 镜像构建；另有框架无关的外部评测 [ragproof](https://github.com/however-yir/ragproof) |
+| 可扩展的 AI 工作流 | Spring AI 对话、ReAct trace 载荷、SSE token 流式输出、模型路由、工具执行挂钩 |
 
-## Product Surfaces
+## 产品功能面
 
-| Surface | What to inspect |
+| 功能面 | 检查内容 |
 |---|---|
-| Console workspace | Session branches, streaming mode, model profile, JWT/API key auth, tenant context |
-| Evaluation Studio | Eval datasets, baseline vs current runs, retrieval/citation/faithfulness metrics, Markdown report export |
-| RAG answer | Citation chips, evidence snippets, empty-result fallback policy |
-| API surface | Swagger UI, curl recipes, chat/RAG/ingestion/auth/audit endpoints |
-| Operations surface | Health, Prometheus metrics, E2E artifacts, regression reports, container image |
+| 控制台工作区 | 会话分支、流式模式、模型档位、JWT/API Key 鉴权、租户上下文 |
+| Evaluation Studio | 评测数据集、基线与当前运行对比、检索/引用/忠实度指标、Markdown 报告导出 |
+| RAG 问答 | 引用标签、证据片段、空结果兜底策略 |
+| API 面 | Swagger UI、curl 示例、chat/RAG/ingestion/auth/audit 端点 |
+| 运维面 | 健康检查、Prometheus 指标、端到端产物、回归报告、容器镜像 |
 
 ![RAG answer with citations](docs/assets/rag-answer-citations.png)
 
-## Architecture At a Glance
+## 架构一览
 
 ![KnowledgeOps Agent architecture](docs/assets/architecture-overview.svg)
 
-## 5-Minute Proof Path
+## 5 分钟验证路径
 
 ```bash
 git clone https://github.com/however-yir/knowledgeops-agent.git
@@ -53,14 +53,14 @@ cd knowledgeops-agent
 ./scripts/demo.sh
 ```
 
-After startup:
+启动后：
 
-- Frontend console: `http://localhost:8088`
-- Backend API: `http://localhost:8080`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Local demo API key: see the seeded development value in `.env.example` or the authentication card in the frontend console.
+- 前端控制台：`http://localhost:8088`
+- 后端 API：`http://localhost:8080`
+- Swagger UI：`http://localhost:8080/swagger-ui/index.html`
+- 本地演示 API Key：查看 `.env.example` 中预置的开发值，或前端控制台中的「鉴权」卡片。
 
-Prefer Make targets if you use `make`:
+如果你使用 `make`，也可以改用 Make 目标：
 
 ```bash
 make demo
@@ -77,15 +77,15 @@ make demo-down
 | 2 | **智能客服（tianji）** | 意图识别→9子Agent路由→工具调用→SSE卡片 | tianji [README](https://github.com/however-yir/tianji-ai-agent) |
 | 3 | **知识库混合检索问答** | PDF入库→四路召回→证据评分→引用溯源 | [demo-paths.md](docs/demo-paths.md#链路三知识库问答混合检索--引用溯源) |
 
-## Evidence Links
+## 证据链接
 
-- Documentation index: [docs/index.md](docs/index.md)
-- Evidence pack: [docs/evidence/README.md](docs/evidence/README.md)
-- Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- 文档索引：[docs/index.md](docs/index.md)
+- 证据包：[docs/evidence/README.md](docs/evidence/README.md)
+- 最新发布：[v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
 - 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
-- Reproducible demo script: [docs/demo-script.md](docs/demo-script.md)
-- Operations guide: [docs/operations.md](docs/operations.md)
-- Enterprise architecture: [docs/architecture-enterprise.md](docs/architecture-enterprise.md)
+- 可复现 Demo 脚本：[docs/demo-script.md](docs/demo-script.md)
+- 运维手册：[docs/operations.md](docs/operations.md)
+- 企业架构：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 
 ## 矩阵角色
 
@@ -102,14 +102,14 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 
 ## 目录
 
-- Why It Is More Than a Demo
-- Product Surfaces
-- Architecture At a Glance
-- 5-Minute Proof Path
-- Evidence Links
+- 为什么它不止是一个 Demo
+- 产品功能面
+- 架构一览
+- 5 分钟验证路径
+- 证据链接
 - 矩阵角色
 - 项目定位
-- Why KnowledgeOps Agent?
+- 为什么选择 KnowledgeOps Agent？
 - 企业级能力矩阵
 - 技术栈与版本基线
 - 架构总览
@@ -147,16 +147,16 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 
 ---
 
-## Why KnowledgeOps Agent?
+## 为什么选择 KnowledgeOps Agent？
 
-| Capability | KnowledgeOps Agent | Typical RAG demo | Typical Spring AI sample |
+| 能力 | KnowledgeOps Agent | 典型 RAG demo | 典型 Spring AI 示例 |
 |---|---|---|---|
-| Deployable full stack | Spring Boot API, Vue console, MySQL, Redis/RabbitMQ, pgvector, Docker Compose | Often API-only or notebook-level | Usually focused on one framework feature |
-| Tenant-aware security | API Key, JWT, refresh tokens, RBAC, identity-derived tenant scope, audit logs, rate limits | Rarely included | Usually omitted for clarity |
-| Async ingestion | Redis Stream or RabbitMQ queues, retries, DLQ, idempotency, job status | Often synchronous upload and parse | Usually sample-specific |
-| RAG production path | Tenant-scoped retrieval, citations, chunking, reranker extension point (identity default), pgvector indexes | Basic vector lookup | Demonstrates core API usage |
-| Observability | Prometheus, Loki, Tempo, Alertmanager, structured logs, runbooks | Usually absent | Minimal or external |
-| Quality gates | Full-module JaCoCo gate, MySQL/Flyway startup test, evaluator contract test, live API evaluation, k6 scripts | Manual validation | Varies by example |
+| 可部署的完整技术栈 | Spring Boot API、Vue 控制台、MySQL、Redis/RabbitMQ、pgvector、Docker Compose | 通常只有 API 或 notebook 级别 | 通常只聚焦单个框架特性 |
+| 租户感知的安全 | API Key、JWT、Refresh Token、RBAC、由认证身份派生的租户范围、审计日志、限流 | 很少包含 | 为清晰起见通常省略 |
+| 异步入库 | Redis Stream 或 RabbitMQ 队列、重试、DLQ、幂等、任务状态 | 常为同步上传与解析 | 通常随示例而定 |
+| RAG 生产化路径 | 租户隔离检索、引用、切片、重排器扩展点（默认恒等实现）、pgvector 索引 | 基础向量查询 | 演示核心 API 用法 |
+| 可观测性 | Prometheus、Loki、Tempo、Alertmanager、结构化日志、运维手册 | 通常缺失 | 极少或依赖外部 |
+| 质量门禁 | 全模块 JaCoCo 门禁、MySQL/Flyway 启动测试、评测器契约测试、真实 API 评测、k6 脚本 | 人工验证 | 因示例而异 |
 
 ---
 
@@ -674,7 +674,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [ ] 评测数据集（路由准确率、检索命中率、证据质量）
 - [ ] 企业 SSO（OIDC/SAML）接入
 
-See the release-oriented roadmap in [docs/roadmap.md](docs/roadmap.md).
+发布导向的路线图见 [docs/roadmap.md](docs/roadmap.md)。
 
 ---
 

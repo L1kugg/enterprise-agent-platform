@@ -12,19 +12,19 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Web search retriever that delegates to a configured search backend (SearXNG or Bing API).
+ * 网络搜索检索器，委托给已配置的搜索后端（SearXNG 或 Bing API）。
  * <p>
- * Web search is disabled by default. To enable it:
+ * 网络搜索默认关闭。如需启用：
  * <ol>
- *   <li>Set {@code app.web-search.enabled=true}</li>
- *   <li>Configure a search backend:
+ *   <li>设置 {@code app.web-search.enabled=true}</li>
+ *   <li>配置一个搜索后端：
  *     <ul>
- *       <li>SearXNG: set {@code app.web-search.searxng-url} to your SearXNG instance</li>
- *       <li>Bing: set {@code app.web-search.bing-api-key} and optionally {@code app.web-search.bing-endpoint}</li>
+ *       <li>SearXNG：将 {@code app.web-search.searxng-url} 指向你的 SearXNG 实例</li>
+ *       <li>Bing：设置 {@code app.web-search.bing-api-key}，可选配置 {@code app.web-search.bing-endpoint}</li>
  *     </ul>
  *   </li>
  * </ol>
- * If no backend is configured or enabled, this retriever returns an empty list with a log warning.
+ * 若未配置或未启用任何后端，该检索器会记录一条警告日志并返回空列表。
  */
 @Slf4j
 @Component
@@ -51,7 +51,7 @@ public class WebRetriever {
                 return Collections.emptyList();
             }
 
-            // Find the first available backend
+            // 找到第一个可用的后端
             WebSearchBackend activeBackend = backends.stream()
                     .filter(WebSearchBackend::isAvailable)
                     .findFirst()

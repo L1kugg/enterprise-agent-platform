@@ -1,4 +1,4 @@
-# Intelligent Q&A Knowledge Retrieval Platform Resume Upgrade Checklist
+# 智能问答知识检索平台简历升级清单
 
 ## 1. 功能
 - [x] 聊天 / 工具调用 / PDF RAG / 会话历史
@@ -12,7 +12,7 @@
 - [x] JWT + API Key + RBAC + 限流 + 审计
 - [x] Flyway 迁移 + Docker + CI + 回归评测
 - [x] 分布式压测脚本与演练脚本
-- [x] 观测联调 runbook（Prometheus/Loki/Tempo/Alertmanager）
+- [x] 观测联调操作手册（Prometheus/Loki/Tempo/Alertmanager）
 - [x] 演练报告模板与 k6 报告生成脚本
 - [ ] 真实多节点演练结果沉淀（报告 + 图表证据）
 
@@ -26,6 +26,6 @@
 
 ## 4. 测试
 - [x] Controller / Service / Security / Ingestion 测试
-- [x] Regression dataset + report pipeline
+- [x] 回归数据集 + 报告流水线
 - [x] ModelRouter 单元测试
 - [ ] 更大规模多跳与幻觉评测集

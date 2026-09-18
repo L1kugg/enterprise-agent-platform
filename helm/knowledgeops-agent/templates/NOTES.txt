@@ -1,10 +1,10 @@
-KnowledgeOps Agent has been installed.
+KnowledgeOps Agent 已安装完成。
 
-Service:
+服务：
   {{ include "knowledgeops-agent.fullname" . }}:{{ .Values.service.port }}
 
-Health:
+健康检查：
   /actuator/health
 
-Metrics:
+指标：
   /actuator/prometheus

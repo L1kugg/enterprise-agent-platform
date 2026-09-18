@@ -22,7 +22,7 @@ public class KgEntityRecord {
     private String tenantId;
     private String name;
     private String type;
-    private String aliases;      // JSON array
+    private String aliases;      // JSON 数组
     private String description;
     private String sourceId;
     private String metadataJson;

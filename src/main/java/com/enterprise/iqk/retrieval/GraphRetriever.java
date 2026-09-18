@@ -26,18 +26,18 @@ public class GraphRetriever {
         try {
             List<ScoredDocument> results = new ArrayList<>();
 
-            // Extract keywords from query for entity matching
+            // 从查询中提取关键词用于实体匹配
             String keyword = extractMainKeyword(query);
             if (!StringUtils.hasText(keyword)) {
                 outcome = "empty";
                 return results;
             }
 
-            // Search entities by keyword
+            // 按关键词搜索实体
             List<KgEntityRecord> entities = graphService.searchEntities(tenantId, keyword, topK);
             for (int i = 0; i < entities.size(); i++) {
                 KgEntityRecord e = entities.get(i);
-                // Get one-hop neighbors for richer context
+                // 获取一跳邻居以丰富上下文
                 List<GraphService.GraphNeighbor> neighbors = graphService.getNeighbors(tenantId, e.getEntityId());
                 String neighborContext = buildNeighborContext(neighbors);
 
@@ -53,7 +53,7 @@ public class GraphRetriever {
                         .build());
             }
 
-            // Search facts by keyword
+            // 按关键词搜索事实
             List<KgFactRecord> facts = graphService.searchFacts(tenantId, keyword, topK);
             for (int i = 0; i < facts.size(); i++) {
                 KgFactRecord f = facts.get(i);
@@ -80,7 +80,7 @@ public class GraphRetriever {
 
     private String extractMainKeyword(String query) {
         if (!StringUtils.hasText(query)) return "";
-        // Simple: take the longest token as keyword
+        // 简单策略：取最长的 token 作为关键词
         String longest = "";
         for (String token : query.split("[^\\p{L}\\p{Nd}]+")) {
             if (token.length() > longest.length()) {

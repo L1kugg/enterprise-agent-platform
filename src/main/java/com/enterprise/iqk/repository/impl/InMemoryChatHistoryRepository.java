@@ -13,9 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-// NOTE: this implementation currently has no active injection point
-// (MysqlChatHistoryRepository is @Primary); it is still registered as a bean, so
-// guard its shared state for concurrent access.
+// 注意：该实现目前没有活跃的注入点（MysqlChatHistoryRepository 标注了 @Primary）；
+// 但它仍被注册为 bean，因此需对其共享状态做并发访问保护。
 @Repository
 public class InMemoryChatHistoryRepository implements ChatHistoryRepository {
     private final Map<String, List<String>> chatHistory = new ConcurrentHashMap<>();

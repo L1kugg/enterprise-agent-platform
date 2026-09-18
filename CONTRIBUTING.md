@@ -1,17 +1,17 @@
-# Contributing
+# 贡献指南
 
-Thanks for your interest in improving KnowledgeOps Agent!
+感谢你有兴趣改进 KnowledgeOps Agent！
 
-## Getting Started
+## 快速上手
 
-### Prerequisites
+### 前置条件
 
 - JDK 17+
 - Maven 3.9+
-- Node.js 18+ (for frontend)
-- Docker & Docker Compose (for infra services)
+- Node.js 18+（用于前端）
+- Docker 与 Docker Compose（用于基础设施服务）
 
-### Backend Setup
+### 后端环境
 
 ```bash
 # Run tests
@@ -24,7 +24,7 @@ mvn -B -ntp verify
 mvn -B -ntp compile
 ```
 
-### Frontend Setup
+### 前端环境
 
 ```bash
 cd frontend
@@ -33,47 +33,47 @@ npm run build        # production build
 npm run lint         # ESLint check
 ```
 
-### Full Stack (Docker)
+### 全栈（Docker）
 
 ```bash
 ./scripts/demo.sh
 ```
 
-## Branch and Commit
+## 分支与提交
 
-- Branch from `main`
-- Keep commits small and focused
-- Use conventional commit style:
-  - `feat: ...` — new feature
-  - `fix: ...` — bug fix
-  - `docs: ...` — documentation only
-  - `refactor: ...` — code change that neither fixes a bug nor adds a feature
-  - `chore: ...` — tooling, CI, dependency updates
-  - `test: ...` — adding or updating tests
+- 从 `main` 切出分支
+- 保持提交小而聚焦
+- 使用约定式提交风格：
+  - `feat: ...` — 新功能
+  - `fix: ...` — 缺陷修复
+  - `docs: ...` — 仅文档变更
+  - `refactor: ...` — 既非修复缺陷也非新增功能的代码调整
+  - `chore: ...` — 工具、CI、依赖更新
+  - `test: ...` — 新增或更新测试
 
-## Pull Request Guidelines
+## Pull Request 规范
 
-- Keep each PR scoped to one change set
-- Add or update tests when behavior changes
-- Update docs when API/config/usage changes
-- Ensure `mvn -B -ntp verify` passes before requesting review
-- Run `cd frontend && npm run build && npm run lint` for frontend changes
-- Do not commit generated/runtime artifacts (`target/`, `node_modules/`, logs, local env files)
+- 每个 PR 只聚焦一个变更集
+- 行为变更时新增或更新测试
+- API/配置/用法变更时更新文档
+- 请求评审前确保 `mvn -B -ntp verify` 通过
+- 前端变更请运行 `cd frontend && npm run build && npm run lint`
+- 不要提交生成物/运行时产物（`target/`、`node_modules/`、日志、本地环境文件）
 
-## Code Style
+## 代码风格
 
-- **Java**: Follow existing conventions; Checkstyle, PMD, and SpotBugs are enforced in CI
-- **TypeScript/Vue**: ESLint + Prettier config in `frontend/`; run `npm run lint` before committing
-- Avoid unrelated refactors in feature/fix PRs
-- Prefer clear naming and small methods over clever shortcuts
+- **Java**：遵循现有约定；Checkstyle、PMD 和 SpotBugs 在 CI 中强制执行
+- **TypeScript/Vue**：使用 `frontend/` 中的 ESLint + Prettier 配置；提交前运行 `npm run lint`
+- 避免在功能/修复 PR 中夹带无关重构
+- 优先选择清晰的命名与小方法，而非取巧的捷径
 
-## Reporting Issues
+## 报告问题
 
-- Use the [bug report template](https://github.com/however-yir/knowledgeops-agent/issues/new?template=bug_report.yml) for reproducible problems
-- Use the [feature request template](https://github.com/however-yir/knowledgeops-agent/issues/new?template=feature_request.yml) for suggestions
-- For security vulnerabilities, see [SECURITY.md](SECURITY.md) — do **not** open public issues
+- 可复现的问题请使用[缺陷报告模板](https://github.com/however-yir/knowledgeops-agent/issues/new?template=bug_report.yml)
+- 功能建议请使用[功能请求模板](https://github.com/however-yir/knowledgeops-agent/issues/new?template=feature_request.yml)
+- 安全漏洞请参阅 [SECURITY.md](SECURITY.md)——**不要**创建公开 issue
 
-## Code of Conduct
+## 行为准则
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
-By participating, you agree to uphold this code.
+本项目遵循 [Contributor Covenant 行为准则](CODE_OF_CONDUCT.md)。
+参与本项目即表示你同意遵守该准则。

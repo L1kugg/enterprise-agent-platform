@@ -1,23 +1,23 @@
-# Security Policy
+# 安全策略
 
-## Supported Versions
-Security fixes are provided on the `main` branch.
-For historical commits/tags, fixes are not guaranteed unless explicitly stated.
+## 支持版本
+安全修复在 `main` 分支提供。
+对于历史提交/标签，除非明确说明，否则不保证提供修复。
 
-## Reporting a Vulnerability
-Please do **not** open public issues for suspected vulnerabilities.
+## 报告漏洞
+对于疑似漏洞，请**不要**创建公开 issue。
 
-Report privately via **GitHub Security Advisories** (preferred). Include:
-- Affected component/file
-- Reproduction steps or proof of concept
-- Impact assessment
-- Suggested remediation (optional)
+请通过 **GitHub Security Advisories** 私下报告（推荐）。内容包括：
+- 受影响的组件/文件
+- 复现步骤或概念验证
+- 影响评估
+- 建议的修复方案（可选）
 
-## Response Expectations
-- Initial acknowledgment: within 72 hours
-- Triage and severity assessment: as soon as reproducible details are available
-- Status updates: shared during investigation until resolution
+## 响应时限
+- 初步确认：72 小时内
+- 分诊与严重性评估：在获得可复现细节后尽快进行
+- 状态更新：调查期间持续同步，直至解决
 
-## Disclosure Policy
-- Please keep vulnerability details private until a fix is available
-- After remediation, coordinated disclosure is welcome
+## 披露政策
+- 在修复可用之前，请对漏洞细节保密
+- 修复完成后，欢迎协同披露

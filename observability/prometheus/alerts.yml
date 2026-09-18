@@ -99,7 +99,7 @@ groups:
           summary: "ReAct stream error rate high"
           description: "Stream error ratio exceeded 20% in the last 10 minutes."
 
-      # --- New enterprise alerts ---
+      # --- 新增企业级告警 ---
 
       - alert: DiskSpaceLow
         expr: node_filesystem_avail_bytes{mountpoint="/app"} / node_filesystem_size_bytes{mountpoint="/app"} < 0.15

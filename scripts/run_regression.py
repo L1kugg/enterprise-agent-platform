@@ -257,7 +257,7 @@ def main():
     parser.add_argument("--predictions", default="evaluation/predictions.sample.json")
     parser.add_argument("--report-dir", default="reports/regression")
 
-    # Keep backward compatibility with existing usage (--threshold)
+    # 保持与既有用法（--threshold）的向后兼容
     parser.add_argument("--threshold", type=float, default=0.70, help="Per-case correctness threshold (legacy alias)")
     parser.add_argument("--correctness-threshold", type=float, default=0.75)
     parser.add_argument("--citation-hit-threshold", type=float, default=0.80)

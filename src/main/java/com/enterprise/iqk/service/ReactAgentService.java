@@ -311,7 +311,7 @@ public class ReactAgentService {
                 return new AnswerResult(answer, false);
             }
         } catch (RuntimeException ignored) {
-            // fallback below
+            // 走下方兜底逻辑
         }
         return new AnswerResult("当前未能生成最终答案，请稍后重试。", true);
     }

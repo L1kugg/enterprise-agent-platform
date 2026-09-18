@@ -44,8 +44,8 @@ public class AgentSessionService {
         String tenant = TenantContext.normalize(tenantId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, pageSize);
-        // Escape SQL LIKE wildcards in the user-supplied keyword so a search
-        // for "%" or "_" cannot widen the result set beyond the intended rows.
+        // 对用户输入的关键词转义 SQL LIKE 通配符，
+        // 避免搜索 "%" 或 "_" 时结果集被扩大到超出预期行。
         String safeKeyword = SqlLikeUtils.escapeForLike(emptyToNull(keyword));
         long total = agentSessionStateMapper.countByTenant(tenant, safeKeyword, workspaceId, includeArchived);
         if (total == 0) {
@@ -77,8 +77,8 @@ public class AgentSessionService {
         AgentSessionStateVO state = normalizeSessionPayload(normalizedSessionId, payload);
         String serialized = writeJson(state);
 
-        // Optimistic-lock loop: the previous read-modify-write silently lost concurrent
-        // updates (and duplicate inserts raced on uk_agent_session_tenant_session).
+        // 乐观锁重试循环：此前采用的"读-改-写"方式会静默丢失并发更新
+        // （且并发插入会在 uk_agent_session_tenant_session 上产生竞态冲突）。
         for (int attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt++) {
             AgentSessionStateRecord existing = agentSessionStateMapper.findByTenantAndSessionId(tenant, normalizedSessionId);
             if (existing == null) {
@@ -86,7 +86,7 @@ public class AgentSessionService {
                     agentSessionStateMapper.insert(buildInsertRecord(tenant, normalizedSessionId, state, serialized));
                     return get(tenant, normalizedSessionId);
                 } catch (DuplicateKeyException raced) {
-                    // another writer inserted first; retry via the update path
+                    // 其他写入方已抢先插入；改走更新路径重试
                 }
             } else {
                 long expectedLockVersion = existing.getLockVersion() == null ? 0L : existing.getLockVersion();
@@ -96,7 +96,7 @@ public class AgentSessionService {
                 if (updated > 0) {
                     return get(tenant, normalizedSessionId);
                 }
-                // lock_version moved on: re-read the latest state before writing again
+                // lock_version 已发生变化：重新读取最新状态后再写入
             }
         }
         throw new IllegalStateException("session update conflict, please retry: " + normalizedSessionId);
@@ -419,8 +419,8 @@ public class AgentSessionService {
     }
 
     /**
-     * Attach a workflow task snapshot to a session branch message.
-     * This links the conversational message to its agent execution trace.
+     * 将工作流任务快照附加到会话分支消息上。
+     * 由此把对话消息与其 agent 执行轨迹关联起来。
      */
     public AgentSessionStateVO attachWorkflowSnapshot(String tenantId, String sessionId,
                                                        String branchId, String messageId,

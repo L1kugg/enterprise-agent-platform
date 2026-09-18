@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A single web search result from an external search backend.
+ * 来自外部搜索后端的单条网络搜索结果。
  */
 @Data
 @Builder

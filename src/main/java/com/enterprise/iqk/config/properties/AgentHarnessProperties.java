@@ -34,12 +34,12 @@ public class AgentHarnessProperties {
     @Data
     public static class Mcp {
         private Map<String, McpServer> servers = new LinkedHashMap<>();
-        // Optional operator-curated list of host patterns (exact host or
-        // suffix match like ".internal.example.com") that are allowed to be
-        // called even when they resolve to a loopback / private address.
-        // Default empty: all private/loopback hosts are refused. Tests and
-        // dev environments that need to point at a localhost mock can set
-        // e.g. ["localhost", "127.0.0.1", "::1"] here.
+        // 可选的、由运维人员维护的主机模式列表（精确主机名或类似
+        // ".internal.example.com" 的后缀匹配）。即使这些主机解析到
+        // 回环/私有地址，也允许调用。
+        // 默认为空：所有私有/回环主机一律拒绝。测试和开发环境
+        // 若需要指向 localhost mock，可在此设置为
+        // ["localhost", "127.0.0.1", "::1"] 之类的值。
         private java.util.List<String> allowedHosts = new java.util.ArrayList<>();
     }
 

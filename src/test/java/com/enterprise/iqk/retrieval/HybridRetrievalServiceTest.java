@@ -70,11 +70,11 @@ class HybridRetrievalServiceTest {
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 5);
 
-        // 3 raw docs, 2 unique fingerprints after dedup
+        // 原始文档 3 条，去重后按内容指纹只剩 2 条
         assertThat(result.totalBeforeDedup()).isEqualTo(3);
         assertThat(result.totalAfterDedup()).isEqualTo(2);
-        // vector 0.9 * 0.40 = 0.36 wins over keyword 0.5 * 0.25 = 0.125 for the
-        // shared content
+        // 相同内容时，vector 0.9 * 0.40 = 0.36
+        // 胜过 keyword 0.5 * 0.25 = 0.125
         assertThat(result.documents()).extracting(ScoredDocument::getDocId)
                 .containsExactly("vec-1", "kw-2");
         assertThat(result.documents().get(0).getFinalScore()).isGreaterThan(

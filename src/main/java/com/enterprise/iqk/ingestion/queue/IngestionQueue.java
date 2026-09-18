@@ -15,9 +15,8 @@ public interface IngestionQueue {
     void ensureConsumerGroup();
 
     /**
-     * Reclaims messages that were delivered to another consumer but never acked
-     * (idle for at least {@code minIdle}). Returns an empty list when the backend
-     * does not support reclaiming.
+     * 认领那些已投递给其他消费者但一直未被 ack 的消息
+     * （空闲时间至少为 {@code minIdle}）。后端不支持认领时返回空列表。
      */
     default List<IngestionQueueMessage> claimIdle(String consumerName, Duration minIdle, int maxCount) {
         return List.of();

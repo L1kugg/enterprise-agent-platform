@@ -57,7 +57,7 @@ public class HybridRagAnswerService {
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
 
-            // Step 1: Hybrid retrieval (vector + keyword + graph + web)
+            // 第 1 步：混合检索（向量 + 关键词 + 图谱 + 网络）
             HybridRetrievalService.HybridRetrievalResult retrievalResult =
                     hybridRetrievalService.retrieve(prompt, normalizedTenantId, chatId,
                             ragProperties.getRetrieveTopK());
@@ -74,7 +74,7 @@ public class HybridRagAnswerService {
                         .build();
             }
 
-            // Step 2: Evidence judging
+            // 第 2 步：证据评审
             List<EvidenceItem> evidence = evidenceJudgeService.judge(retrievedDocs, prompt);
 
             // Step 2.5：把高置信证据写入租户级 fact 记忆
@@ -82,10 +82,10 @@ public class HybridRagAnswerService {
             // 绝不会拖慢或中断 RAG 管线）
             ragFactMemoryRecorder.recordFacts(normalizedTenantId, evidence);
 
-            // Step 3: Build citations
+            // 第 3 步：构建引用
             List<CitationItem> citations = citationService.buildCitations(evidence);
 
-            // Step 4: Build context from top evidence
+            // 第 4 步：用头部证据构建上下文
             String context = buildContext(retrievedDocs);
 
             // Step 4.5: 召回记忆（用户画像 / 近期会话要点 / 高置信事实）
@@ -96,7 +96,7 @@ public class HybridRagAnswerService {
                     && StringUtils.hasText(memorySnapshot.contextText())
                     ? "\n\n已知记忆:\n" + memorySnapshot.contextText().trim() : "";
 
-            // Step 5: Generate answer via LLM
+            // 第 5 步：通过 LLM 生成回答
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(
                     modelProfile, "rag_hybrid", normalizedTenantId, chatId);
             long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
@@ -115,7 +115,7 @@ public class HybridRagAnswerService {
             tenantCostService.recordUsage(normalizedTenantId, decision.costTier(),
                     inputTokens, outputTokens, "rag_hybrid");
 
-            // Step 6: Append citation footer
+            // 第 6 步：追加引用来源脚注
             String answerWithCitations = answer + citationService.formatCitationFooter(citations);
 
             pipelineOutcome = "success";

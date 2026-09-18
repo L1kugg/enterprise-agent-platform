@@ -128,9 +128,8 @@ public class WorkspaceRuntime implements AgentRuntime {
                     .limit(Math.max(1, harnessProperties.getWorkspace().getMaxSearchFiles()))
                     .toList();
             for (Path path : candidates) {
-                // Already collected enough matches; stop walking the candidate
-                // list instead of continuing to open and skip every remaining
-                // file.
+                // 已收集到足够的匹配项，停止遍历候选文件列表，
+                // 避免继续打开又跳过其余每个文件。
                 if (matches.size() >= maxMatches) {
                     break;
                 }
@@ -162,10 +161,10 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
-        // Cap the proposed file size the same way readFile caps read size.
-        // Without this an LLM-driven agent invocation of workspace_propose_patch
-        // could submit a multi-megabyte content / patch and cause the worker
-        // to allocate a matching string, then applyPatch to write the file.
+        // 与 readFile 限制读取大小的方式相同，限制所提议文件的大小。
+        // 若无此限制，LLM 驱动的 Agent 调用 workspace_propose_patch
+        // 可能提交数 MB 的 content / patch，导致工作线程分配同等大小的
+        // 字符串，随后再由 applyPatch 写入该文件。
         int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
         if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
             return Map.of("status", "error", "message",
@@ -203,8 +202,8 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
-        // Cap the same way proposePatch does so a caller cannot bypass the
-        // preview cap by going straight to apply.
+        // 与 proposePatch 相同的限制，防止调用方直接走 apply
+        // 绕过预览阶段的容量上限。
         int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
         if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
             return Map.of("status", "error", "message",
@@ -272,8 +271,8 @@ public class WorkspaceRuntime implements AgentRuntime {
                     "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
             );
         } finally {
-            // No-op for an already-exited process; guarantees the child is reaped even
-            // when waitFor is interrupted, so no handle is left behind.
+            // 对已退出的进程是无操作；确保即使 waitFor 被中断子进程
+            // 也能被回收，不遗留句柄。
             process.destroyForcibly();
         }
     }
@@ -349,9 +348,9 @@ public class WorkspaceRuntime implements AgentRuntime {
             return command.size() == 1;
         }
         if ("ls".equals(executable) || "rg".equals(executable)) {
-            // Non-flag arguments are filesystem paths (for rg the first non-flag token
-            // is the pattern, which can only fail closed); reject anything resolving
-            // outside the workspace root so the shell cannot be used to read host files.
+            // 非 flag 参数视为文件系统路径（对 rg 来说第一个非 flag
+            // 参数是匹配模式，最坏也只是匹配不到结果）；拒绝任何解析后
+            // 落在 workspace 根目录之外的参数，防止借 shell 读取宿主机文件。
             return argsWithinWorkspace(command.subList(1, command.size()));
         }
         if ("git".equals(executable)) {
@@ -367,21 +366,19 @@ public class WorkspaceRuntime implements AgentRuntime {
     }
 
     /**
-     * mvn test allow-list: -q, -D&lt;name&gt;=&lt;value&gt; where the property
-     * name starts with one of the known-safe prefixes. Without this, a
-     * prompt-injected or misconfigured LLM-driven agent invocation of
-     * workspace_run_shell could pass
+     * mvn test 允许列表：-q，以及属性名以已知安全前缀开头的
+     * -D&lt;name&gt;=&lt;value&gt;。若不做此限制，被提示词注入或配置错误的
+     * LLM 驱动 Agent 在调用 workspace_run_shell 时可能传入
      *   mvn test -DargLine="-javaagent:/tmp/evil.jar"
      *   mvn test -Dsurefire.suiteXmlFiles=/tmp/evil.xml
-     * to make the Surefire test JVM load a hostile Java agent or run a
-     * custom suite XML — bypassing the workspace sandbox from inside the
-     * test process.
+     * 使 Surefire 测试 JVM 加载恶意 Java agent 或执行自定义
+     * suite XML，从测试进程内部绕过 workspace 沙箱。
      */
     private static final java.util.Set<String> SAFE_MVN_PROPERTY_PREFIXES = java.util.Set.of(
-            // Surefire test selection knobs the user would actually want to
-            // pass through. Anything else (argLine, exec.executable,
-            // surefire.suiteXmlFiles, maven.compiler, etc.) can influence
-            // the test JVM classpath or execution and is refused.
+            // 用户确实会想要传入的 Surefire 测试选择参数。其余参数
+            // （argLine、exec.executable、surefire.suiteXmlFiles、
+            // maven.compiler 等）可能影响测试 JVM 的类路径或执行，
+            // 一律拒绝。
             "test=",
             "groups=",
             "excludedGroups=",
@@ -406,11 +403,10 @@ public class WorkspaceRuntime implements AgentRuntime {
     }
 
     /**
-     * git flag deny-list: every flag passed to a whitelisted git subcommand
-     * must not match any of these. The main concern is --output which makes
-     * git log / git show write to a host path, defeating the workspace
-     * sandbox. --exec / --upload-pack / --receive-pack accept an
-     * attacker-controlled command and are also refused.
+     * git flag 拒绝列表：传给白名单内 git 子命令的每个 flag 都不得命中
+     * 此处所列项。主要风险是 --output，它会让 git log / git show
+     * 写入宿主机路径，破坏 workspace 沙箱。--exec / --upload-pack /
+     * --receive-pack 会接受攻击者可控的命令，同样予以拒绝。
      */
     private static final java.util.Set<String> UNSAFE_GIT_FLAGS = java.util.Set.of(
             "--output", "-o", "--exec", "--upload-pack", "--receive-pack",
@@ -430,13 +426,11 @@ public class WorkspaceRuntime implements AgentRuntime {
     private boolean argsWithinWorkspace(List<String> args) {
         for (String arg : args) {
             if (arg.startsWith("-")) {
-                // Reject options that cause the underlying tool to execute
-                // commands or read arbitrary host files. ripgrep's --pre and
-                // --pre-glob run a shell command before each file is
-                // searched; --hostname-bin and --regexp-file read files
-                // from the host filesystem. ls / git do not currently have
-                // equivalents, so the option-list approach keeps the
-                // allow-list narrow.
+                // 拒绝会导致底层工具执行命令或读取宿主机任意文件的选项。
+                // ripgrep 的 --pre 和 --pre-glob 会在搜索每个文件前执行
+                // shell 命令；--hostname-bin 和 --regexp-file 会读取宿主机
+                // 文件系统中的文件。ls / git 目前没有同类选项，因此采用
+                // 列举选项的方式让允许列表保持收紧。
                 String normalized = stripOptionValue(arg);
                 if (normalized.startsWith("--pre")
                         || normalized.startsWith("--pre-glob")

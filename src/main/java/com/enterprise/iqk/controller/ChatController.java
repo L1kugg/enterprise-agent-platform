@@ -31,11 +31,10 @@ import java.util.function.Function;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
- * Routes /ai/chat and /ai/chat/stream through TenantCostService the same
- * way the rest of the platform does. Without this, callers with
- * PERM_CHAT_WRITE could fire unlimited /ai/chat requests and consume
- * LLM tokens without ever being counted toward the tenant's monthly
- * budget, defeating the cost_governance.enabled = true setting.
+ * 与平台其他部分一样，将 /ai/chat 和 /ai/chat/stream 接入
+ * TenantCostService。若不这样做，持有 PERM_CHAT_WRITE 的调用者
+ * 可以无限发起 /ai/chat 请求并消耗 LLM token，却从不计入租户的
+ * 月度预算，使 cost_governance.enabled = true 配置形同虚设。
  */
 @RestController
 @RequestMapping("/ai")
@@ -84,11 +83,11 @@ public class ChatController {
                                         String modelProfile,
                                         String chatId) {
         List<Media> mediaList = files.stream().map(f -> {
-            // A multipart upload without an explicit Content-Type header would
-            // make Spring's MultipartFile.getContentType() return null; passing
-            // that to MimeType.valueOf throws NPE. Fall back to application/
-            // octet-stream so the model receives a usable MimeType and the
-            // error stays a clean 4xx instead of a 500.
+            // 若 multipart 上传未显式携带 Content-Type 头，Spring 的
+            // MultipartFile.getContentType() 会返回 null；将其传给
+            // MimeType.valueOf 会抛出 NPE。这里回退为 application/
+            // octet-stream，使模型仍能拿到可用的 MimeType，错误也
+            // 保持为干净的 4xx 而非 500。
             String contentType = f.getContentType();
             MimeType mime = StringUtils.hasText(contentType)
                     ? MimeType.valueOf(contentType)
@@ -108,11 +107,11 @@ public class ChatController {
     }
 
     /**
-     * Common chat-stream wrapper. The two callers above only differ in
-     * the .user(...) call, so the cost-tracking, advisor and stream()
-     * setup is shared here. Without the helper, both methods end up
-     * with the same six lines around .user(prompt), which is exactly
-     * what the SpotBugs DB_DUPLICATE_BRANCHES check flags.
+     * 通用的聊天流封装。上面两个调用方的差异仅在 .user(...) 调用，
+     * 因此成本统计、advisor 与 stream() 的配置在此共享。
+     * 若没有这个辅助方法，两个方法都会在 .user(prompt) 周围出现
+     * 同样的六行代码，而这正是 SpotBugs DB_DUPLICATE_BRANCHES
+     * 检查所标记的问题。
      */
     private Flux<String> trackedChatStream(String prompt,
                                           String modelProfile,

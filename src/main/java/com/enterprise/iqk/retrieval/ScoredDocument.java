@@ -13,12 +13,12 @@ import java.util.Map;
 @AllArgsConstructor
 public class ScoredDocument {
     private String docId;
-    private String sourceType;   // vector | keyword | graph | web
+    private String sourceType;   // 向量 | 关键词 | 图谱 | 网络
     private String title;
     private String url;
     private String chunkId;
     private String content;
-    private double retrievalScore; // raw score from retriever (0-1)
-    private double finalScore;     // after fusion + evidence judging (0-1)
+    private double retrievalScore; // 检索器给出的原始得分（0-1）
+    private double finalScore;     // 融合 + 证据评审之后的得分（0-1）
     private Map<String, Object> metadata;
 }

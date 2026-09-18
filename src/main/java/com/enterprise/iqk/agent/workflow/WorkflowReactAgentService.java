@@ -206,8 +206,8 @@ public class WorkflowReactAgentService {
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage())
                             ? ex.getMessage() : "stream failed";
-                    // Mark the task FAILED so a failed stream does not leave the
-                    // workflow record orphaned in a non-terminal state.
+                    // 将任务标记为 FAILED，避免失败的流式请求把工作流记录
+                    // 遗留在非终态成为孤儿。
                     String failedTaskId = taskIdRef.get();
                     if (StringUtils.hasText(failedTaskId)) {
                         workflowEngine.failTask(failedTaskId, message);
@@ -218,7 +218,7 @@ public class WorkflowReactAgentService {
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenMs.get(), outcomeRef.get()));
     }
 
-    // ── Reason / Action / Summarize (same logic, now with engine) ──
+    // ── 推理 / 行动 / 总结（逻辑同原实现，现已接入引擎） ──
 
     private ReasonDecision reason(ReactChatRequestVO request,
                                   String rollingContext,
@@ -265,7 +265,7 @@ public class WorkflowReactAgentService {
                 return answer;
             }
         } catch (RuntimeException ignored) {
-            // The deterministic fallback below keeps the workflow response usable.
+            // 下方的确定性兜底保证工作流响应仍可用。
         }
         return "当前未能生成最终答案，请稍后重试。";
     }
@@ -275,7 +275,7 @@ public class WorkflowReactAgentService {
         return "用户问题:%n%s%n%nReAct轨迹:%n%s%n%n观察上下文:%n%s%n%n请输出最终中文答案，要求简洁、可执行、结构清晰。%n".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
-    // ── Helpers (delegated from original ReactAgentService) ──────
+    // ── 辅助方法（自原 ReactAgentService 迁移） ──────
 
     private ReactTraceStepVO buildTraceStep(int step, ReasonDecision d, Object obs) {
         return ReactTraceStepVO.builder()
@@ -350,7 +350,7 @@ public class WorkflowReactAgentService {
         };
     }
 
-    // ── Delegated helpers (same as original ReactAgentService) ───
+    // ── 委托辅助方法（与原 ReactAgentService 相同） ───
 
     private ReasonDecision parseDecision(String raw) {
         String json = extractJson(raw);
@@ -473,7 +473,7 @@ public class WorkflowReactAgentService {
                 .register(meterRegistry).increment();
     }
 
-    // ── Trivial delegates ──────────────────────────────────────────
+    // ── 简单委托方法 ──────────────────────────────────────────
 
     private String normalizeAction(String a) {
         return (!StringUtils.hasText(a)) ? "finish" : a.trim().toLowerCase(Locale.ROOT);

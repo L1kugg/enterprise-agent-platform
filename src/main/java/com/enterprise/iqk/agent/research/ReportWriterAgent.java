@@ -10,7 +10,7 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 import org.springframework.stereotype.Component;
 
 /**
- * Synthesizes research findings into a structured report.
+ * 将研究发现汇总合成为结构化报告。
  */
 @Component
 @RequiredArgsConstructor

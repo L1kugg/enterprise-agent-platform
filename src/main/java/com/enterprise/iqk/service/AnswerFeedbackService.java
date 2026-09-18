@@ -100,10 +100,10 @@ public class AnswerFeedbackService {
             }
             String line = objectMapper.writeValueAsString(datasetItem) + System.lineSeparator();
             long maxBytes = Math.max(0L, feedbackProperties.getMaxDatasetBytes());
-            // Rotate the dataset file when it would exceed the configured cap.
-            // This caps disk usage even under sustained feedback spam, while
-            // still keeping the most recent data in the active file path so
-            // downstream training pipelines can pick it up as usual.
+            // 数据集文件超过配置上限时进行轮转。
+            // 即使遭遇持续的反馈刷量也能限制磁盘占用，
+            // 同时最新数据仍保留在当前文件路径中，
+            // 下游训练管道可以照常读取。
             if (maxBytes > 0 && Files.exists(output) && Files.size(output) >= maxBytes) {
                 String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
                 String rotatedName = output.getFileName().toString();

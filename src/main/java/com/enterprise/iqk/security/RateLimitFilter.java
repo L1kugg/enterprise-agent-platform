@@ -26,9 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitProperties rateLimitProperties;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
-    // Hard ceiling on the per-process bucket map so a burst of distinct keys
-    // cannot exhaust the JVM. Once exceeded we drop everything; legitimate
-    // callers rebuild their bucket on the next request.
+    // 进程内 bucket 映射的硬上限，防止大量不同的 key 突发涌入
+    // 拖垮 JVM。一旦超限就清空全部 bucket；正常调用者会在
+    // 下一次请求时重建自己的 bucket。
     private static final int MAX_BUCKETS = 50_000;
 
     @Override
@@ -41,8 +41,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         String key = resolveKey(request);
         if (buckets.size() >= MAX_BUCKETS) {
-            // Memory-safety guard: when the map is full (likely a flood of
-            // distinct keys), drop everything before adding a new entry.
+            // 内存安全保护：当映射已满（很可能是不同 key 的洪峰）时，
+            // 先清空全部条目再添加新条目。
             buckets.clear();
         }
         Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket());
@@ -65,14 +65,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Pick the most useful client IP for the rate-limit key. When the
-     * request comes through a reverse proxy, the direct {@code RemoteAddr}
-     * is the proxy's own address, so every anonymous caller would share
-     * one bucket and a single attacker could exhaust the limit for the
-     * whole tenant. Parse {@code X-Forwarded-For} only when the direct
-     * peer is a private/loopback address (i.e. we are behind a proxy),
-     * and prefer the rightmost non-private address so a malicious caller
-     * cannot inject a fake leftmost entry to rotate their own bucket.
+     * 为限流 key 选取最有效的客户端 IP。当请求经过反向代理时，直连的
+     * {@code RemoteAddr} 是代理自身的地址，所有匿名调用者会共享同一个
+     * bucket，单个攻击者即可耗尽整个租户的配额。仅当直连对端是
+     * 私有/回环地址（即我们位于代理之后）时才解析 {@code X-Forwarded-For}，
+     * 并优先选取最右侧的非私有地址，防止恶意调用者伪造最左侧条目
+     * 来轮换自己的 bucket。
      */
     static String resolveClientIp(HttpServletRequest request) {
         String direct = StringUtils.hasText(request.getRemoteAddr()) ? request.getRemoteAddr() : "unknown";
@@ -81,8 +79,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return direct;
         }
         if (!isPrivateOrLoopback(direct)) {
-            // Direct peer is already a public address, so the X-Forwarded-For
-            // header would be untrusted. Keep using the direct address.
+            // 直连对端已经是公网地址，此时 X-Forwarded-For 头不可信，
+            // 继续使用直连地址。
             return direct;
         }
         String[] hops = forwarded.split(",");
@@ -102,11 +100,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("127.0.0.1".equals(ip) || "::1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
             return true;
         }
-        // Simple textual prefix check covers the common RFC1918 / link-local
-        // ranges. InetAddress parsing is intentionally avoided here because
-        // X-Forwarded-For is a string and we want to fail closed (treat
-        // unparseable values as not-private so we keep using the direct
-        // address).
+        // 简单的文本前缀检查即可覆盖常见的 RFC1918 / 链路本地地址段。
+        // 这里刻意避免使用 InetAddress 解析，因为 X-Forwarded-For 是
+        // 字符串，且我们希望失败即关闭（把无法解析的值视为非私有地址，
+        // 从而继续使用直连地址）。
         if (ip.startsWith("10.") || ip.startsWith("192.168.")) {
             return true;
         }
@@ -122,7 +119,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         return true;
                     }
                 } catch (NumberFormatException ignored) {
-                    // fall through
+                    // 继续向下执行
                 }
             }
         }
@@ -145,9 +142,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Drops buckets that fully refilled (idle for at least the refill window) so the
-     * per-tenant/per-IP bucket map does not grow without bound. Scheduler-based
-     * eviction is safe: keys knocked out simply start with a fresh bucket.
+     * 丢弃已完全补满令牌的 bucket（至少空闲了一个补充窗口），避免
+     * 按租户/按 IP 的 bucket 映射无限增长。基于调度器的淘汰是安全的：
+     * 被移除的 key 只是从一个全新的 bucket 重新开始。
      */
     @Scheduled(fixedDelayString = "${app.rate-limit.evict-interval-ms:300000}")
     public void evictIdleBuckets() {

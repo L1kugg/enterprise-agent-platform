@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Decomposes a research topic into sub-questions for parallel or sequential investigation.
+ * 将研究主题拆解为若干子问题，以便并行或逐个调查。
  */
 @Component
 @RequiredArgsConstructor
@@ -61,8 +61,8 @@ public class ResearchPlannerAgent {
     }
 
     /**
-     * Defensive extraction: the model may return non-string list entries (numbers,
-     * nested objects), which would otherwise blow up with ClassCastException later.
+     * 防御性提取：模型可能返回非字符串的列表元素（数字、嵌套对象），
+     * 不加处理的话后面会抛出 ClassCastException。
      */
     private static List<String> toStringList(Object raw) {
         if (!(raw instanceof List<?> list)) {

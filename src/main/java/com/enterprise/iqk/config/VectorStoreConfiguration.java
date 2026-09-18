@@ -33,15 +33,15 @@ public class VectorStoreConfiguration {
         return SimpleVectorStore.builder(embeddingModel).build();
     }
 
-    @SuppressWarnings("PMD.CloseResource") // pool is owned by the PgVectorStore bean for the app lifetime
+    @SuppressWarnings("PMD.CloseResource") // 连接池由 PgVectorStore bean 持有，与应用同生命周期
     private VectorStore tryBuildPgvectorStore(OpenAiEmbeddingModel embeddingModel, VectorStoreProperties properties) {
         if (!StringUtils.hasText(properties.getPgvector().getUrl())) {
             log.warn("app.vector-store.pgvector.url is empty, skip pgvector initialization.");
             return null;
         }
         try {
-            // Pool connections instead of DriverManagerDataSource: the latter opens a
-            // fresh TCP connection for every retrieval, which collapses under load.
+            // 使用连接池而非 DriverManagerDataSource：后者每次检索都会新开一个
+            // TCP 连接，在高负载下性能会急剧恶化。
             HikariDataSource dataSource = new HikariDataSource();
             dataSource.setPoolName("pgvector-pool");
             dataSource.setDriverClassName("org.postgresql.Driver");
@@ -85,7 +85,7 @@ public class VectorStoreConfiguration {
             Method method = builder.getClass().getMethod(methodName, type);
             method.invoke(builder, value);
         } catch (NoSuchMethodException ignore) {
-            // keep compatibility with different Spring AI versions
+            // 保持对不同 Spring AI 版本的兼容性
         } catch (Exception e) {
             log.warn("Failed to invoke PgVectorStore builder method: {}", methodName, e);
         }

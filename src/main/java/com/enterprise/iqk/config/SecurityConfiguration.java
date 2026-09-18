@@ -33,7 +33,7 @@ public class SecurityConfiguration {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
-        // Enterprise security headers
+        // 企业级安全响应头
         http.headers(headers -> headers
                 .contentTypeOptions(cto -> {})
                 .frameOptions(fo -> fo.deny())

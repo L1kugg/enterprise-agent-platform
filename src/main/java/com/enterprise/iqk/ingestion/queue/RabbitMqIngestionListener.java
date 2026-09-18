@@ -36,8 +36,8 @@ public class RabbitMqIngestionListener {
             log.warn("Skip rabbit ingestion message without jobId: {}", payload);
             return;
         }
-        // Read tenant from the job itself; threads here have no MDC and the SQL
-        // now requires the owning tenant to claim the row.
+        // 从任务记录本身读取租户：这里的线程没有 MDC，
+        // 且 SQL 现在要求以任务所属租户的身份认领记录。
         IngestionJob job = ingestionJobMapper.findByJobId(jobId);
         String ownerTenant = job == null ? null : job.getTenantId();
         IngestionProcessResult result = ingestionService.processQueuedJob(jobId, ownerTenant, traceId);

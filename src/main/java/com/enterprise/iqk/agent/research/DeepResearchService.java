@@ -36,7 +36,7 @@ public class DeepResearchService {
                 request.getTopic(), request.getModelProfile(), null, null);
 
         try {
-            // Step 1: Plan - decompose topic
+            // 步骤 1：规划 —— 拆解主题
             workflowEngine.transitionStatus(task.getTaskId(), WorkflowState.PLANNING, WorkflowState.SEARCHING);
             var planStep = workflowEngine.startStep(task.getTaskId(), "ResearchPlanner", 1,
                     Map.of("topic", request.getTopic()));
@@ -47,7 +47,7 @@ public class DeepResearchService {
                     plan, null, null, null, 0, 0,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs), null);
 
-            // Step 2: Search & Retrieve for each sub-question
+            // 步骤 2：针对每个子问题进行搜索与检索
             workflowEngine.transitionStatus(task.getTaskId(), WorkflowState.SEARCHING, WorkflowState.RETRIEVING);
             List<String> findings = new ArrayList<>();
             int stepNum = 2;
@@ -76,7 +76,7 @@ public class DeepResearchService {
                 stepNum++;
             }
 
-            // Step 3: Write report
+            // 步骤 3：撰写报告
             workflowEngine.transitionStatus(task.getTaskId(), WorkflowState.RETRIEVING, WorkflowState.WRITING);
             var writeStep = workflowEngine.startStep(task.getTaskId(), "ReportWriter", stepNum,
                     Map.of("topic", request.getTopic()));

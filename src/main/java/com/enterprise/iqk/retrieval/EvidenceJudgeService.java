@@ -12,10 +12,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Scores evidence items on three dimensions:
- * - Relevance: how well the evidence matches the query
- * - Authority: source credibility (e.g., internal doc > web)
- * - Timeliness: recency of the information
+ * 从三个维度为证据条目评分：
+ * - 相关度：证据与查询的匹配程度
+ * - 权威度：来源可信度（例如：内部文档 > 网络来源）
+ * - 时效度：信息的新鲜程度
  */
 @Service
 @RequiredArgsConstructor
@@ -62,7 +62,7 @@ public class EvidenceJudgeService {
     }
 
     private double scoreRelevance(ScoredDocument doc, String query) {
-        // Use the retrieval score as a base, boosted by keyword overlap
+        // 以检索得分为基础，再按关键词重叠度加成
         double base = doc.getFinalScore();
         if (!StringUtils.hasText(query) || !StringUtils.hasText(doc.getContent())) {
             return base;
@@ -81,16 +81,16 @@ public class EvidenceJudgeService {
 
     private double scoreAuthority(ScoredDocument doc) {
         return switch (doc.getSourceType()) {
-            case "graph" -> 0.90;   // structured knowledge graph data
-            case "vector" -> 0.75;  // internal document chunks
-            case "keyword" -> 0.65; // keyword matches (same source, lower confidence)
-            case "web" -> 0.50;     // external web content
+            case "graph" -> 0.90;   // 结构化知识图谱数据
+            case "vector" -> 0.75;  // 内部文档 chunk
+            case "keyword" -> 0.65; // 关键词匹配（来源相同，置信度较低）
+            case "web" -> 0.50;     // 外部网络内容
             default -> 0.50;
         };
     }
 
     private double scoreTimeliness(ScoredDocument doc) {
-        // Default: no timestamp metadata → neutral score
+        // 默认：没有时间戳元数据 → 中性分数
         if (doc.getMetadata() == null) return 0.70;
         Object timestamp = doc.getMetadata().get("created_at");
         if (timestamp == null) timestamp = doc.getMetadata().get("timestamp");

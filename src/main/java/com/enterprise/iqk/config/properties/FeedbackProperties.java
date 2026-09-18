@@ -8,9 +8,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class FeedbackProperties {
     private boolean enabled = true;
     private String datasetPath = "evaluation/feedback_dataset.jsonl";
-    // Cap the on-disk dataset so a single tenant (or a tenant with a leaked
-    // credential) cannot exhaust the disk by repeatedly submitting feedback.
-    // When the file is at or above this size, the writer rotates to a
-    // timestamped sibling instead of appending further.
+    // 限制数据集在磁盘上的占用，防止单一租户（或凭据泄露的租户）
+    // 通过反复提交反馈耗尽磁盘空间。
+    // 当文件达到或超过该大小时，写入器会轮转到带时间戳的
+    // 同级文件，而不再继续追加。
     private long maxDatasetBytes = 50L * 1024L * 1024L; // 50 MiB
 }

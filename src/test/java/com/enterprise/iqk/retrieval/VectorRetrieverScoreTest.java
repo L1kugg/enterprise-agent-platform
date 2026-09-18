@@ -62,7 +62,7 @@ class VectorRetrieverScoreTest {
 
         List<ScoredDocument> docs = retriever.retrieve("q", "tenant", "chat");
 
-        // First doc still above the floor, second doc decays by 0.05.
+        // 第一条文档仍在分数下限之上，第二条按 0.05 递减。
         assertThat(docs.get(0).getRetrievalScore()).isBetween(0.99, 1.0);
         assertThat(docs.get(1).getRetrievalScore()).isBetween(0.9, 0.96);
     }

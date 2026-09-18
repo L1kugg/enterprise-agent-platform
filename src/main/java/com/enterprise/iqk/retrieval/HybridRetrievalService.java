@@ -30,8 +30,8 @@ public class HybridRetrievalService {
     private final WebRetriever webRetriever;
     private final MeterRegistry meterRegistry;
 
-    // Retrieval sources perform blocking IO; running them on ForkJoinPool.commonPool()
-    // could starve parallel streams elsewhere in the JVM, so use a dedicated pool.
+    // 各检索来源执行的是阻塞 IO；若在 ForkJoinPool.commonPool() 上运行，
+    // 可能导致 JVM 中其他并行流饥饿，因此使用专用线程池。
     private final ExecutorService retrievalExecutor = Executors.newFixedThreadPool(8, runnable -> {
         Thread thread = new Thread(runnable, "hybrid-retrieval");
         thread.setDaemon(true);
@@ -50,38 +50,38 @@ public class HybridRetrievalService {
     private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
     /**
-     * Retrieve documents using hybrid search with default source weights.
-     * Equivalent to calling {@link #retrieve(String, String, String, int, HybridWeights)}
-     * with default weights (vector=0.40, keyword=0.25, graph=0.20, web=0.15).
+     * 使用默认来源权重的混合检索获取文档。
+     * 等价于以默认权重（vector=0.40、keyword=0.25、graph=0.20、web=0.15）调用
+     * {@link #retrieve(String, String, String, int, HybridWeights)}。
      *
-     * @param query    search query
-     * @param tenantId tenant identifier for filtering
-     * @param chatId   chat/conversation identifier for filtering
-     * @param topK     number of top results to return
-     * @return hybrid retrieval result with deduplicated, scored documents
+     * @param query    搜索查询
+     * @param tenantId 用于过滤的租户标识
+     * @param chatId   用于过滤的会话标识
+     * @param topK     返回的头部结果数量
+     * @return 混合检索结果，包含去重且已评分的文档
      */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
         return retrieve(query, tenantId, chatId, topK, HybridWeights.DEFAULT);
     }
 
     /**
-     * Retrieve documents using hybrid search with configurable per-source weights.
-     * Each source runs in parallel via {@link CompletableFuture} and results are
-     * merged, deduplicated by content fingerprint, and sorted by final weighted score.
+     * 使用按来源可配置权重的混合检索获取文档。
+     * 各来源通过 {@link CompletableFuture} 并行执行，结果会被合并、
+     * 按内容指纹去重，并按最终加权得分排序。
      *
-     * Tuning tip: factual/definitional queries benefit from higher vector weight;
-     * exact-match/lookup queries benefit from higher keyword weight.
+     * 调优提示：事实型/定义型查询适合调高向量权重；
+     * 精确匹配/查找型查询适合调高关键词权重。
      *
-     * @param query    search query
-     * @param tenantId tenant identifier for filtering
-     * @param chatId   chat/conversation identifier for filtering
-     * @param topK     number of top results to return
-     * @param weights  per-source weight configuration; weights are normalized to sum to 1.0
-     * @return hybrid retrieval result with deduplicated, scored documents
+     * @param query    搜索查询
+     * @param tenantId 用于过滤的租户标识
+     * @param chatId   用于过滤的会话标识
+     * @param topK     返回的头部结果数量
+     * @param weights  按来源的权重配置；权重会被归一化为总和 1.0
+     * @return 混合检索结果，包含去重且已评分的文档
      */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK, HybridWeights weights) {
 
-        // Normalize weights to sum to 1.0
+        // 将权重归一化为总和 1.0
         HybridWeights normalized = weights.normalize();
 
         Timer.Sample sample = Timer.start(meterRegistry);
@@ -100,10 +100,10 @@ public class HybridRetrievalService {
                     .flatMap(future -> future.join().stream())
                     .toList();
 
-            // Deduplicate by content fingerprint
+            // 按内容指纹去重
             List<ScoredDocument> deduped = deduplicate(allDocs);
 
-            // Sort by weighted score descending
+            // 按加权得分降序排序
             deduped.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
 
             List<ScoredDocument> top = deduped.stream().limit(topK).toList();
@@ -152,7 +152,7 @@ public class HybridRetrievalService {
 
     private String fingerprint(ScoredDocument d) {
         String content = d.getContent() != null ? d.getContent() : "";
-        // Use first 200 chars as dedup key
+        // 取前 200 个字符作为去重键
         String normalized = content.replaceAll("\\s+", " ").trim();
         return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
     }

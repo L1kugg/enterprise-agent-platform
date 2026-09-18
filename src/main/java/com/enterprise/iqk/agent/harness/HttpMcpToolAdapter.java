@@ -22,19 +22,19 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 public class HttpMcpToolAdapter implements McpToolAdapter {
-    // Allow only public HTTP(S) endpoints for outbound MCP calls. Any
-    // RFC1918 / loopback / link-local / cloud-metadata address is refused
-    // to prevent an agent invocation of mcp_call from being turned into
-    // an SSRF probe against internal services or the host metadata API.
+    // 出站 MCP 调用仅允许公共 HTTP(S) 端点。任何
+    // RFC1918 / 回环 / 链路本地 / 云元数据地址一律拒绝，
+    // 防止 Agent 调用 mcp_call 时把请求变成针对内部服务
+    // 或宿主机元数据 API 的 SSRF 探测。
     private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
 
     private final AgentHarnessProperties harnessProperties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
-    // Cap the MCP HTTP response body so a hostile or compromised MCP
-    // server cannot exhaust JVM memory by returning a multi-MB payload.
-    // 2 MiB matches the same order of magnitude as the workspace
-    // max-file-bytes cap and is generous for typical JSON-RPC responses.
+    // 限制 MCP HTTP 响应体大小，防止恶意或被攻陷的 MCP
+    // 服务器返回数 MB 载荷耗尽 JVM 内存。2 MiB 与 workspace
+    // 的 max-file-bytes 上限同一数量级，对典型的 JSON-RPC
+    // 响应而言已足够宽裕。
     private static final long MAX_MCP_RESPONSE_BYTES = 2L * 1024L * 1024L;
 
     @Override
@@ -106,17 +106,15 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
     }
 
     /**
-     * Reject baseUrls whose scheme is not http(s) or whose host resolves to a
-     * private, loopback, link-local, or cloud-metadata address. Without this,
-     * an operator (or an LLM-driven agent invocation of mcp_call) could
-     * point the MCP HTTP adapter at e.g. http://169.254.169.254/latest/meta-data/
-     * to harvest cloud instance credentials.
+     * 拒绝 scheme 不是 http(s)，或主机名解析到私有、回环、链路本地或
+     * 云元数据地址的 baseUrl。若不做此校验，运维人员（或由 LLM 驱动的
+     * Agent 调用 mcp_call）可能把 MCP HTTP 适配器指向诸如
+     * http://169.254.169.254/latest/meta-data/ 的地址，以窃取云实例凭据。
      *
-     * <p>Operators can opt in to a curated list of host patterns (exact
-     * host or suffix match like ".internal.example.com") via
-     * {@code app.agent-harness.mcp.allowed-hosts}. Tests and dev
-     * environments typically need to set it to {@code ["localhost",
-     * "127.0.0.1", "::1"]}.
+     * <p>运维可通过 {@code app.agent-harness.mcp.allowed-hosts} 选择加入
+     * 一份经过审核的主机模式列表（精确主机名或诸如 ".internal.example.com"
+     * 的后缀匹配）。测试和开发环境通常需要将其设为 {@code ["localhost",
+     * "127.0.0.1", "::1"]}。
      */
     static boolean isSafeBaseUrl(String baseUrl, java.util.List<String> allowedHosts) {
         if (!StringUtils.hasText(baseUrl)) {
@@ -165,7 +163,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
             }
             String p = pattern.trim().toLowerCase();
             if (p.startsWith(".")) {
-                // suffix match: ".internal.example.com" matches "a.internal.example.com"
+                // 后缀匹配：".internal.example.com" 可匹配 "a.internal.example.com"
                 if (normalized.endsWith(p)) {
                     return true;
                 }

@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * Seeds an operator-provided bootstrap ADMIN credential at startup when
- * APP_BOOTSTRAP_API_KEY is configured. Repository-committed demo keys were
- * revoked by Flyway V15; this is the explicit per-deployment equivalent (the
- * Python runtime ships the same mechanism via the same environment name).
+ * 当配置了 APP_BOOTSTRAP_API_KEY 时，在启动时注入操作员提供的
+ * bootstrap ADMIN 凭据。仓库中提交的演示 key 已被 Flyway V15 吊销；
+ * 本类是按部署显式注入的等价机制（Python 运行时通过同名环境变量
+ * 提供相同机制）。
  */
 @Slf4j
 @Component
@@ -38,8 +38,8 @@ public class BootstrapApiKeyInitializer implements ApplicationRunner {
                 log.info("bootstrap api key '{}' already active for tenant '{}'", result.keyName(), result.tenantId());
             }
         } catch (RuntimeException exc) {
-            // Fail closed: a misconfigured bootstrap credential must surface at
-            // startup instead of leaving the deployment without an admin.
+            // 失败即终止（fail closed）：配置错误的 bootstrap 凭据必须在
+            // 启动时暴露出来，而不是让部署环境缺少管理员。
             throw new IllegalStateException("failed to provision bootstrap api key '" + properties.getKeyName() + "'", exc);
         }
     }

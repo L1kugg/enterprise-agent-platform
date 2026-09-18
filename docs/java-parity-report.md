@@ -1,44 +1,39 @@
-# Java Parity Report
+# Java 对齐报告
 
-This report records the Java edition readiness against the shared
-KnowledgeOps Agent parity target for Java, TypeScript, and Python.
+本报告记录 Java 版本相对于 KnowledgeOps Agent 三语言（Java、TypeScript、Python）共同对齐目标的就绪情况。
 
-## Scope
+## 范围
 
-The Java edition is the feature baseline and production-oriented prototype. It keeps the
-existing Spring Boot, Spring Security, Spring AI, MyBatis-Plus, Flyway,
-Docker, and observability stack, while exposing compatibility endpoints and
-tests for the shared three-language contract.
+Java 版本是功能基线和面向生产的原型。它保留了既有的 Spring Boot、Spring Security、Spring AI、MyBatis-Plus、Flyway、Docker 及可观测性技术栈，同时为三语言共享契约提供兼容端点和测试。
 
-## Capability Matrix
+## 能力矩阵
 
-| Capability | Java status | Evidence |
+| 能力 | Java 状态 | 证据 |
 |---|---:|---|
-| Auth and tenant isolation | Done | API key, JWT, refresh token, RBAC, identity-derived tenant context |
-| Chat | Done | `/ai/chat` |
-| SSE streaming | Done | `/ai/chat/stream`, `/ai/react/chat/stream` |
-| ReAct Agent | Done | `/ai/react/chat`, trace payloads |
-| RAG ingestion and Q&A | Done | `/ai/pdf/upload/{chatId}`, `/ingestion/upload/{chatId}`, `/ai/pdf/chat` |
-| Hybrid retrieval | Done | vector, keyword, graph, web retrieval service |
-| Citations and evidence | Done | `CitationItem`, `EvidenceItem`, RAG responses |
-| Session history | Done | `/ai/sessions`, branch compare and merge |
-| Feedback and evaluation | Done | `/ai/feedback`, `/ai/evaluation/datasets`, `/ai/evaluation/runs` |
-| Cost governance | Done | `/cost/summary`, `/cost/budget` |
-| Audit logs | Done | `/audit/logs`, audit filter |
-| Rate limiting | Single instance | Bucket4j in-memory filter; shared Redis backend is not implemented |
-| Health and metrics | Done | `/actuator/health`, `/actuator/prometheus` |
-| Docker local deployment | Done | `Dockerfile`, `docker-compose.yml` |
-| Helm deployment | Done | `helm/knowledgeops-agent` |
-| API contract tests | Done | `JavaApiContractTest` |
-| E2E smoke | Done | `scripts/e2e_chat_flow.py` |
-| Performance smoke | Done | `performance/k6/chat_ingestion_load.js` |
-| Security defaults check | Done | `AppStartupValidator`, `SecurityDefaultsTest` |
-| README and operations docs | Done | README, operations docs, this report |
+| 认证与租户隔离 | 已完成 | API key、JWT、refresh token、RBAC、由身份派生的租户上下文 |
+| 聊天 | 已完成 | `/ai/chat` |
+| SSE 流式 | 已完成 | `/ai/chat/stream`、`/ai/react/chat/stream` |
+| ReAct Agent | 已完成 | `/ai/react/chat`、trace 载荷 |
+| RAG 摄取与问答 | 已完成 | `/ai/pdf/upload/{chatId}`、`/ingestion/upload/{chatId}`、`/ai/pdf/chat` |
+| 混合检索 | 已完成 | 向量、关键词、图谱、Web 检索服务 |
+| 引用与证据 | 已完成 | `CitationItem`、`EvidenceItem`、RAG 响应 |
+| 会话历史 | 已完成 | `/ai/sessions`、分支对比与合并 |
+| 反馈与评估 | 已完成 | `/ai/feedback`、`/ai/evaluation/datasets`、`/ai/evaluation/runs` |
+| 成本治理 | 已完成 | `/cost/summary`、`/cost/budget` |
+| 审计日志 | 已完成 | `/audit/logs`、审计过滤器 |
+| 限流 | 仅单实例 | Bucket4j 内存过滤器；共享 Redis 后端尚未实现 |
+| 健康检查与指标 | 已完成 | `/actuator/health`、`/actuator/prometheus` |
+| Docker 本地部署 | 已完成 | `Dockerfile`、`docker-compose.yml` |
+| Helm 部署 | 已完成 | `helm/knowledgeops-agent` |
+| API 契约测试 | 已完成 | `JavaApiContractTest` |
+| E2E 冒烟 | 已完成 | `scripts/e2e_chat_flow.py` |
+| 性能冒烟 | 已完成 | `performance/k6/chat_ingestion_load.js` |
+| 安全默认值检查 | 已完成 | `AppStartupValidator`、`SecurityDefaultsTest` |
+| README 与运维文档 | 已完成 | README、运维文档、本报告 |
 
-## Shared Endpoint Contract
+## 共享端点契约
 
-The Java edition exposes the shared endpoint names expected by the three
-language tracks:
+Java 版本提供三语言路线共同约定的端点名称：
 
 - `POST /auth/token`
 - `POST /auth/refresh`
@@ -63,27 +58,22 @@ language tracks:
 - `GET /cost/summary`
 - `POST /cost/budget`
 
-## Compatibility Notes
+## 兼容性说明
 
-- Existing Java endpoints remain available. New shared endpoints were added as
-  aliases where needed instead of removing existing routes.
-- JSON responses keep the current Java response shapes for frontend and smoke
-  compatibility. Compatibility getters expose shared names such as
-  `thoughtSummary`, `source`, `snippet`, `principal`, and `status`.
-- Global response envelope migration to strict `ok/msg/data` for every endpoint
-  is intentionally left as a future coordinated change because it would affect
-  the current frontend and E2E smoke payload expectations.
+- 既有的 Java 端点仍然可用。新的共享端点在需要时以别名形式添加，而不是删除现有路由。
+- JSON 响应保持当前 Java 的响应结构，以保证前端与冒烟测试兼容。兼容性 getter 暴露共享字段名，例如 `thoughtSummary`、`source`、`snippet`、`principal` 和 `status`。
+- 将全局响应包络统一迁移为严格的 `ok/msg/data` 有意留待后续协同变更，因为这会影响当前前端和 E2E 冒烟测试的载荷预期。
 
-## Local Java Gates
+## 本地 Java 门禁
 
-Run these before pushing Java main:
+推送 Java main 之前请先执行：
 
 ```bash
 mvn -q test
 mvn -q -DskipTests package
 ```
 
-Optional deployment checks:
+可选的部署检查：
 
 ```bash
 helm lint helm/knowledgeops-agent

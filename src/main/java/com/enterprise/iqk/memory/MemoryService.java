@@ -22,7 +22,7 @@ public class MemoryService {
     private final MemoryEventMapper eventMapper;
     private final ObjectMapper objectMapper;
 
-    // ── Save ─────────────────────────────────────────────────────
+    // ── 保存 ─────────────────────────────────────────────────────
 
     public MemoryItemRecord saveShortMemory(String tenantId, String userId,
                                              String content, String source) {
@@ -72,7 +72,7 @@ public class MemoryService {
         return item;
     }
 
-    // ── Query ─────────────────────────────────────────────────────
+    // ── 查询 ─────────────────────────────────────────────────────
 
     public List<MemoryItemRecord> queryShortMemory(String tenantId, String userId, int limit) {
         return itemMapper.findByUserAndType(TenantContext.normalize(tenantId), userId, "short", limit);
@@ -123,9 +123,9 @@ public class MemoryService {
         return new MemoryContextSnapshot(context.toString(), shortMem, longMem, facts);
     }
 
-    // ── Maintenance ──────────────────────────────────────────────
+    // ── 维护 ──────────────────────────────────────────────────────
 
-    @Scheduled(cron = "0 0 3 * * ?") // daily at 3am
+    @Scheduled(cron = "0 0 3 * * ?") // 每天凌晨 3 点执行
     public void cleanExpiredMemories() {
         int deleted = itemMapper.deleteExpired();
         if (deleted > 0) {
@@ -141,7 +141,7 @@ public class MemoryService {
         }
     }
 
-    // ── Event ─────────────────────────────────────────────────────
+    // ── 事件 ─────────────────────────────────────────────────────
 
     private void emitEvent(String memoryId, String action, String reason) {
         try {

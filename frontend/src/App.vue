@@ -356,7 +356,7 @@
                           </li>
                         </ul>
                       </div>
-                      <!-- Agent Trace Timeline -->
+                      <!-- Agent 执行轨迹时间线 -->
                       <div
                         v-if="traceSteps.length && entry.index === virtualMessages.length - 1"
                         class="trace-timeline-panel"
@@ -1009,12 +1009,11 @@ function shortId(id: string): string {
   return id.slice(0, 10);
 }
 
-// Module-level hook: force rel="noopener noreferrer" on every link with
-// target="_blank" rendered from LLM output. Without this, a prompt-injected
-// response could open a new tab and the new tab's JS would be able to reach
-// back to window.opener.location of the original page (reverse-tabnabbing).
-// Registered once at module load; DOMPurify hooks are keyed by event name and
-// replace prior registrations, so this is safe across re-renders.
+// 模块级钩子：对 LLM 输出中渲染出的所有带 target="_blank" 的链接
+// 强制添加 rel="noopener noreferrer"。否则被提示词注入的响应可能
+// 打开新标签页，新标签页的 JS 就能回访原页面的 window.opener.location
+// （反向 tabnabbing 攻击）。该钩子在模块加载时注册一次；DOMPurify 的
+// 钩子按事件名作为键并会覆盖先前的注册，因此在多次重渲染间是安全的。
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
     const existing = (node.getAttribute('rel') || '').toLowerCase();
@@ -1030,11 +1029,11 @@ function renderMarkdown(content: string): string {
     return '<p>等待模型输出...</p>';
   }
   const html = marked.parse(content) as string;
-  // Defense-in-depth: explicitly forbid inline event handlers, javascript:
-  // URLs, and target=_blank without rel=noopener. DOMPurify already strips
-  // the dangerous forms (script, onerror, javascript:), but the defaults
-  // leave target and a few other attributes alone, which is enough to
-  // enable reverse-tabnabbing on links rendered from LLM output.
+  // 纵深防御：显式禁止内联事件处理器、javascript: URL 以及
+  // 未带 rel=noopener 的 target=_blank。DOMPurify 本身已清除
+  // 危险形式（script、onerror、javascript:），但默认配置会保留
+  // target 等少数属性，这足以让 LLM 输出渲染出的链接
+  // 成为反向 tabnabbing 攻击的入口。
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['data-code'],
     ALLOWED_ATTR: [
@@ -1101,7 +1100,7 @@ const messages = ref<ChatMessage[]>([...activeBranch.value.messages]);
 const traceSteps = ref<ReactTraceStep[]>([...activeBranch.value.traceSteps]);
 const traceDurationMs = computed(() => {
   if (!traceSteps.value.length) return 0;
-  // Estimate ~2s per step as rough timing if not available
+  // 若无真实耗时数据，按每步约 2 秒粗略估算
   return traceSteps.value.length * 2000;
 });
 
@@ -1655,7 +1654,7 @@ async function refreshCostSummary(): Promise<void> {
   try {
     costSummary.value = await getTenantCostSummary(authContext());
   } catch {
-    // Keep UI usable even when cost endpoint is unavailable.
+    // 即使成本查询接口不可用，也保持界面可用。
   }
 }
 
@@ -3206,7 +3205,7 @@ h2 {
   font-size: 12px;
 }
 
-/* ── Agent Trace Timeline ─────────────────────────── */
+/* ── Agent 执行轨迹时间线 ─────────────────────────── */
 .trace-timeline-panel {
   margin-top: 12px;
   padding: 12px 14px;

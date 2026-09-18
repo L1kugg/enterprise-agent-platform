@@ -10,14 +10,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EvidenceItem {
-    private String sourceType;   // vector | keyword | graph | web
+    private String sourceType;   // 向量 | 关键词 | 图谱 | 网络
     private String title;
     private String url;
     private String chunkId;
-    private double score;        // 0-1 composite score
-    private String reason;       // human-readable reason for the score
+    private double score;        // 0-1 综合得分
+    private String reason;       // 人类可读的评分理由
     private double relevanceScore;
     private double authorityScore;
     private double timelinessScore;
-    private String snippet;      // short preview text
+    private String snippet;      // 简短预览文本
 }

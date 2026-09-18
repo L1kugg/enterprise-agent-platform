@@ -30,8 +30,8 @@ public class TrustedActionService {
 
         String token = "ta-" + UUID.randomUUID().toString().replace("-", "");
         Instant expiresAt = Instant.now().plus(TOKEN_TTL);
-        // Sweep tokens whose TTL elapsed without ever being executed; otherwise the
-        // pending map keeps growing for the lifetime of the process.
+        // 清理已过 TTL 但始终未被消费执行的 token；否则挂起映射表
+        // 会随进程生命周期不断增长。
         pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
         pendingActions.put(token, new PendingTrustedAction(action, expiresAt));
         return new TrustedActionPreviewResponse(
@@ -44,10 +44,9 @@ public class TrustedActionService {
     }
 
     public AgentObservation execute(String token, String tenantId) {
-        // Opportunistically drop expired tokens here as well: the preview
-        // path is the only place that sweeps the map, so an operator that
-        // only ever calls execute (e.g. an automated confirm loop) would
-        // otherwise let expired tokens accumulate until the next preview.
+        // 这里也顺带清理过期 token：目前只有 preview 路径会清扫该映射表，
+        // 若运维只调用 execute（例如自动化确认循环），过期 token
+        // 会一直堆积到下一次 preview 才被清除。
         pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
         PendingTrustedAction pending = pendingActions.get(token);
         if (pending == null || !pending.action().tenantId().equals(tenantId)) {

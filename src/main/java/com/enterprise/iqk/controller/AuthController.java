@@ -31,7 +31,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuthController {
     private static final long REFRESH_EXPIRE_SOON_DAYS = 2L;
-    /** Name of the HttpOnly cookie that holds the long-lived refresh token. */
+    /** 存放长效 refresh token 的 HttpOnly cookie 的名称。 */
     public static final String REFRESH_COOKIE = "kops_refresh";
 
     private final ApiKeyAuthService apiKeyAuthService;
@@ -42,11 +42,10 @@ public class AuthController {
     private final SecurityProperties securityProperties;
 
     /**
-     * When true (default), the refresh token cookie is marked Secure and
-     * the SameSite=Strict policy is used. Operators serving the app over
-     * plain HTTP during local development should set
-     * {@code app.security.refresh-cookie-secure=false} to make the cookie
-     * usable from a localhost browser.
+     * 为 true（默认值）时，refresh token cookie 会标记 Secure 并使用
+     * SameSite=Strict 策略。在本地开发中通过纯 HTTP 提供服务的操作员
+     * 应设置 {@code app.security.refresh-cookie-secure=false}，以便
+     * localhost 浏览器能够使用该 cookie。
      */
     @Value("${app.security.refresh-cookie-secure:true}")
     private boolean refreshCookieSecure;
@@ -67,12 +66,11 @@ public class AuthController {
         String token = jwtService.issueToken(identity.getPrincipal(), identity.getRoles(), permissions, identityTenant);
         RefreshTokenService.RefreshTokenIssueResult refreshIssue =
                 refreshTokenService.issue(identity.getPrincipal(), identity.getRoles(), identityTenant);
-        // Refresh token is delivered as an HttpOnly cookie so an XSS in the
-        // front-end cannot exfiltrate the long-lived credential. The body
-        // still carries a copy for the existing App.vue that has not yet
-        // moved to credentials: 'include'. Once the companion PR (PR B)
-        // lands and App.vue drops localStorage, the body field can go
-        // away without breaking older clients mid-upgrade.
+        // Refresh token 以 HttpOnly cookie 下发，这样前端即使发生 XSS
+        // 也无法窃取这份长效凭据。响应体中仍会携带一份副本，
+        // 供尚未切换到 credentials: 'include' 的现有 App.vue 使用。
+        // 等配套的 PR（PR B）合入且 App.vue 弃用 localStorage 后，
+        // 即可移除响应体中的该字段，且不会在升级过程中破坏旧客户端。
         setRefreshCookie(response, refreshIssue);
         return buildTokenResponse(token, identityTenant, refreshIssue);
     }
@@ -80,10 +78,9 @@ public class AuthController {
     @PostMapping("/refresh")
     public AuthTokenVO refresh(@RequestHeader(value = "X-Refresh-Token", required = false) String refreshTokenHeader,
                               @CookieValue(value = REFRESH_COOKIE, required = false) String refreshCookie) {
-        // Accept the refresh token from either the legacy X-Refresh-Token
-        // header or the HttpOnly cookie set by /auth/token. Header takes
-        // precedence so older clients (or test scripts) can still override
-        // the cookie value.
+        // 接受来自旧版 X-Refresh-Token 请求头或 /auth/token 所设置
+        // HttpOnly cookie 的 refresh token。请求头优先，这样旧客户端
+        // （或测试脚本）仍可覆盖 cookie 中的值。
         String refreshToken = StringUtils.hasText(refreshTokenHeader) ? refreshTokenHeader : refreshCookie;
         AuthIdentity identity = refreshTokenService.consume(refreshToken);
         if (identity == null) {
@@ -103,11 +100,10 @@ public class AuthController {
                         java.time.Instant.now(),
                         refreshIssue.expiresAt().atZone(java.time.ZoneOffset.UTC).toInstant()
                 ).getSeconds());
-        // The Servlet Cookie API has no SameSite setter, so build the
-        // Set-Cookie header by hand. The Secure flag is omitted in dev
-        // profiles (refresh-cookie-secure=false) because Secure cookies
-        // are not sent over plain HTTP, which is how the dev front-end
-        // talks to the dev back-end.
+        // Servlet Cookie API 没有 SameSite 的设置方法，因此需要手工
+        // 拼接 Set-Cookie 头。开发环境配置（refresh-cookie-secure=false）
+        // 下省略 Secure 标志，因为 Secure cookie 不会随纯 HTTP 请求发送，
+        // 而开发前端正是通过纯 HTTP 访问开发后端的。
         String secureAttr = refreshCookieSecure ? "; Secure" : "";
         String cookieValue = String.format(
                 "%s=%s; Path=/auth; Max-Age=%d; HttpOnly%s; SameSite=Strict",
@@ -121,12 +117,10 @@ public class AuthController {
         cookie.setPath("/auth");
         cookie.setMaxAge((int) Math.min(maxAge, Integer.MAX_VALUE));
         response.addCookie(cookie);
-        // The standard Cookie API does not expose SameSite; add a second
-        // Set-Cookie header (with the SameSite attribute) so the
-        // container is required to merge on serialization. The first
-        // Set-Cookie (from addCookie) and the second (from addHeader)
-        // carry the same value+attributes; downstream caches will keep
-        // one of them per RFC 7234.
+        // 标准 Cookie API 不支持 SameSite；追加第二个 Set-Cookie 头
+        // （带 SameSite 属性），使容器在序列化时必须合并。第一个
+        // Set-Cookie（来自 addCookie）与第二个（来自 addHeader）的
+        // 值和属性完全相同；按照 RFC 7234，下游缓存会保留其中一个。
         response.addHeader("Set-Cookie", cookieValue);
     }
 

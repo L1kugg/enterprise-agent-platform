@@ -17,8 +17,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Keyword-based retriever using text overlap scoring on document titles and content.
- * Complements VectorRetriever by catching exact term matches that semantic search may miss.
+ * 基于关键词的检索器，对文档标题和内容进行文本重叠度评分。
+ * 与 VectorRetriever 互补，可捕获语义搜索可能遗漏的精确词匹配。
  */
 @Component
 @RequiredArgsConstructor
@@ -31,7 +31,7 @@ public class KeywordRetriever {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            // Use vector store as document source, then re-rank by keyword overlap
+            // 用向量库作为文档来源，再按关键词重叠度重新排序
             String filter = "tenant_id == \"" + escapeFilter(tenantId)
                     + "\" && chat_id == \"" + escapeFilter(chatId) + "\"";
             List<Document> docs = vectorStore.similaritySearch(

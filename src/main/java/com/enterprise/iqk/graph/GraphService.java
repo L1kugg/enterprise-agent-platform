@@ -23,7 +23,7 @@ public class GraphService {
     private final KgFactMapper factMapper;
 
     /**
-     * Search entities by keyword (name or alias match).
+     * 按关键词检索实体（匹配名称或别名）。
      */
     public List<KgEntityRecord> searchEntities(String tenantId, String keyword, int limit) {
         if (!StringUtils.hasText(keyword)) return List.of();
@@ -31,7 +31,7 @@ public class GraphService {
     }
 
     /**
-     * Get one-hop neighbors of an entity, with relation info.
+     * 获取实体的一跳邻居，附带关系信息。
      */
     public List<GraphNeighbor> getNeighbors(String tenantId, String entityId) {
         List<KgRelationRecord> relations = relationMapper.findRelations(tenantId, entityId);
@@ -56,7 +56,7 @@ public class GraphService {
     }
 
     /**
-     * Search facts by keyword (subject or object match).
+     * 按关键词检索事实（匹配主语或宾语）。
      */
     public List<KgFactRecord> searchFacts(String tenantId, String keyword, int limit) {
         if (!StringUtils.hasText(keyword)) return List.of();
@@ -64,7 +64,7 @@ public class GraphService {
     }
 
     /**
-     * Get entities by type, e.g., all COURSE entities.
+     * 按类型获取实体，例如全部 COURSE 类型的实体。
      */
     public List<KgEntityRecord> getEntitiesByType(String tenantId, String type) {
         return entityMapper.findByType(tenantId, type);
@@ -77,7 +77,7 @@ public class GraphService {
     public static class GraphNeighbor {
         private KgEntityRecord entity;
         private String relationType;
-        private String direction;  // IN or OUT
+        private String direction;  // 取值为 IN 或 OUT
         private Double weight;
     }
 }

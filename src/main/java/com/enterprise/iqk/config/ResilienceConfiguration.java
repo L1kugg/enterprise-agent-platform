@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * Resilience4j circuit breaker and retry configuration for LLM API calls.
+ * 面向 LLM API 调用的 Resilience4j 熔断与重试配置。
  */
 @Configuration
 public class ResilienceConfiguration {

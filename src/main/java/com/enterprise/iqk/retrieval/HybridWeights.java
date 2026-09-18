@@ -1,7 +1,7 @@
 package com.enterprise.iqk.retrieval;
 
 /**
- * Configurable per-source weights for hybrid retrieval.
+ * 混合检索中按来源可配置的权重。
  */
 public record HybridWeights(double vectorWeight, double keywordWeight,
                              double graphWeight, double webWeight) {

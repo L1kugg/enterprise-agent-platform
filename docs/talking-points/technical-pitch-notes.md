@@ -1,28 +1,28 @@
-# Interview Notes
+# 面试要点笔记
 
-## One-Minute Pitch
+## 一分钟介绍
 
-KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document knowledge into a governed, deployable, and measurable backend system with tenant isolation, asynchronous ingestion, audit logs, observability, and regression evaluation.
+KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，把文档知识转化为可治理、可部署、可度量的后端系统，具备租户隔离、异步入库、审计日志、可观测性与回归评测能力。
 
-## What It Proves
+## 它证明了什么
 
-- RAG is implemented as a platform path rather than a single retrieval endpoint.
-- Ingestion is asynchronous and observable, with job status, retries, and failure handling.
-- Tenant and permission boundaries are visible through API keys, JWT, RBAC, tenant headers, and audit logs.
-- The system includes operational proof: Docker Compose, Flyway migrations, metrics, logs, traces, and alerting assets.
-- Quality checks are part of the story through unit tests, integration tests, JaCoCo, regression scripts, and E2E smoke evidence.
+- RAG 按平台化路径实现，而不是单个检索接口。
+- 入库是异步且可观测的，具备任务状态、重试与失败处理。
+- 租户与权限边界通过 API Key、JWT、RBAC、租户请求头与审计日志可见。
+- 系统具备运维证据：Docker Compose、Flyway 迁移、指标、日志、链路追踪与告警资产。
+- 质量保障贯穿其中：单元测试、集成测试、JaCoCo、回归脚本与端到端 smoke 证据。
 
-## Best Technical Story
+## 最有说服力的技术叙事
 
-The strongest story is that the RAG answer is only one surface of the platform. The more important engineering work is the lifecycle around it: document upload, async parsing, vector indexing, tenant-scoped retrieval, answer citations, audit trail, metrics, and regression evaluation.
+最有力的叙事是：RAG 问答只是平台的一个切面，更重要的工程工作在其外围生命周期——文档上传、异步解析、向量索引、租户隔离检索、答案引用、审计追踪、指标与回归评测。
 
-## Tradeoffs To Explain
+## 需要解释的取舍
 
-- Spring AI is currently pinned to `1.0.0-M6`; the repository should treat a framework upgrade as an explicit compatibility project, not a casual dependency bump.
-- Local demo settings prioritize reproducibility over production hardening.
-- Some provider integrations are designed to be swappable, so provider-specific behavior should stay behind configuration and adapter boundaries.
+- Spring AI 当前锁定在 `1.0.0-M6`；本仓库把框架升级当作一个明确的兼容性项目来管理，而不是随手升级依赖。
+- 本地演示配置优先保证可复现性，而非生产加固。
+- 部分模型提供方集成设计为可替换，提供方特有行为应收敛在配置与适配层边界之内。
 
-## Validation Path
+## 验证路径
 
 ```bash
 ./scripts/demo.sh
@@ -31,8 +31,8 @@ mvn test
 cd frontend && npm ci && npm run lint && npm run build
 ```
 
-## Follow-Up Ideas
+## 后续想法
 
-- Add a public regression report artifact with sample questions and expected citation behavior.
-- Add a threat model for tenant isolation and API-key/JWT boundaries.
-- Publish OpenAPI output as a generated artifact in CI.
+- 增加公开的回归报告产物，包含示例问题与预期引用行为。
+- 为租户隔离与 API Key/JWT 边界补充威胁模型。
+- 在 CI 中把 OpenAPI 输出作为生成产物发布。

@@ -30,6 +30,7 @@ cp .env.example .env
 ```
 
 核心环境变量：
+
 | 变量 | 说明 | 默认值 |
 |---|---|---|
 | `OPENAI_API_KEY` | 模型 API 密钥 | 必填 |
@@ -65,6 +66,7 @@ docker compose up --build -d
 ```
 
 服务列表：
+
 | 服务 | 端口 | 说明 |
 |---|---|---|
 | knowledgeops-agent | 8080 | Spring Boot 后端 |

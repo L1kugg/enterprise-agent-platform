@@ -20,7 +20,7 @@ route:
 
 receivers:
   - name: "default"
-    # Configure webhook, Slack, or email for production:
+    # 生产环境请配置 webhook、Slack 或邮件通知：
     # webhook_configs:
     #   - url: "${ALERTMANAGER_WEBHOOK_URL}"
     #     send_resolved: true

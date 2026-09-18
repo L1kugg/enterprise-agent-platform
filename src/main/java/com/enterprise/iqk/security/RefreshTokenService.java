@@ -49,8 +49,8 @@ public class RefreshTokenService {
         if (record == null) {
             return null;
         }
-        // Conditional revoke guards against concurrent reuse of the same token:
-        // only the first caller flips revoked_at, the rest get 0 rows and are rejected.
+        // 条件更新式吊销可防止同一 token 被并发复用：
+        // 只有第一个调用者能更新 revoked_at，其余调用者更新 0 行并被拒绝。
         if (refreshTokenMapper.revoke(record.getId(), LocalDateTime.now()) == 0) {
             return null;
         }

@@ -1,7 +1,7 @@
 package com.enterprise.iqk.security;
 
 /**
- * Utility for masking sensitive data in audit logs and error messages.
+ * 用于在审计日志和错误消息中对敏感数据脱敏的工具类。
  */
 public final class MaskingUtils {
 

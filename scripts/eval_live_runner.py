@@ -44,7 +44,7 @@ def extract_citations(done_payload):
                 text = str(item).strip()
                 if text:
                     citations.append(text)
-    # unique + order
+    # 去重并保持原始顺序
     seen = set()
     result = []
     for item in citations:
@@ -108,8 +108,8 @@ def stream_chat(base_url, body, headers, timeout):
                 data_lines = []
                 continue
 
-            # Spring WebFlux may wrap emitted SSE strings as data:event/data:data lines.
-            # Support both wrapped and raw SSE formats.
+            # Spring WebFlux 可能把发出的 SSE 字符串包装成 data:event/data:data 行。
+            # 同时兼容包装形式与原始 SSE 格式。
             if line.startswith("data:event:"):
                 event_name = line[len("data:event:"):].strip() or "message"
             elif line.startswith("data:data:"):

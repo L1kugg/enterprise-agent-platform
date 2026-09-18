@@ -61,9 +61,9 @@ public class VectorRetriever {
         return v == null ? fallback : v.toString();
     }
 
-    // Real retrieval scores live in Spring AI's standard metadata keys
-    // (distance / score). Falling back to rank-based decay keeps the pipeline
-    // functional for stores that do not populate them.
+    // 真实的检索得分保存在 Spring AI 的标准元数据键中
+    // （distance / score）。对于不填充这些键的向量库，
+    // 回退到基于排名的衰减得分，保证流水线仍可用。
     private double extractScore(Document d, int rank) {
         Double explicit = readDouble(d.getMetadata(), "score");
         if (explicit != null) {
@@ -104,10 +104,9 @@ public class VectorRetriever {
         return value;
     }
 
-    // Escape values for double-quoted filter expressions. The previous
-    // implementation only stripped single quotes, so an input containing a
-    // double quote (or backslash) could break out of the filter and inject
-    // an unintended predicate.
+    // 对双引号包裹的过滤表达式中的值进行转义。之前的实现
+    // 只去除单引号，因此包含双引号（或反斜杠）的输入
+    // 可能突破过滤条件并注入意外的谓词。
     private String escapeFilter(String v) {
         if (v == null) return "";
         return v.replace("\\", "\\\\").replace("\"", "\\\"");

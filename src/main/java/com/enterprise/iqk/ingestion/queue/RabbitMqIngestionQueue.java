@@ -54,11 +54,11 @@ public class RabbitMqIngestionQueue implements IngestionQueue {
 
     @Override
     public void ack(String consumerName, String recordId) {
-        // RabbitMQ listener handles ack automatically.
+        // RabbitMQ 监听器会自动完成 ack。
     }
 
     @Override
     public void ensureConsumerGroup() {
-        // no-op for RabbitMQ
+        // RabbitMQ 无需此操作
     }
 }

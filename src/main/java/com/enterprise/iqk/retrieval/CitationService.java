@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Generates numbered citations with source, chunk, confidence, and excerpt.
+ * 生成带编号的引用，包含来源、chunk、置信度和摘录。
  */
 @Service
 public class CitationService {

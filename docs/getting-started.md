@@ -1,14 +1,14 @@
-# Getting Started
+# 快速开始
 
-This guide gets KnowledgeOps Agent running locally with Docker Compose and verifies the most important runtime surfaces.
+本指南介绍如何在本地通过 Docker Compose 运行 KnowledgeOps Agent，并核验最重要的运行时入口。
 
-## Prerequisites
+## 前置条件
 
-- JDK 17+ if you plan to run the backend outside Docker.
-- Docker and Docker Compose.
-- An OpenAI-compatible model endpoint and API key.
+- 如果打算在 Docker 之外运行后端，需要 JDK 17+。
+- Docker 与 Docker Compose。
+- 一个 OpenAI 兼容的模型端点和 API Key。
 
-## Start the Full Stack
+## 启动完整技术栈
 
 ```bash
 git clone https://github.com/however-yir/knowledgeops-agent.git
@@ -16,33 +16,33 @@ cd knowledgeops-agent
 ./scripts/demo.sh
 ```
 
-The demo script creates a gitignored `.env.demo` file when missing, starts the Docker Compose stack, waits for API/web health checks, and runs a smoke test.
+演示脚本会在 `.env.demo` 缺失时创建该文件（已加入 gitignore），启动 Docker Compose 技术栈，等待 API/Web 健康检查通过，并运行冒烟测试。
 
 ```bash
 make demo
 ```
 
-Use `make demo` when you prefer Make targets.
+如果你更习惯使用 Make 目标，可以执行 `make demo`。
 
-## Verify Startup
+## 核验启动状态
 
 ```bash
 curl http://localhost:8080/actuator/health
 curl http://localhost:8080/actuator/prometheus
 ```
 
-Expected local surfaces:
+本地可访问的入口：
 
-| Surface | URL |
+| 入口 | URL |
 |---|---|
-| Frontend console | `http://localhost:8088` |
-| Backend API | `http://localhost:8080` |
+| 前端控制台 | `http://localhost:8088` |
+| 后端 API | `http://localhost:8080` |
 | Swagger UI | `http://localhost:8080/swagger-ui/index.html` |
-| RabbitMQ console | `http://localhost:15672` |
+| RabbitMQ 控制台 | `http://localhost:15672` |
 
-## Authenticate
+## 身份认证
 
-The local development seed includes a demo administrator API key. Use the seeded value from `.env.example` or the frontend authentication card.
+本地开发预置数据中包含一个演示管理员 API Key。请使用 `.env.example` 或前端认证卡片中的预置值。
 
 ```bash
 curl -X POST http://localhost:8080/auth/token \
@@ -50,9 +50,9 @@ curl -X POST http://localhost:8080/auth/token \
   -H "X-Tenant-Id: default"
 ```
 
-Use the returned JWT as `Authorization: Bearer <token>` for protected routes. The API key can also be sent directly with `X-API-Key` in local evaluation flows.
+在访问受保护路由时，将返回的 JWT 用作 `Authorization: Bearer <token>`。在本地评估流程中，也可以直接通过 `X-API-Key` 发送 API Key。
 
-## Try a Chat Request
+## 试一次聊天请求
 
 ```bash
 curl "http://localhost:8080/ai/chat?prompt=hello&chatId=demo-chat" \
@@ -60,15 +60,15 @@ curl "http://localhost:8080/ai/chat?prompt=hello&chatId=demo-chat" \
   -H "X-Tenant-Id: default"
 ```
 
-## Shut Down
+## 关闭服务
 
 ```bash
 ./scripts/demo.sh down
 ```
 
-Use `docker compose down -v` only when you intentionally want to remove local volumes.
+只有在确实要删除本地卷时才使用 `docker compose down -v`。
 
-## Demo Script Commands
+## 演示脚本命令
 
 ```bash
 ./scripts/demo.sh verify
@@ -76,11 +76,11 @@ Use `docker compose down -v` only when you intentionally want to remove local vo
 ./scripts/demo.sh down
 ```
 
-Use `DEMO_RESET=1 ./scripts/demo.sh` when you intentionally want to remove demo volumes before startup.
+如果想在启动前主动清空演示卷，可使用 `DEMO_RESET=1 ./scripts/demo.sh`。
 
-## Next Steps
+## 后续步骤
 
-- Run the full [Reproducible Demo Script](demo-script.md) with `demo-data/heat-safety-policy.pdf`.
-- Use [API Recipes](api-recipes.md) for common endpoint examples.
-- Read [Enterprise Architecture](architecture-enterprise.md) before changing data flow or security boundaries.
-- Read [Operations Manual](operations.md) before running drills, load tests, or observability components.
+- 使用 `demo-data/heat-safety-policy.pdf` 完整执行一遍[可复现演示脚本](demo-script.md)。
+- 参考 [API 使用示例](api-recipes.md)查看常见端点示例。
+- 在修改数据流或安全边界之前，先阅读[企业级架构说明](architecture-enterprise.md)。
+- 在执行演练、压测或启用可观测性组件之前，先阅读[运维手册](operations.md)。

@@ -1,31 +1,31 @@
-# KnowledgeOps Agent Evidence Pack
+# KnowledgeOps Agent 证据包
 
-This pack collects the shortest public proof path for reviewing the project as a runnable AI platform.
+本文件汇集了把项目当作可运行 AI 平台来评审时最短的公开证据路径。
 
-## Runtime Evidence
+## 运行时证据
 
-- Local proof path: `./scripts/demo.sh`
-- Pullable image: `docker pull ghcr.io/however-yir/knowledgeops-agent:latest`
-- Container workflow: `.github/workflows/publish-image.yml`
-- Main CI: `.github/workflows/ci.yml`
-- Regression workflow: `.github/workflows/nightly-regression.yml`
-- Baseline release: `AI Matrix Baseline 2026.05`
-- Release: `v1.0.0 - KnowledgeOps Agent Platform Prototype`
+- 本地验证路径：`./scripts/demo.sh`
+- 可拉取镜像：`docker pull ghcr.io/however-yir/knowledgeops-agent:latest`
+- 容器工作流：`.github/workflows/publish-image.yml`
+- 主 CI：`.github/workflows/ci.yml`
+- 回归工作流：`.github/workflows/nightly-regression.yml`
+- 基线发布：`AI Matrix Baseline 2026.05`
+- 发布版本：`v1.0.0 - KnowledgeOps Agent Platform Prototype`
 
-## Product And Architecture Evidence
+## 产品与架构证据
 
-- Demo GIF: `docs/assets/screenshots/demo.gif`
-- RAG Evaluation Studio screenshot: `docs/assets/evaluation-report-studio.png`
-- RAG citations screenshot: `docs/assets/rag-answer-citations.png`
-- Architecture overview: `docs/assets/architecture-overview.svg`
-- Workflow architecture: `docs/architecture-agent-workflow.md`
-- Hybrid retrieval architecture: `docs/architecture-hybrid-retrieval.md`
-- Knowledge graph architecture: `docs/architecture-knowledge-graph.md`
-- Memory system architecture: `docs/architecture-memory-system.md`
+- 演示 GIF：`docs/assets/screenshots/demo.gif`
+- RAG Evaluation Studio 截图：`docs/assets/evaluation-report-studio.png`
+- RAG 引用截图：`docs/assets/rag-answer-citations.png`
+- 架构总览：`docs/assets/architecture-overview.svg`
+- 工作流架构：`docs/architecture-agent-workflow.md`
+- 混合检索架构：`docs/architecture-hybrid-retrieval.md`
+- 知识图谱架构：`docs/architecture-knowledge-graph.md`
+- 记忆系统架构：`docs/architecture-memory-system.md`
 
-## RAG Evaluation Reproduction
+## RAG 评测复现
 
-The Evaluation Studio path uses the platform API and the existing Hybrid RAG chain. It persists `eval_dataset`, `eval_case`, `eval_run`, and `eval_result`, then exports one latest report file.
+Evaluation Studio 路径使用平台 API 与现有 Hybrid RAG 链路。它会持久化 `eval_dataset`、`eval_case`、`eval_run`、`eval_result`，然后导出一份最新报告文件。
 
 ```bash
 # 1. Start the local stack
@@ -38,24 +38,24 @@ make eval-demo
 open evaluation/reports/latest-evaluation-report.md
 ```
 
-API path behind the demo:
+演示背后的 API 路径：
 
 1. `POST /ai/evaluation/datasets`
 2. `POST /ai/evaluation/datasets/{datasetId}/runs`
 3. `GET /ai/evaluation/datasets/{datasetId}/comparison`
 4. `GET /ai/evaluation/runs/{runId}/report`
 
-Dashboard path:
+看板路径：
 
-- Open `http://localhost:8088`
-- Switch to `Evaluation`
-- Compare baseline vs current metrics: retrieval hit rate, citation coverage, answer faithfulness, average latency, failure rate, run score.
+- 打开 `http://localhost:8088`
+- 切换到 `Evaluation`
+- 对比基线与当前指标：检索命中率、引用覆盖率、回答忠实度、平均延迟、失败率、运行评分。
 
-## Cross-Repo Integration Evidence (KnowledgeOps → tianji)
+## 跨仓库集成证据（KnowledgeOps → tianji）
 
-The following evidence demonstrates that the "KnowledgeOps→tianji" matrix link is a runnable code path, not just a README arrow.
+以下证据表明"KnowledgeOps→tianji"矩阵链路是可运行的代码路径，而不只是 README 上的一个箭头。
 
-### Prerequisites
+### 前置条件
 
 ```bash
 # 1. Start KnowledgeOps Agent stack
@@ -70,14 +70,14 @@ export TJ_AI_KNOWLEDGEOPS_BASE_URL=http://localhost:8080
 export TJ_AI_KNOWLEDGEOPS_API_KEY=your-api-key
 ```
 
-### Verification Steps
+### 验证步骤
 
-1. **Web Retrieval is functional**: With `APP_WEB_SEARCH_ENABLED=true` and a SearXNG instance configured, send a research query → confirm `retrieval.web.latency` metric shows `outcome=success` (not `disabled` or `no-backend`).
-2. **KnowledgeOpsClient reaches KnowledgeOps**: With `TJ_AI_KNOWLEDGEOPS_ENABLED=true` in tianji, send a KNOWLEDGE or RECOMMEND prompt → check tianji logs for `KnowledgeOps platform RAG` or `KnowledgeOps platform memory` enrichment messages.
-3. **Fallback works**: With `TJ_AI_KNOWLEDGEOPS_ENABLED=false`, send the same prompt → tianji's KnowledgeAgent and RecommendAgent fall back to local VectorStore Advisor without errors.
-4. **Both CIs are green**: Open the latest GitHub Actions run for both repositories and confirm `✓` on main branch pushes.
+1. **Web 检索可用**：在 `APP_WEB_SEARCH_ENABLED=true` 且配置了 SearXNG 实例的前提下，发送一个研究类查询 → 确认 `retrieval.web.latency` 指标显示 `outcome=success`（而不是 `disabled` 或 `no-backend`）。
+2. **KnowledgeOpsClient 连通 KnowledgeOps**：在 tianji 中设置 `TJ_AI_KNOWLEDGEOPS_ENABLED=true` 后，发送 KNOWLEDGE 或 RECOMMEND 提示词 → 在 tianji 日志中检查 `KnowledgeOps platform RAG` 或 `KnowledgeOps platform memory` 增强消息。
+3. **兜底生效**：设置 `TJ_AI_KNOWLEDGEOPS_ENABLED=false` 后发送相同提示词 → tianji 的 KnowledgeAgent 与 RecommendAgent 无报错地回退到本地 VectorStore Advisor。
+4. **两个仓库的 CI 均为绿色**：打开两个仓库最新的 GitHub Actions 运行记录，确认 main 分支推送为 `✓`。
 
-### Cross-Repo Docker Compose (Minimal)
+### 跨仓库 Docker Compose（最小化）
 
 ```yaml
 # docker-compose.cross-repo.yml — for local cross-repo verification
@@ -108,22 +108,22 @@ services:
     depends_on: [knowledgeops]
 ```
 
-### Evidence Artifacts
+### 证据产物
 
-| Evidence | How to verify |
+| 证据 | 如何验证 |
 |---|---|
-| Web retrieval returns results | Check `retrieval.web.latency` metric with `outcome=success` |
-| tianji reaches KnowledgeOps | Check tianji logs for `KnowledgeOps platform RAG` debug messages |
-| Fallback without KnowledgeOps | Disable `TJ_AI_KNOWLEDGEOPS_ENABLED` → agents use local Advisor |
-| Both CIs are green | Open latest GitHub Actions run on `main` for both repos |
+| Web 检索返回结果 | 检查 `retrieval.web.latency` 指标为 `outcome=success` |
+| tianji 连通 KnowledgeOps | 检查 tianji 日志中的 `KnowledgeOps platform RAG` 调试消息 |
+| 无 KnowledgeOps 时的兜底 | 关闭 `TJ_AI_KNOWLEDGEOPS_ENABLED` → Agent 使用本地 Advisor |
+| 两个仓库 CI 均为绿色 | 打开两个仓库 `main` 分支最新的 GitHub Actions 运行记录 |
 
-## Verification Checklist
+## 验证清单
 
-- Start the demo stack from a clean checkout.
-- Upload or seed a knowledge document.
-- Run a RAG answer and confirm citations/evidence are returned.
-- Run an Agent workflow and confirm task/step/event state is visible.
-- Check Prometheus/Grafana/trace documentation in `docs/observability.md`.
-- Open the latest GitHub Actions run and confirm the baseline CI is green.
-- *(Cross-repo)* With KnowledgeOps running, verify tianji's KnowledgeAgent reaches it via KnowledgeOpsClient.
-- *(Cross-repo)* With KnowledgeOps stopped, verify tianji's KnowledgeAgent falls back to local Advisor.
+- 从干净的检出目录启动演示栈。
+- 上传或植入一份知识文档。
+- 运行一次 RAG 问答，确认返回引用/证据。
+- 运行一次 Agent 工作流，确认任务/步骤/事件状态可见。
+- 查看 `docs/observability.md` 中的 Prometheus/Grafana/链路追踪文档。
+- 打开最新的 GitHub Actions 运行记录，确认基线 CI 为绿色。
+- *（跨仓库）* 在 KnowledgeOps 运行时，验证 tianji 的 KnowledgeAgent 通过 KnowledgeOpsClient 连通它。
+- *（跨仓库）* 在 KnowledgeOps 停止时，验证 tianji 的 KnowledgeAgent 回退到本地 Advisor。
