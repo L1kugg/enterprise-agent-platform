@@ -23,6 +23,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
+/**
+ * 工作区运行时：Agent 在受限文件系统沙箱内执行 6 个动作（列文件/读文件/搜文本/提补丁/应用补丁/跑命令）。
+ * 安全模型：路径经 resolvePath 归一化必须仍在根内（防 ../ 逃逸）；写入与 shell 各有开关；
+ * 命令白名单（pwd/ls/rg/git/mvn test）+ git flag 黑名单 + mvn -D 属性白名单；读写与输出全有上限。
+ */
 @Component
 public class WorkspaceRuntime implements AgentRuntime {
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
@@ -38,6 +43,7 @@ public class WorkspaceRuntime implements AgentRuntime {
     private final UnifiedDiffService diffService;
     private final Path workspaceRoot;
 
+    /** 生产构造器：工作区根取自配置；根目录归一化为绝对路径，resolvePath 的逃逸判断以此为准 */
     @Autowired
     public WorkspaceRuntime(AgentHarnessProperties harnessProperties, UnifiedDiffService diffService) {
         this(harnessProperties, diffService, Path.of(harnessProperties.getWorkspace().getRoot()));
@@ -291,6 +297,7 @@ public class WorkspaceRuntime implements AgentRuntime {
         return result;
     }
 
+    /** 沙箱核心：解析后 normalize，必须仍以 workspace 根为前缀，否则视为路径逃逸直接拒绝 */
     private Path resolvePath(String raw) {
         Path resolved = workspaceRoot.resolve(StringUtils.hasText(raw) ? raw : ".").normalize();
         if (!resolved.startsWith(workspaceRoot)) {

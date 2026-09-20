@@ -10,16 +10,28 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 受信动作服务：trustedOnly 高危动作（workspace 写入、shell、mcp_call 等）
+ * 的"预览 → 确认 → 执行"两段式流程。
+ * preview 生成一次性 token（10 分钟 TTL，内存 ConcurrentHashMap 挂起），
+ * execute 凭 token 原子消费后才放行执行——防"模型自己点头"执行高危操作。
+ */
 @Service
 @RequiredArgsConstructor
 public class TrustedActionService {
+    /** 确认 token 有效期：预览到确认之间留给人工/上游审阅的窗口 */
     private static final Duration TOKEN_TTL = Duration.ofMinutes(10);
 
     private final AgentHarnessService harnessService;
     private final ActionSchemaRegistry schemaRegistry;
     private final HarnessPayloadSanitizer payloadSanitizer;
+    /** 挂起中的受信动作：token → 待执行动作（进程内存态，重启即失效，需重新预览） */
     private final Map<String, PendingTrustedAction> pendingActions = new ConcurrentHashMap<>();
 
+    /**
+     * 第一段：受理预览请求。校验动作存在且确为 trustedOnly，
+     * 生成 token 存入挂起表并返回脱敏预览（apply_patch 类会试跑 propose 出 diff）。
+     */
     public TrustedActionPreviewResponse preview(TrustedActionRequest request) {
         AgentAction action = toTrustedAction(request);
         ActionSchema schema = schemaRegistry.find(action.action())
@@ -43,6 +55,11 @@ public class TrustedActionService {
         );
     }
 
+    /**
+     * 第二段：凭 token 执行。三重校验缺一不可——
+     * token 存在、租户匹配（防跨租户盗用）、未过期；
+     * remove(token, pending) 原子消费保证同一 token 只能执行一次。
+     */
     public AgentObservation execute(String token, String tenantId) {
         // 这里也顺带清理过期 token：目前只有 preview 路径会清扫该映射表，
         // 若运维只调用 execute（例如自动化确认循环），过期 token
@@ -61,6 +78,7 @@ public class TrustedActionService {
         return harnessService.execute(pending.action());
     }
 
+    /** 组装预览载荷：apply_patch 动作转成 propose_patch 真实试跑出 diff；其余动作给脱敏后的待确认输入 */
     private Map<String, Object> previewPayload(AgentAction action, ActionSchema schema) {
         if ("workspace_apply_patch".equals(action.action())) {
             AgentObservation observation = harnessService.execute(new AgentAction(
@@ -84,6 +102,7 @@ public class TrustedActionService {
         );
     }
 
+    /** 请求 → 动作对象：动作名必填；trustedRuntimeAccess 固定置 true（本服务就是受信入口） */
     private AgentAction toTrustedAction(TrustedActionRequest request) {
         if (request == null || !StringUtils.hasText(request.action())) {
             throw new IllegalArgumentException("action is required");
@@ -101,6 +120,7 @@ public class TrustedActionService {
         );
     }
 
+    /** 挂起项：待执行动作 + 过期时间 */
     private record PendingTrustedAction(AgentAction action, Instant expiresAt) {
     }
 }

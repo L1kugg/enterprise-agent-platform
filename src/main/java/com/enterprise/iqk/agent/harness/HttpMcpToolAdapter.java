@@ -18,6 +18,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * HTTP MCP 工具适配器：用 JDK HttpClient 直连外部 MCP server 发 JSON-RPC 2.0
+ * tools/call（自研桥接，非 MCP SDK）。server/tool 的启用状态、baseUrl、路径与
+ * 超时全部来自 app.agent-harness.mcp 配置，supports() 五重校验通过才放行调用。
+ * 安全线：仅 http(s) + SSRF 地址黑名单（私有/回环/链路本地/云元数据）+ 可选
+ * allowed-hosts 白名单 + 2 MiB 响应上限。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -47,6 +54,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         return "configured-http";
     }
 
+    /** 五重校验：配置存在、server 启用、baseUrl 非空且安全（SSRF 检查）、tool 配置存在、tool 启用 */
     @Override
     public boolean supports(String server, String tool) {
         AgentHarnessProperties.McpServer serverConfig = harnessProperties.getMcp().getServers().get(server);
@@ -58,6 +66,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
                 && serverConfig.getTools().get(tool).isEnabled();
     }
 
+    /** 发 JSON-RPC tools/call：先 SSRF 复检 baseUrl，再按 tool 超时设置请求；非 2xx、超限、异常一律转 status=error 的 Map，不抛异常 */
     @Override
     public Object execute(String server, String tool, Map<String, Object> arguments) {
         try {
@@ -91,11 +100,13 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         }
     }
 
+    /** 不带 server/tool 的调用直接拒绝（本适配器必须显式指定目标） */
     @Override
     public Object execute(Map<String, Object> arguments) {
         return Map.of("status", "error", "message", "configured MCP call requires server and tool");
     }
 
+    /** 拼 baseUrl + tool path 成最终 URI（拼接前再过一次 SSRF 校验，防配置运行期被改） */
     private URI resolveUri(String baseUrl, String path) {
         if (!isSafeBaseUrl(baseUrl, harnessProperties.getMcp().getAllowedHosts())) {
             throw new IllegalArgumentException("MCP baseUrl is not a permitted public endpoint: " + baseUrl);
@@ -152,6 +163,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         return true;
     }
 
+    /** 主机名白名单匹配：".example.com" 后缀匹配或精确主机名（大小写不敏感） */
     private static boolean hostMatchesAllowList(String host, java.util.List<String> allowedHosts) {
         if (allowedHosts == null || allowedHosts.isEmpty()) {
             return false;

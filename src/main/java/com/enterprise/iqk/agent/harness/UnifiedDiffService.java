@@ -7,10 +7,17 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 统一 diff 服务：为工作区补丁动作生成与应用 unified diff。
+ * create 生成的是"全量替换式" diff（单个 hunk、全部旧行 - 前缀 + 全部新行 + 前缀），
+ * 不做最小差异对齐——生成端简单可靠，语义等价；apply 则按标准 hunk 头逐块应用。
+ */
 @Component
 public class UnifiedDiffService {
+    /** hunk 头正则：@@ -旧起,旧计数 +新起,新计数 @@（计数可省略） */
     private static final Pattern HUNK_HEADER = Pattern.compile("@@ -(\\d+)(?:,(\\d+))? \\+(\\d+)(?:,(\\d+))? @@.*");
 
+    /** 生成全量替换式统一 diff（---/+++ 文件头 + 单 hunk 全删全加） */
     public String create(String path, String oldContent, String newContent) {
         List<String> oldLines = splitLines(oldContent);
         List<String> newLines = splitLines(newContent);
@@ -28,6 +35,11 @@ public class UnifiedDiffService {
         return builder.toString();
     }
 
+    /**
+     * 应用补丁到旧内容：逐个 hunk 按头定位旧内容起点，
+     * 行前缀含义——空格=保留旧行、'-'=删除旧行、'+'=插入新行；
+     * hunk 之外的旧行原样带过，hunk 头非法抛 IllegalArgumentException。
+     */
     public String apply(String oldContent, String patch) {
         List<String> oldLines = splitLines(oldContent);
         List<String> patchLines = splitLines(patch);
@@ -76,6 +88,7 @@ public class UnifiedDiffService {
         return String.join("\n", result);
     }
 
+    /** 按行拆分：容忍结尾换行，空内容返回空列表（保留行内空行） */
     private List<String> splitLines(String content) {
         if (content == null || content.isEmpty()) {
             return List.of();

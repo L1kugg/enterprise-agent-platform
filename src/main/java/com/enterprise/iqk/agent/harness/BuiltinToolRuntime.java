@@ -15,6 +15,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 进程内工具运行时：处理 4 个业务内置动作
+ * （query_school / query_course / add_course_reservation / rag_search），
+ * 直接复用 CourseTools 与 RagAnswerService，不经过模型工具调用协议。
+ */
 @Component
 @RequiredArgsConstructor
 public class BuiltinToolRuntime implements AgentRuntime {
@@ -38,6 +43,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return SUPPORTED_ACTIONS.contains(action);
     }
 
+    /** 按动作分发；下游返回 status=error 的 Map 时统一转为 error 观测 */
     @Override
     public AgentObservation execute(AgentAction action) {
         long startedNs = System.nanoTime();
@@ -56,6 +62,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return AgentObservation.success(source(), payload, elapsedMs(startedNs));
     }
 
+    /** 预约登记：course/studentName/contactInfo/school 四项必填，缺一返回 error；成功返回 reservationId */
     private Map<String, Object> executeReservation(Map<String, Object> actionInput) {
         String course = stringVal(actionInput, "course", "");
         String studentName = stringVal(actionInput, "studentName", "");
@@ -86,6 +93,10 @@ public class BuiltinToolRuntime implements AgentRuntime {
         );
     }
 
+    /**
+     * RAG 检索动作：query 缺省退回用户原始问题；
+     * 会话 ID 用 react 前缀派生（与直连聊天链路隔离），chatId 先去单引号防注入。
+     */
     private Map<String, Object> executeRagSearch(AgentAction action) {
         String query = stringVal(action.actionInput(), "query", action.prompt());
         String conversationId = ConversationIdHelper.build("react", action.chatId());
@@ -104,6 +115,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return payload;
     }
 
+    /** 动作输入 → 课程查询对象：解析 type/edu/sorts（排序字段+升降序），解析不了的字段静默忽略 */
     private CourseQuery toCourseQuery(Map<String, Object> actionInput) {
         CourseQuery query = new CourseQuery();
         query.setType(stringVal(actionInput, "type", null));
@@ -128,6 +140,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return query;
     }
 
+    /** 去掉 chatId 中的单引号，防止拼接进 SQL 的注入风险 */
     private String sanitizeChatId(String value) {
         if (!StringUtils.hasText(value)) {
             return "";
@@ -135,6 +148,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return value.replace("'", "");
     }
 
+    /** 取字符串字段：null/空白统一返回 fallback */
     private String stringVal(Map<String, Object> input, String key, String fallback) {
         Object raw = input.get(key);
         if (raw == null) {
@@ -144,6 +158,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return StringUtils.hasText(value) ? value : fallback;
     }
 
+    /** 取整型字段：解析失败返回 null（不抛异常） */
     private Integer intVal(Object raw) {
         if (raw == null) {
             return null;
@@ -155,6 +170,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
         }
     }
 
+    /** 纳秒起点换算毫秒耗时 */
     private long elapsedMs(long startedNs) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs);
     }
