@@ -28,9 +28,17 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
 
+/**
+ * ReAct 主循环服务：reason() 规划（动作白名单硬编码，不含 mcp_call）
+ * → executeAction() 经 AgentHarnessService 执行 → 观测滚动拼接回上下文，最多 MAX_STEPS 步。
+ * finish 时优先取决策自带答案，否则 summarizeAnswer() 用轨迹汇总生成；
+ * 规划调用/解析失败走 decisionParser.fallback() 规则兜底；
+ * callModel/callModelStream 统一预算断言与租户用量记账。
+ */
 @Service
 @RequiredArgsConstructor
 public class ReactAgentService {
+    /** ReAct 循环步数上限，超出后强制汇总收尾 */
     private static final int MAX_STEPS = 4;
 
     private final AgentHarnessService agentHarnessService;
@@ -41,6 +49,7 @@ public class ReactAgentService {
     private final ReactDecisionParser decisionParser;
     private final ReactResponseFormatter responseFormatter;
 
+    /** 同步对话：跑完 ReAct 循环后一次性返回完整响应（含轨迹、引用与路由信息）。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
         validateRequest(request);
         String tenantId = currentTenantId();
@@ -99,6 +108,7 @@ public class ReactAgentService {
         return responseFormatter.success(request.getChatId(), answer.answer(), trace, routeDecision, usedFallback || answer.fallback());
     }
 
+    /** SSE 流式对话：先推 trace 事件，再流式推 token，最后推 done；任何异常转 error 事件。 */
     public Flux<String> stream(ReactChatRequestVO request) {
         long startedNs = System.nanoTime();
         AtomicReference<Long> firstTokenLatencyMsRef = new AtomicReference<>(null);
@@ -197,10 +207,12 @@ public class ReactAgentService {
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenLatencyMsRef.get(), outcomeRef.get()));
     }
 
+    /** 纳秒起点换算毫秒耗时 */
     private long elapsedMs(long startedNs) {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs);
     }
 
+    /** 记录流式链路的总耗时 / 首 token 延迟 / 请求计数（按 outcome 打标）。 */
     private void recordStreamMetrics(long startedNs, Long firstTokenLatencyMs, String outcome) {
         long totalLatencyMs = elapsedMs(startedNs);
         Timer.builder("react.stream.total.latency")
@@ -226,6 +238,7 @@ public class ReactAgentService {
                 .increment();
     }
 
+    /** 单步规划：让模型从白名单选动作输出 JSON 决策；调用或解析失败回退规则兜底。 */
     private ReasonDecision reason(ReactChatRequestVO request,
                                   String rollingContext,
                                   List<ReactTraceStepVO> trace,
@@ -277,6 +290,7 @@ public class ReactAgentService {
         }
     }
 
+    /** 把决策动作交给 AgentHarnessService（守卫/运行时/消毒/留痕），返回观测 Map。 */
     private Map<String, Object> executeAction(ReactChatRequestVO request,
                                               String action,
                                               Map<String, Object> actionInput,
@@ -293,6 +307,7 @@ public class ReactAgentService {
         )).toMap();
     }
 
+    /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败或空答案给兜底文案并标记 fallback。 */
     private AnswerResult summarizeAnswer(ReactChatRequestVO request,
                                          List<ReactTraceStepVO> trace,
                                          String rollingContext,
@@ -316,6 +331,7 @@ public class ReactAgentService {
         return new AnswerResult("当前未能生成最终答案，请稍后重试。", true);
     }
 
+    /** 构造汇总提示词：用户问题 + ReAct 轨迹 JSON + 观察上下文三段。 */
     private String buildFinalPrompt(ReactChatRequestVO request,
                                     List<ReactTraceStepVO> trace,
                                     String rollingContext) {
@@ -333,6 +349,7 @@ public class ReactAgentService {
                 %n""".formatted(request.getPrompt(), responseFormatter.toJson(trace), emptyIfBlank(rollingContext));
     }
 
+    /** 解析本次请求的模型路由决策（场景 react，主体键为 chatId）。 */
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String requestedProfile,
                                                                 String endpoint,
                                                                 String subjectKey,
@@ -340,11 +357,13 @@ public class ReactAgentService {
         return modelRouter.resolve(requestedProfile, endpoint, tenantId, subjectKey);
     }
 
+    /** 按路由决策构造带模型选项的 prompt 骨架。 */
     private ChatClient.ChatClientRequestSpec routedPrompt(ModelRouter.ModelRouteDecision decision) {
         return chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build());
     }
 
+    /** 统一同步 LLM 调用：先预算断言，调用后按端点标签记租户用量。 */
     private String callModel(String systemPrompt,
                              String userPrompt,
                              ModelRouter.ModelRouteDecision routeDecision,
@@ -362,6 +381,7 @@ public class ReactAgentService {
         return output;
     }
 
+    /** 统一流式 LLM 调用：预算断言 + 流中收集输出，流结束一次性记账（CAS 防重）。 */
     private Flux<String> callModelStream(String systemPrompt,
                                          String userPrompt,
                                          ModelRouter.ModelRouteDecision routeDecision,
@@ -387,14 +407,17 @@ public class ReactAgentService {
                 });
     }
 
+    /** null/空白统一返回空串。 */
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
     }
 
+    /** 从 MDC 取归一化租户 ID。 */
     private String currentTenantId() {
         return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
 
+    /** 校验 prompt 与 chatId 必填，缺失抛 IllegalArgumentException。 */
     private void validateRequest(ReactChatRequestVO request) {
         if (request == null || !StringUtils.hasText(request.getPrompt())) {
             throw new IllegalArgumentException("prompt is required");
@@ -404,6 +427,7 @@ public class ReactAgentService {
         }
     }
 
+    /** 内部答案封装：最终回答 + 是否走了兜底 */
     private record AnswerResult(String answer, boolean fallback) {
     }
 }

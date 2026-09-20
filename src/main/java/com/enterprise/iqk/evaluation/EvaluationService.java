@@ -30,9 +30,17 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 评测主服务：串起数据集 → 用例 → 运行 → 结果四层数据模型。
+ * 核心链路：加载 eval_case → 逐条调用 HybridRagAnswerService.answer()
+ * （conversationId 统一用 ConversationIdHelper.build("eval", chatId)，与线上会话隔离）
+ * → EvaluationScorer 打分 → 逐条落 eval_result → 汇总指标回写 eval_run。
+ * 单个 case 失败不中断整轮，只记 FAILED 与错误信息，由失败率指标暴露。
+ */
 @Service
 @RequiredArgsConstructor
 public class EvaluationService {
+    /** 单 case 综合分达到该阈值才计入 passedCases */
     private static final double PASS_THRESHOLD = 0.70;
 
     private final EvalDatasetMapper evalDatasetMapper;
@@ -44,6 +52,7 @@ public class EvaluationService {
     private final EvaluationScorer evaluationScorer;
     private final EvaluationReportRenderer evaluationReportRenderer;
 
+    /** 创建评测数据集：校验后写 eval_dataset / eval_case，用例缺 caseId 时按序生成 case-###。 */
     public EvalDatasetVO createDataset(String tenantId, EvalDatasetCreateVO request) {
         if (request == null) {
             throw new IllegalArgumentException("dataset payload is required");
@@ -94,6 +103,7 @@ public class EvaluationService {
         return toDatasetVO(dataset, order);
     }
 
+    /** 列出租户下全部数据集（附各自用例数）。 */
     public List<EvalDatasetVO> listDatasets(String tenantId) {
         String tenant = TenantContext.normalize(tenantId);
         return evalDatasetMapper.findByTenant(tenant).stream()
@@ -101,6 +111,10 @@ public class EvaluationService {
                 .toList();
     }
 
+    /**
+     * 触发一轮评测：先落 RUNNING 状态的 eval_run，逐 case 同步执行后
+     * 汇总指标回写并把状态置为 SUCCESS；modelProfile 缺省 balanced。
+     */
     public EvalRunVO triggerRun(String tenantId, String datasetId, EvalRunRequestVO request) {
         String tenant = TenantContext.normalize(tenantId);
         EvalDatasetRecord dataset = requireDataset(tenant, datasetId);
@@ -155,12 +169,14 @@ public class EvaluationService {
         return toRunVO(run, results);
     }
 
+    /** 查询单轮评测详情（附全部 case 级结果）。 */
     public EvalRunVO getRun(String tenantId, String runId) {
         String tenant = TenantContext.normalize(tenantId);
         EvalRunRecord run = requireRun(tenant, runId);
         return toRunVO(run, evalResultMapper.findByTenantAndRunId(tenant, runId));
     }
 
+    /** 把某轮运行标记为数据集基线，供 compareLatest 对比。 */
     public EvalRunVO markBaseline(String tenantId, String runId) {
         String tenant = TenantContext.normalize(tenantId);
         EvalRunRecord run = requireRun(tenant, runId);
@@ -171,6 +187,7 @@ public class EvaluationService {
         return getRun(tenant, runId);
     }
 
+    /** 最新一轮与基线对比：优先用数据集标记的基线运行，未标记则退化为最近两轮互比。 */
     public EvalComparisonVO compareLatest(String tenantId, String datasetId) {
         String tenant = TenantContext.normalize(tenantId);
         EvalDatasetRecord dataset = requireDataset(tenant, datasetId);
@@ -198,10 +215,15 @@ public class EvaluationService {
                 .build();
     }
 
+    /** 导出 Markdown 评测报告（委托 EvaluationReportRenderer）。 */
     public String exportReport(String tenantId, String runId) {
         return evaluationReportRenderer.render(getRun(tenantId, runId));
     }
 
+    /**
+     * 执行单个用例：真实走一遍 RAG 回答链路，空答案或异常都记 FAILED；
+     * 无论成败都打分并落一条 eval_result。
+     */
     private EvalResultRecord runCase(String tenant,
                                      String runId,
                                      String datasetId,
@@ -268,6 +290,7 @@ public class EvaluationService {
         return record;
     }
 
+    /** 汇总一轮全部 case 结果：通过数、各分项均值与失败率。 */
     private EvalMetricSummaryVO summarize(List<EvalResultRecord> results) {
         int total = results.size();
         int passed = (int) results.stream()
@@ -367,6 +390,7 @@ public class EvaluationService {
                 .build();
     }
 
+    /** 解析评测用 chatId：用例自带 > 请求前缀拼序号 > 数据集 ID。 */
     private String resolveChatId(EvalCaseRecord evalCase, EvalRunRequestVO request, int index) {
         if (StringUtils.hasText(evalCase.getChatId())) {
             return evalCase.getChatId().trim();
@@ -377,6 +401,7 @@ public class EvaluationService {
         return evalCase.getDatasetId();
     }
 
+    /** 引用格式化为去重的 sourceType:title:chunkId 字符串列表。 */
     private List<String> toCitationStrings(List<CitationItem> items) {
         if (items == null || items.isEmpty()) {
             return List.of();

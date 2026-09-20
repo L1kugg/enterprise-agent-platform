@@ -16,6 +16,18 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * 记忆子系统统一入口：short / long / task / fact 四层记忆的写入、
+ * 按层查询、召回快照构建与事件留痕。
+ *
+ * 设计要点 —— 写入时机决定层级：
+ * 1. short：对话轮次完成写入，24 小时过期；
+ * 2. task：工作流到达 DONE 写入结论，绑定 taskId，30 天过期；
+ * 3. fact：RAG 证据置信度达标（>= 0.7）写入，永久、按租户共享；
+ * 4. long：异步画像提取命中写入，永久。
+ * 查询一律过滤已过期条目（expires_at 为空视为永久）；
+ * 写入失败由调用方（各 Recorder）以 best-effort 方式兜底，不阻塞主链路。
+ */
 public class MemoryService {
 
     private final MemoryItemMapper itemMapper;
@@ -24,23 +36,27 @@ public class MemoryService {
 
     // ── 保存 ─────────────────────────────────────────────────────
 
+    /** 保存会话级 short 记忆：24 小时过期；内容为空白时返回 null 不落库。 */
     public MemoryItemRecord saveShortMemory(String tenantId, String userId,
                                              String content, String source) {
         return save(tenantId, userId, "short", content, source, null, 0.9,
                 LocalDateTime.now().plusHours(24));
     }
 
+    /** 保存用户画像 long 记忆：永久有效；内容为空白时返回 null 不落库。 */
     public MemoryItemRecord saveLongMemory(String tenantId, String userId,
                                             String content, String source) {
         return save(tenantId, userId, "long", content, source, null, 0.85, null);
     }
 
+    /** 保存任务结论 task 记忆：绑定 taskId、30 天过期，source 记为 task:{taskId}。 */
     public MemoryItemRecord saveTaskMemory(String tenantId, String userId,
                                             String content, String taskId) {
         return save(tenantId, userId, "task", content, "task:" + taskId, taskId, 0.9,
                 LocalDateTime.now().plusDays(30));
     }
 
+    /** 保存租户级 fact 记忆：永久有效，置信度由调用方（RAG 证据综合分）给定。 */
     public MemoryItemRecord saveFactMemory(String tenantId, String userId,
                                             String content, String source,
                                             double confidence) {
@@ -48,6 +64,7 @@ public class MemoryService {
                 confidence, null);
     }
 
+    /** 各层写入的公共落库路径：生成 memoryId、规范化租户、内容去空白，插入后记 CREATE 事件。 */
     private MemoryItemRecord save(String tenantId, String userId, String type,
                                    String content, String source, String sourceTaskId,
                                    double confidence, LocalDateTime expiresAt) {
@@ -74,18 +91,22 @@ public class MemoryService {
 
     // ── 查询 ─────────────────────────────────────────────────────
 
+    /** 查询某用户键下未过期的 short 记忆，按创建时间倒序取前 limit 条。 */
     public List<MemoryItemRecord> queryShortMemory(String tenantId, String userId, int limit) {
         return itemMapper.findByUserAndType(TenantContext.normalize(tenantId), userId, "short", limit);
     }
 
+    /** 查询某用户键下未过期的 long 记忆，按创建时间倒序取前 limit 条。 */
     public List<MemoryItemRecord> queryLongMemory(String tenantId, String userId, int limit) {
         return itemMapper.findByUserAndType(TenantContext.normalize(tenantId), userId, "long", limit);
     }
 
+    /** 查询租户内绑定指定 taskId 的未过期 task 记忆（用于召回早前任务的结论）。 */
     public List<MemoryItemRecord> queryTaskMemory(String tenantId, String taskId) {
         return itemMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
     }
 
+    /** 查询租户内置信度不低于 minConfidence 的未过期 fact 记忆（召回侧复验门槛 0.7）。 */
     public List<MemoryItemRecord> queryFactMemory(String tenantId, double minConfidence, int limit) {
         return itemMapper.findByTypeAndConfidence(
                 TenantContext.normalize(tenantId), "fact", minConfidence, limit);
@@ -125,6 +146,7 @@ public class MemoryService {
 
     // ── 维护 ──────────────────────────────────────────────────────
 
+    /** 物理删除所有 expires_at 已过期的记忆条目；long / fact 永久保存不受影响。 */
     @Scheduled(cron = "0 0 3 * * ?") // 每天凌晨 3 点执行
     public void cleanExpiredMemories() {
         int deleted = itemMapper.deleteExpired();
@@ -133,6 +155,7 @@ public class MemoryService {
         }
     }
 
+    /** 删除租户内指定记忆并记 DELETE 事件；记忆不存在或不属于该租户时静默返回。 */
     public void deleteMemory(String tenantId, String memoryId) {
         MemoryItemRecord item = itemMapper.findByTenantAndMemoryId(TenantContext.normalize(tenantId), memoryId);
         if (item != null) {
@@ -143,6 +166,7 @@ public class MemoryService {
 
     // ── 事件 ─────────────────────────────────────────────────────
 
+    /** 写入一条记忆事件（CREATE / USE / DELETE 等，best-effort）：失败只记日志，绝不影响主流程。 */
     private void emitEvent(String memoryId, String action, String reason) {
         try {
             MemoryEventRecord event = MemoryEventRecord.builder()
@@ -158,11 +182,13 @@ public class MemoryService {
         }
     }
 
+    /** 查询指定记忆的事件链（按时间倒序）；记忆不属于该租户时返回空列表，不暴露存在性。 */
     public List<MemoryEventRecord> getEvents(String tenantId, String memoryId) {
         MemoryItemRecord item = itemMapper.findByTenantAndMemoryId(TenantContext.normalize(tenantId), memoryId);
         return item == null ? Collections.emptyList() : eventMapper.findByMemoryId(memoryId);
     }
 
+    /** 召回快照：拼接好的上下文文本 + 按层返回的原始记忆记录（供 memoryUsed 观测上报）。 */
     public record MemoryContextSnapshot(String contextText,
                                          List<MemoryItemRecord> shortMemories,
                                          List<MemoryItemRecord> longMemories,

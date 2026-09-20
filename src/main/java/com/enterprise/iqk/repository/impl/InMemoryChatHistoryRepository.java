@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 // 但它仍被注册为 bean，因此需对其共享状态做并发访问保护。
 @Repository
 public class InMemoryChatHistoryRepository implements ChatHistoryRepository {
+    /** tenantId::type → 该类型下按保存顺序去重累积的 chatId 列表 */
     private final Map<String, List<String>> chatHistory = new ConcurrentHashMap<>();
     @Override
     public void save(String type, String chatId) {
@@ -31,6 +32,7 @@ public class InMemoryChatHistoryRepository implements ChatHistoryRepository {
     }
 
     @Override
+    /** 分页返回该类型下已保存的 chatId；读取走同步快照避免与写入并发冲突。 */
     public PagedResult<String> getChatIds(String type, int page, int pageSize) {
         List<String> all = chatHistory.get(scopedKey(type));
         if (all == null) {
@@ -48,10 +50,12 @@ public class InMemoryChatHistoryRepository implements ChatHistoryRepository {
     }
 
     @Override
+    /** 消息明细不做内存存储，恒返回空分页结果。 */
     public PagedResult<MessageVO> getChatHistory(String type, String chatId, int page, int pageSize) {
         return new PagedResult<>(Collections.emptyList(), 0, Math.max(page, 1), Math.max(pageSize, 1));
     }
 
+    /** 以 tenantId::type 作为租户内隔离的存储键。 */
     private String scopedKey(String type) {
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         return tenantId + "::" + type;

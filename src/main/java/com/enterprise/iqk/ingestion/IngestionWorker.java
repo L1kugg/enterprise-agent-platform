@@ -23,8 +23,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+/**
+ * 入库任务的异步消费端，按 queue-backend 选择消费方式：
+ * redis_stream 起固定线程池循环消费（读新消息 + 空闲认领兜底，仅终态 ack）；
+ * db_polling 由定时器直接轮询数据库认领任务；另有独立定时器驱动到期重试重新入队。
+ */
 public class IngestionWorker {
 
+    /** db_polling 单轮轮询最多处理的任务数 */
     private static final int DB_POLL_BATCH = 20;
 
     private final IngestionService ingestionService;
@@ -35,6 +41,7 @@ public class IngestionWorker {
     private ExecutorService workerPool;
 
     @PostConstruct
+    /** 仅 redis_stream 后端启动：确保消费组存在并按 workerCount 拉起消费线程。 */
     public void start() {
         if (!ingestionProperties.isWorkerEnabled()) {
             return;
@@ -52,6 +59,7 @@ public class IngestionWorker {
         log.info("Started redis stream ingestion workers: {}", workers);
     }
 
+    /** 消费循环：批量读新消息，空则认领空闲 pending；按任务所属租户执行，仅终态才 ack，异常保留 pending 等待重认领。 */
     private void loopConsume(String consumerName) {
         while (running.get()) {
             try {
@@ -97,6 +105,7 @@ public class IngestionWorker {
     }
 
     @Scheduled(fixedDelayString = "${app.ingestion.poll-interval-ms:2000}")
+    /** 定时把到期的 RETRY 任务重新发布到队列；db_polling 后端由轮询器消化，跳过。 */
     public void enqueueRetryJobs() {
         if (!ingestionProperties.isWorkerEnabled()) {
             return;
@@ -144,6 +153,7 @@ public class IngestionWorker {
     }
 
     @PreDestroy
+    /** 停止消费循环并立即关闭线程池。 */
     public void shutdown() {
         running.set(false);
         if (workerPool != null) {

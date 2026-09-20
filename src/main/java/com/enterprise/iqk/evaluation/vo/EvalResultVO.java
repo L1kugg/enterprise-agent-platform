@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.util.List;
 
+/** 单 case 评测结果视图：答案与引用证据快照 + 四项得分与耗时。 */
 @Data
 @Builder
 public class EvalResultVO {

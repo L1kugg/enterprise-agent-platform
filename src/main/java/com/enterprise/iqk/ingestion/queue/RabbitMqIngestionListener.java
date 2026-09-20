@@ -18,6 +18,10 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.ingestion", name = "queue-backend", havingValue = "rabbitmq")
+/**
+ * RabbitMQ 后端的消费端：@RabbitListener 按配置并发拉取任务消息并转交 IngestionService。
+ * 消息由容器自动 ack；任务失败状态写回数据库并按重试策略重新入队，不做消息级重试。
+ */
 public class RabbitMqIngestionListener {
 
     private final IngestionService ingestionService;
@@ -29,6 +33,7 @@ public class RabbitMqIngestionListener {
             concurrency = "${app.ingestion.worker-count:3}",
             autoStartup = "${app.ingestion.worker-enabled:true}"
     )
+    /** 消费一条任务消息：从任务记录读取所属租户后按租户认领执行；缺 jobId 直接跳过。 */
     public void consume(Map<String, Object> payload) {
         String jobId = payload == null ? "" : asString(payload.get("jobId"));
         String traceId = payload == null ? "" : asString(payload.get("traceId"));
@@ -47,6 +52,7 @@ public class RabbitMqIngestionListener {
         }
     }
 
+    /** null 安全的字符串化，null 归一为空串。 */
     private String asString(Object value) {
         return value == null ? "" : String.valueOf(value);
     }

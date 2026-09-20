@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** eval_case 表 Mapper：按数据集取排序后的用例列表。 */
 @Mapper
 public interface EvalCaseMapper extends BaseMapper<EvalCaseRecord> {
 

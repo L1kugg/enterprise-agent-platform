@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** eval_run 表 Mapper：按运行 ID 查详情、按数据集取最近若干轮。 */
 @Mapper
 public interface EvalRunMapper extends BaseMapper<EvalRunRecord> {
 

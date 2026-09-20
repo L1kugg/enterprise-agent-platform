@@ -20,6 +20,12 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * 深度研究编排层（剧本）：只编排状态转移与步骤顺序，不亲自执行。
+ * 流程：拆题（ResearchPlannerAgent，PLANNING）→ 逐子问题混合检索（HybridRetrievalService，
+ * SEARCHING→RETRIEVING）→ 汇总成稿（ReportWriterAgent，WRITING→DONE）；
+ * 每一步经 AgentWorkflowEngine 留痕，任一步失败则任务置 FAILED 并原样上抛。
+ */
 public class DeepResearchService {
 
     private final ResearchPlannerAgent plannerAgent;
@@ -28,6 +34,7 @@ public class DeepResearchService {
     private final AgentWorkflowEngine workflowEngine;
     private final MeterRegistry meterRegistry;
 
+    /** 执行完整研究剧本并全程留痕；返回报告全文，失败时置任务 FAILED 后重抛原异常。 */
     public DeepResearchResult executeResearch(ResearchTaskRequest request, String tenantId) {
         long startedNs = System.nanoTime();
         String normalizedTenant = TenantContext.normalize(tenantId);
@@ -108,6 +115,7 @@ public class DeepResearchService {
 
     @Data
     @Builder
+    /** 研究执行结果：任务 ID、主题、报告全文与终态 */
     public static class DeepResearchResult {
         private String taskId;
         private String topic;

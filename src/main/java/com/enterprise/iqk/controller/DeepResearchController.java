@@ -24,6 +24,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/ai/research")
 @RequiredArgsConstructor
+/** 深度研究 API：创建并执行研究任务，以及任务详情、事件流、报告查询（租户隔离）。 */
 public class DeepResearchController {
 
     private final DeepResearchService deepResearchService;
@@ -31,6 +32,7 @@ public class DeepResearchController {
 
     @Operation(summary = "创建并执行深度研究任务")
     @PostMapping("/tasks")
+    /** 创建并同步执行深度研究任务，完成后返回报告 */
     public ResponseEntity<?> createResearch(@RequestBody ResearchTaskRequest request) {
         DeepResearchService.DeepResearchResult result = deepResearchService.executeResearch(
                 request, TenantContext.currentTenantId());
@@ -39,6 +41,7 @@ public class DeepResearchController {
 
     @Operation(summary = "查询研究任务详情")
     @GetMapping("/tasks/{taskId}")
+    /** 查询研究任务详情（含步骤与事件）；不存在返回 404 */
     public ResponseEntity<?> getTask(@PathVariable String taskId) {
         WorkflowTaskVO task = workflowEngine.getTask(TenantContext.currentTenantId(), taskId);
         if (task == null) {
@@ -49,12 +52,14 @@ public class DeepResearchController {
 
     @Operation(summary = "查询研究任务事件流")
     @GetMapping("/tasks/{taskId}/events")
+    /** 查询研究任务事件流（时间升序，事件溯源回放） */
     public ResponseEntity<List<WorkflowEventVO>> getEvents(@PathVariable String taskId) {
         return ResponseEntity.ok(workflowEngine.getTaskEvents(TenantContext.currentTenantId(), taskId));
     }
 
     @Operation(summary = "查询研究任务报告")
     @GetMapping("/tasks/{taskId}/report")
+    /** 查询研究任务最终报告；任务不存在返回 404 */
     public ResponseEntity<?> getReport(@PathVariable String taskId) {
         WorkflowTaskVO task = workflowEngine.getTask(TenantContext.currentTenantId(), taskId);
         if (task == null) {

@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** 记忆条目表 Mapper：自定义查询一律过滤已过期条目（expires_at 为空视为永久）。 */
 @Mapper
 public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
 

@@ -12,11 +12,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * ReAct 响应格式化器：统一组装成功响应、SSE 事件帧与 JSON 序列化。
+ * 引用/证据从轨迹 observation 中去重抽取并给答案追加脚注；
+ * appendContext 负责观察上下文的滚动拼接；toJson 失败降级为固定 JSON，绝不打断流。
+ */
 @Component
 @RequiredArgsConstructor
 public class ReactResponseFormatter {
     private final ObjectMapper objectMapper;
 
+    /** 组装成功响应：抽取 citations/evidence、追加引用脚注并附路由/实验信息。 */
     public ReactChatResponseVO success(String chatId,
                                        String answer,
                                        List<ReactTraceStepVO> trace,
@@ -42,10 +48,12 @@ public class ReactResponseFormatter {
                 .build();
     }
 
+    /** 按 SSE 规范拼一个事件帧（event + data 两个行）。 */
     public String formatSse(String event, String data) {
         return "event: " + event + "\ndata: " + data + "\n\n";
     }
 
+    /** 序列化为 JSON；失败返回固定占位串而非抛异常。 */
     public String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -54,6 +62,7 @@ public class ReactResponseFormatter {
         }
     }
 
+    /** 观察上下文滚动拼接：在已有内容后追加一行 "action=..., observation=..."。 */
     public String appendContext(String origin, String action, Object observation) {
         StringBuilder builder = new StringBuilder(emptyIfBlank(origin));
         if (builder.length() > 0) {
@@ -62,6 +71,7 @@ public class ReactResponseFormatter {
         return builder.append("action=").append(action).append(", observation=").append(toJson(observation)).toString();
     }
 
+    /** 从轨迹各步 observation 的指定 key 去重抽取字符串列表。 */
     private List<String> extractTraceStrings(List<ReactTraceStepVO> trace, String key) {
         if (trace == null || trace.isEmpty()) {
             return List.of();
@@ -84,6 +94,7 @@ public class ReactResponseFormatter {
         return List.copyOf(values);
     }
 
+    /** 给答案追加引用来源脚注；答案已含脚注或无引用则原样返回。 */
     private String attachCitationFooter(String answer, List<String> citations) {
         String safeAnswer = emptyIfBlank(answer);
         if (citations == null || citations.isEmpty() || safeAnswer.contains("引用来源")) {
@@ -100,6 +111,7 @@ public class ReactResponseFormatter {
         return builder.toString().trim();
     }
 
+    /** null/空白统一返回空串。 */
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
     }

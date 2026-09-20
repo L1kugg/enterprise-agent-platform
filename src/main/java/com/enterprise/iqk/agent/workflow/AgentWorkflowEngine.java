@@ -23,6 +23,13 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * 工作流引擎（引擎层）：只管状态机与留痕，零业务智能——
+ * 不决定下一步做什么（编排层剧本职责），也不亲自执行动作（执行层 Agent 职责）。
+ * 职责：任务/步骤生命周期管理（startTask/startStep/completeStep/completeTask/failTask）、
+ * 状态转移守卫与落库、事件溯源（agent_event）、指标上报、任务查询与 VO 转换，
+ * 使复杂任务全程可观测、可审计、可回放。
+ */
 public class AgentWorkflowEngine {
 
     private final AgentTaskMapper taskMapper;
@@ -34,6 +41,7 @@ public class AgentWorkflowEngine {
 
     // ── 任务生命周期 ───────────────────────────────────────────
 
+    /** 创建任务并落库（租户 ID 归一化），置 CREATED 后立即转入 PLANNING；modelProfile 缺省 balanced。 */
     public AgentTaskRecord startTask(String tenantId, String type, String userInput,
                                      String modelProfile, String chatId, String sessionId) {
         String taskId = "task-" + UUID.randomUUID().toString().replace("-", "");
@@ -55,6 +63,7 @@ public class AgentWorkflowEngine {
         return task;
     }
 
+    /** 以 RUNNING 状态落库一个步骤，输入快照存 inputJson，并发 STEP_STARTED 事件。 */
     public AgentStepRecord startStep(String taskId, String agentName, int stepOrder,
                                       Map<String, Object> input) {
         String stepId = "step-" + UUID.randomUUID().toString().replace("-", "");
@@ -72,6 +81,7 @@ public class AgentWorkflowEngine {
         return step;
     }
 
+    /** 回写步骤结果（状态/输出/观测/token/耗时/错误），并补记 ReAct 的 thought/action/actionInput 留痕。 */
     public void completeStep(String stepId, String status, Map<String, Object> output,
                               Object observation, String thought, String action,
                               Map<String, Object> actionInput,
@@ -93,6 +103,7 @@ public class AgentWorkflowEngine {
                 Map.of("status", status, "latencyMs", latencyMs));
     }
 
+    /** 任务终态落库并发 TASK_COMPLETED 事件；仅 finalStatus==DONE 时触发任务结论记忆写入，FAILED 不写。 */
     public void completeTask(String taskId, WorkflowState finalStatus, String finalOutput) {
         taskMapper.completeTask(taskId, finalStatus.name(), finalOutput);
         emitEvent(taskId, null, "TASK_COMPLETED",
@@ -123,6 +134,7 @@ public class AgentWorkflowEngine {
         }
     }
 
+    /** 将任务置为 FAILED（final_output 记录错误信息）并发 TASK_FAILED 事件。 */
     public void failTask(String taskId, String errorMessage) {
         taskMapper.completeTask(taskId, WorkflowState.FAILED.name(), errorMessage);
         emitEvent(taskId, null, "TASK_FAILED", Map.of("error", errorMessage));
@@ -130,6 +142,7 @@ public class AgentWorkflowEngine {
 
     // ── 状态管理 ─────────────────────────────────────────
 
+    /** 经 canTransitionTo 守卫后更新状态并发 STATE_CHANGED 事件；非法转移或已终态只告警、不抛错。 */
     public void transitionStatus(String taskId, WorkflowState from, WorkflowState to) {
         if (!from.canTransitionTo(to)) {
             log.warn("Invalid state transition: {} -> {} for task {}", from, to, taskId);
@@ -144,6 +157,7 @@ public class AgentWorkflowEngine {
                 Map.of("from", from.name(), "to", to.name()));
     }
 
+    /** 查询任务当前状态；任务不存在返回 null，status 非法串按 FAILED 兜底。 */
     public WorkflowState currentState(String taskId) {
         AgentTaskRecord task = taskMapper.findByTaskId(taskId);
         if (task == null) {
@@ -158,6 +172,7 @@ public class AgentWorkflowEngine {
 
     // ── 事件溯源 ───────────────────────────────────────────
 
+    /** 追加一条事件到 agent_event（事件溯源）；写库失败仅记日志，绝不影响主流程。 */
     public void emitEvent(String taskId, String stepId, String eventType, Map<String, Object> payload) {
         try {
             AgentEventRecord event = AgentEventRecord.builder()
@@ -176,6 +191,7 @@ public class AgentWorkflowEngine {
 
     // ── 指标 ──────────────────────────────────────────────────
 
+    /** 上报步骤执行指标（agent.workflow.step.latency / step.count，按 agent+status 打标）。 */
     public void recordStepMetrics(String agentName, String status, long latencyMs) {
         Timer.builder("agent.workflow.step.latency")
                 .description("Step execution latency")
@@ -193,6 +209,7 @@ public class AgentWorkflowEngine {
                 .increment();
     }
 
+    /** 上报任务执行指标（agent.workflow.task.latency / task.count，按 type+status 打标）。 */
     public void recordTaskMetrics(String type, String status, long latencyMs) {
         Timer.builder("agent.workflow.task.latency")
                 .description("Task execution latency")
@@ -212,6 +229,7 @@ public class AgentWorkflowEngine {
 
     // ── 查询 ────────────────────────────────────────────────────
 
+    /** 查询单个任务详情（含步骤与事件）；租户不匹配或不存在返回 null。 */
     public WorkflowTaskVO getTask(String tenantId, String taskId) {
         AgentTaskRecord task = taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
         if (task == null) {
@@ -222,6 +240,7 @@ public class AgentWorkflowEngine {
         return toTaskVO(task, steps, events);
     }
 
+    /** 分页查询租户任务列表（只带步骤、不带事件）；page 从 1 起。 */
     public List<WorkflowTaskVO> listTasks(String tenantId, int page, int pageSize) {
         long offset = (long) (Math.max(1, page) - 1) * pageSize;
         return taskMapper.findByTenant(TenantContext.normalize(tenantId), offset, pageSize)
@@ -231,6 +250,7 @@ public class AgentWorkflowEngine {
                 .toList();
     }
 
+    /** 查询任务事件列表（时间升序，用于回放）；任务不属于该租户时返回空列表。 */
     public List<WorkflowEventVO> getTaskEvents(String tenantId, String taskId) {
         if (taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId) == null) {
             return Collections.emptyList();
@@ -242,6 +262,7 @@ public class AgentWorkflowEngine {
 
     // ── 转换辅助方法 ───────────────────────────────────────
 
+    /** AgentTaskRecord → WorkflowTaskVO 聚合转换 */
     private WorkflowTaskVO toTaskVO(AgentTaskRecord t, List<AgentStepRecord> steps,
                                      List<AgentEventRecord> events) {
         return WorkflowTaskVO.builder()
@@ -261,6 +282,7 @@ public class AgentWorkflowEngine {
                 .build();
     }
 
+    /** AgentStepRecord → WorkflowStepVO 转换（观测 JSON 容缺，token/耗时空值补 0） */
     private WorkflowStepVO toStepVO(AgentStepRecord s) {
         return WorkflowStepVO.builder()
                 .stepId(s.getStepId())
@@ -282,6 +304,7 @@ public class AgentWorkflowEngine {
                 .build();
     }
 
+    /** AgentEventRecord → WorkflowEventVO 转换 */
     private WorkflowEventVO toEventVO(AgentEventRecord e) {
         return WorkflowEventVO.builder()
                 .eventId(e.getEventId())
@@ -293,6 +316,7 @@ public class AgentWorkflowEngine {
                 .build();
     }
 
+    /** JSON 串反序列化为 Map；空串或解析失败返回空 Map */
     private Map<String, Object> parseJsonMap(String json) {
         if (!StringUtils.hasText(json)) {
             return Collections.emptyMap();
@@ -304,6 +328,7 @@ public class AgentWorkflowEngine {
         }
     }
 
+    /** 序列化为 JSON；null 入参返回 null，失败兜底 "{}" */
     private String toJson(Object value) {
         if (value == null) {
             return null;

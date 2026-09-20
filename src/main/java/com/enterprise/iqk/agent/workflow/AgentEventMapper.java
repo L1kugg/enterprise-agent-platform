@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** agent_event 表 Mapper：按任务（可再按事件类型）拉取事件流用于回放。 */
 @Mapper
 public interface AgentEventMapper extends BaseMapper<AgentEventRecord> {
 

@@ -11,11 +11,13 @@ import java.util.List;
 @Component
 public class IdentityReranker implements Reranker {
 
+    /** 恒等重排：不重打分、不重排，仅截断到 topK 条 */
     @Override
     public List<ScoredDocument> rerank(String query, List<ScoredDocument> documents, int topK) {
         return documents.stream().limit(topK).toList();
     }
 
+    /** 策略名固定为 "identity" */
     @Override
     public String getName() {
         return "identity";

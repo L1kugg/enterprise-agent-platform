@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/** agent_step 表 Mapper：按任务查步骤（step_order 升序）与步骤完成回写。 */
 @Mapper
 public interface AgentStepMapper extends BaseMapper<AgentStepRecord> {
 

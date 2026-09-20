@@ -23,10 +23,15 @@ public class EvidenceJudgeService {
 
     private final MeterRegistry meterRegistry;
 
+    /** 综合得分权重分配：相关度 0.50、权威度 0.30、时效度 0.20 */
     private static final double RELEVANCE_WEIGHT = 0.50;
     private static final double AUTHORITY_WEIGHT = 0.30;
     private static final double TIMELINESS_WEIGHT = 0.20;
 
+    /**
+     * 对文档逐条做三维评分并按综合分降序返回证据条目；
+     * 摘录压缩空白后截断到 180 字符。记录判分延迟指标。
+     */
     public List<EvidenceItem> judge(List<ScoredDocument> documents, String query) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
@@ -61,6 +66,7 @@ public class EvidenceJudgeService {
         }
     }
 
+    /** 相关度：以 finalScore 为基础，按查询词命中内容的个数加成（每个 +0.05、上限 +0.3，封顶 1.0） */
     private double scoreRelevance(ScoredDocument doc, String query) {
         // 以检索得分为基础，再按关键词重叠度加成
         double base = doc.getFinalScore();
@@ -79,6 +85,7 @@ public class EvidenceJudgeService {
         return Math.min(1.0, base + boost);
     }
 
+    /** 权威度按来源类型固定赋值：图谱 0.90 &gt; 向量 0.75 &gt; 关键词 0.65 &gt; 网络/未知 0.50 */
     private double scoreAuthority(ScoredDocument doc) {
         return switch (doc.getSourceType()) {
             case "graph" -> 0.90;   // 结构化知识图谱数据
@@ -89,6 +96,7 @@ public class EvidenceJudgeService {
         };
     }
 
+    /** 时效度：按元数据时间戳距今天数分档（30 天内 1.0 → 一年以上 0.5），无时间戳记中性 0.70 */
     private double scoreTimeliness(ScoredDocument doc) {
         // 默认：没有时间戳元数据 → 中性分数
         if (doc.getMetadata() == null) return 0.70;
@@ -109,6 +117,7 @@ public class EvidenceJudgeService {
         }
     }
 
+    /** 生成人类可读的评分理由（来源类型 + 三个维度的百分比） */
     private String buildReason(ScoredDocument doc, double relevance,
                                 double authority, double timeliness) {
         String sourceLabel = switch (doc.getSourceType()) {
@@ -122,6 +131,7 @@ public class EvidenceJudgeService {
                 sourceLabel, relevance * 100, authority * 100, timeliness * 100);
     }
 
+    /** 压缩空白后截断到 maxLen，超出部分以 "..." 结尾 */
     private String truncate(String text, int maxLen) {
         if (!StringUtils.hasText(text)) return "";
         String cleaned = text.replaceAll("\\s+", " ").trim();

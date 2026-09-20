@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** eval_result 表 Mapper：按运行 ID 取 case 级结果明细。 */
 @Mapper
 public interface EvalResultMapper extends BaseMapper<EvalResultRecord> {
 

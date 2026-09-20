@@ -13,15 +13,22 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * ReAct 决策解析器：把模型输出的 JSON 规划解析为 ReasonDecision，带白名单校验与多重兜底。
+ * 非 JSON / JSON 解析失败按"模型原话当答案直接 finish"降级；动作不在白名单一律视为 finish；
+ * fallback() 提供规划器不可用时的关键词规则兜底（知识库类问题改投 rag_search）。
+ */
 @Component
 @RequiredArgsConstructor
 public class ReactDecisionParser {
+    /** 动作白名单（硬编码，不含 mcp_call），白名单外动作强制归为 finish */
     private static final List<String> ALLOWED_ACTIONS = List.of(
             "query_school", "query_course", "add_course_reservation", "rag_search", "finish"
     );
 
     private final ObjectMapper objectMapper;
 
+    /** 解析模型原始输出：截取首个 {...} 片段读 JSON，缺字段按默认值补齐。 */
     public ReasonDecision parse(String rawModelOutput) {
         String json = extractJson(rawModelOutput);
         if (!StringUtils.hasText(json)) {
@@ -51,6 +58,7 @@ public class ReactDecisionParser {
         }
     }
 
+    /** 规划失败的关键词规则兜底：按问题主题给确定性答案，知识库类问题改投 rag_search。 */
     public ReasonDecision fallback(String prompt) {
         String safePrompt = emptyIfBlank(prompt).toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(safePrompt)) {
@@ -112,6 +120,7 @@ public class ReactDecisionParser {
         );
     }
 
+    /** 构造一条带引用/证据的 finish 型兜底决策。 */
     private ReasonDecision decision(String thought, String answer, String citation, String evidence) {
         return new ReasonDecision(
                 thought,
@@ -124,10 +133,12 @@ public class ReactDecisionParser {
         );
     }
 
+    /** 把模型原话原样作为答案的 finish 决策（用于非 JSON 输出，不标记 fallback）。 */
     private ReasonDecision finishWithAnswer(String thought, String rawModelOutput) {
         return new ReasonDecision(thought, "finish", Collections.emptyMap(), emptyIfBlank(rawModelOutput), List.of(), List.of(), false);
     }
 
+    /** 截取首个 { 到最后一个 } 之间的片段，无 JSON 结构返回空串。 */
     private String extractJson(String raw) {
         if (!StringUtils.hasText(raw)) {
             return "";
@@ -137,10 +148,12 @@ public class ReactDecisionParser {
         return start < 0 || end <= start ? "" : raw.substring(start, end + 1);
     }
 
+    /** 动作名归一：trim + 小写，空白归 finish。 */
     private String normalizeAction(String action) {
         return StringUtils.hasText(action) ? action.trim().toLowerCase(Locale.ROOT) : "finish";
     }
 
+    /** 小写化后的文本是否命中任一关键词。 */
     private boolean containsAny(String text, String... keywords) {
         if (!StringUtils.hasText(text) || keywords == null || keywords.length == 0) {
             return false;
@@ -153,10 +166,12 @@ public class ReactDecisionParser {
         return false;
     }
 
+    /** null/空白统一返回空串。 */
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
     }
 
+    /** 单步决策：thought + 白名单内 action 及入参；finish 时可带 answer/citations/evidence；fallback 标记是否规则兜底产物。 */
     public record ReasonDecision(String thought,
                                  String action,
                                  Map<String, Object> actionInput,

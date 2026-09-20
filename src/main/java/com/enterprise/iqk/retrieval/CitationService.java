@@ -12,6 +12,7 @@ import java.util.List;
 @Service
 public class CitationService {
 
+    /** 将证据按顺序转成编号引用（编号从 1 起），摘录取证据的 snippet */
     public List<CitationItem> buildCitations(List<EvidenceItem> evidence) {
         List<CitationItem> citations = new ArrayList<>();
         for (int i = 0; i < evidence.size(); i++) {
@@ -29,6 +30,7 @@ public class CitationService {
         return citations;
     }
 
+    /** 格式化引用脚注：空列表返回空串；每条形如 "[n] 标题 (类型) 可信度: xx%" */
     public String formatCitationFooter(List<CitationItem> citations) {
         if (citations == null || citations.isEmpty()) return "";
         StringBuilder sb = new StringBuilder("\n\n---\n引用来源:\n");

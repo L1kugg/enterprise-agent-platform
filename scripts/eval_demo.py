@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# 评测演示执行器：调 /ai/evaluation 系列接口走完"建数据集 → 触发评测 → 下载 Markdown 报告"全流程，
+# 供 make eval-demo 一键演示。
 import argparse
 import json
 import os
@@ -7,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 
+# 发送 JSON 请求并解析 JSON 响应
 def request_json(url, method, payload=None, headers=None, timeout=120):
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req_headers = {"Accept": "application/json", **(headers or {})}
@@ -18,12 +21,14 @@ def request_json(url, method, payload=None, headers=None, timeout=120):
         return json.loads(body) if body else {}
 
 
+# 请求纯文本响应（用于拉取 Markdown 报告）
 def request_text(url, headers=None, timeout=120):
     req = urllib.request.Request(url, headers={"Accept": "text/markdown", **(headers or {})}, method="GET")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8")
 
 
+# 组装 API Key 与租户请求头
 def auth_headers(args):
     headers = {}
     if args.api_key:
@@ -33,6 +38,7 @@ def auth_headers(args):
     return headers
 
 
+# 兼容驼峰与下划线两种字段命名，归一化为评测接口所需的驼峰用例结构
 def normalize_case(raw, index):
     expected_keywords = raw.get("expectedKeywords", raw.get("expected_keywords", []))
     expected_citations = raw.get("expectedCitations", raw.get("expected_citations", []))
@@ -48,6 +54,7 @@ def normalize_case(raw, index):
     }
 
 
+# 读数据集文件（裸数组或 {cases: []} 包装均可），过滤掉空问题的用例
 def load_cases(path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     raw_cases = data if isinstance(data, list) else data.get("cases", [])
@@ -55,6 +62,7 @@ def load_cases(path):
     return [case for case in cases if case["question"]]
 
 
+# 主流程：建数据集 → 触发评测 → 拉取报告落盘
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default=os.getenv("EVAL_DEMO_BASE_URL", "http://localhost:8080"))

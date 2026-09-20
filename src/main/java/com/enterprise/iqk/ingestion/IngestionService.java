@@ -44,6 +44,12 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * PDF 文档入库服务：接收上传 → 落盘 + 建任务 → 异步解析/分块/向量化。
+ * 幂等键（客户端提供或按内容哈希自动生成）保证同一文件重复提交返回既有任务；
+ * 失败按 attemptCount 与 baseDelaySeconds 递增延迟重试，超限转 FAILED 并投递 DLQ；
+ * 任务与向量元数据全部携带 tenant_id/chat_id，检索侧按租户隔离。
+ */
 public class IngestionService {
 
     private final IngestionJobMapper ingestionJobMapper;
@@ -58,6 +64,7 @@ public class IngestionService {
     // 避免并发任务交错写入同一个快照文件。
     private final Object snapshotLock = new Object();
 
+    /** 提交 PDF 入库任务：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
     public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         if (!StringUtils.hasText(chatId)) {
@@ -113,18 +120,22 @@ public class IngestionService {
         }
     }
 
+    /** 按租户 + jobId 查询单个任务；jobId 属于其他租户时返回 null。 */
     public IngestionJob getByJobId(String tenantId, String jobId) {
         return ingestionJobMapper.findByJobIdAndTenant(TenantContext.normalize(tenantId), jobId);
     }
 
+    /** 按租户 + chatId 列出最近的入库任务，limit 下限保护为 1。 */
     public List<IngestionJob> listByChatId(String tenantId, String chatId, int limit) {
         return ingestionJobMapper.findLatestByChatId(TenantContext.normalize(tenantId), chatId, Math.max(limit, 1));
     }
 
+    /** 无显式租户的重载：认领租户回退到 MDC（仅适用于 HTTP 请求线程调用）。 */
     public IngestionProcessResult processQueuedJob(String jobId, String traceId) {
         return processQueuedJob(jobId, null, traceId);
     }
 
+    /** 认领并执行一个队列任务：原子认领失败返回 picked=false；成功解析入库，失败按重试计数转 RETRY（带下次执行时间）或 FAILED（投 DLQ）。 */
     public IngestionProcessResult processQueuedJob(String jobId, String tenantId, String traceId) {
         if (!StringUtils.hasText(jobId)) {
             return IngestionProcessResult.builder()
@@ -237,6 +248,7 @@ public class IngestionService {
         }
     }
 
+    /** 把到期的 RETRY 任务重新发布回队列；db_polling 后端由轮询器消化，直接返回 0。 */
     public int enqueueReadyRetries(int limit) {
         if ("db_polling".equalsIgnoreCase(ingestionProperties.getQueueBackend())) {
             return 0;
@@ -253,6 +265,7 @@ public class IngestionService {
         return count;
     }
 
+    /** 解析 PDF 为单页文档 → token 分块 → 写入向量库 → 视后端情况落快照。 */
     private void processPdfJob(IngestionJob job) {
         File source = new File(job.getFilePath());
         if (!source.exists()) {
@@ -271,6 +284,7 @@ public class IngestionService {
         persistSimpleVectorStoreIfNeeded();
     }
 
+    /** 按配置的 chunk 参数切块，并为每个 chunk 覆写 tenant_id/chat_id/job_id 等元数据。 */
     private List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
         TokenTextSplitter splitter = TokenTextSplitter.builder()
                 .withChunkSize(ragProperties.getSplit().getChunkSize())
@@ -295,6 +309,7 @@ public class IngestionService {
         return chunks;
     }
 
+    /** 仅 simple 后端且配置了快照路径时持久化 SimpleVectorStore，失败仅告警不影响入库结果。 */
     private void persistSimpleVectorStoreIfNeeded() {
         if (!(vectorStore instanceof SimpleVectorStore simpleVectorStore)) {
             return;
@@ -327,6 +342,7 @@ public class IngestionService {
         }
     }
 
+    /** 把上传文件以 "jobId_清洗后文件名" 写入存储目录，返回绝对路径。 */
     private String persistFile(String jobId, String sourceName, MultipartFile file) {
         String sanitized = sourceName.replaceAll("[^a-zA-Z0-9._-]", "_");
         Path root = Path.of(ingestionProperties.getStorageDir());
@@ -340,6 +356,7 @@ public class IngestionService {
         }
     }
 
+    /** 归一幂等键：优先客户端提供值，否则按 tenant|chat|内容哈希自动生成。 */
     private String normalizeIdempotencyKey(String tenantId, String chatId, MultipartFile file, String provided) {
         if (StringUtils.hasText(provided)) {
             return "client:" + provided.trim();
@@ -353,6 +370,7 @@ public class IngestionService {
         }
     }
 
+    /** 错误信息截断到 1000 字符，空消息归一为 unknown error。 */
     private String truncateError(String msg) {
         if (!StringUtils.hasText(msg)) {
             return "unknown error";

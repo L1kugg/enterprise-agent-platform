@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
+/** 记忆事件表 Mapper：记录 CREATE / UPDATE / DELETE / EXPIRE / HIT / USE 留痕（库存英文值）。 */
 @Mapper
 public interface MemoryEventMapper extends BaseMapper<MemoryEventRecord> {
 

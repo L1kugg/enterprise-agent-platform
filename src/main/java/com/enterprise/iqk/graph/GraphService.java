@@ -16,6 +16,11 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 知识图谱查询服务：围绕实体/关系/事实三张表提供关键词检索与一跳邻居扩展。
+ * 全部查询强制 tenant_id 过滤，LIKE 关键词先经 SqlLikeUtils 转义防通配符注入；
+ * 结果供 GraphRetriever 在 RAG 检索阶段与向量召回融合使用。
+ */
 public class GraphService {
 
     private final KgEntityMapper entityMapper;
@@ -74,10 +79,14 @@ public class GraphService {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    /** 一跳邻居视图：邻居实体 + 关系类型 + 方向 + 权重 */
     public static class GraphNeighbor {
+        /** 邻居实体 */
         private KgEntityRecord entity;
+        /** 与中心实体的关系类型 */
         private String relationType;
         private String direction;  // 取值为 IN 或 OUT
+        /** 关系权重 */
         private Double weight;
     }
 }

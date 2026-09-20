@@ -12,6 +12,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+/** 工作流任务详情 VO：AgentTaskRecord 的对外投影，聚合步骤列表与事件列表（均升序）。 */
 public class WorkflowTaskVO {
     private String taskId;
     private String tenantId;

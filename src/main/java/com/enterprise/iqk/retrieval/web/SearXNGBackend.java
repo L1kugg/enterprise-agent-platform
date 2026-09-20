@@ -38,6 +38,7 @@ public class SearXNGBackend implements WebSearchBackend {
         this.objectMapper = objectMapper;
     }
 
+    /** 懒初始化带超时配置的 RestTemplate（双重检查锁，仅首次调用构建） */
     private RestTemplate getRestTemplate() {
         RestTemplate local = restTemplate;
         if (local == null) {
@@ -55,6 +56,7 @@ public class SearXNGBackend implements WebSearchBackend {
         return local;
     }
 
+    /** 调用 SearXNG JSON 接口搜索；未启用、空响应或请求异常均返回空列表，不抛异常 */
     @Override
     public List<WebSearchResult> search(String query, int maxResults) {
         if (!isAvailable()) {
@@ -90,6 +92,7 @@ public class SearXNGBackend implements WebSearchBackend {
         }
     }
 
+    /** 后端类型为 searxng 且已配置实例 URL 时可用 */
     @Override
     public boolean isAvailable() {
         return "searxng".equalsIgnoreCase(properties.getBackend())

@@ -27,6 +27,11 @@ import java.util.stream.Collectors;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
+/**
+ * 简单版 RAG 问答链路：向量检索（租户 + chatId 过滤）→ 本地词面重排 → 引用化生成。
+ * 既是用户可见 /ai/pdf/chat 的后端，也被 BuiltinToolRuntime 的 rag_search 动作复用；
+ * 检索为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
+ */
 @Service
 @RequiredArgsConstructor
 public class RagAnswerService {
@@ -38,6 +43,7 @@ public class RagAnswerService {
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
 
+    /** 执行完整问答：检索为空返回固定话术，否则重排选优、预算断言后生成并追加引用脚注。 */
     public RagResult answer(String prompt, String tenantId, String chatId, String conversationId, String modelProfile) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
         String pipelineOutcome = "error";
@@ -111,6 +117,7 @@ public class RagAnswerService {
         }
     }
 
+    /** 带指标包装的向量相似度检索，结果可能为空，由调用方判断走空话术分支。 */
     private List<Document> similaritySearchWithMetrics(SearchRequest request) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
@@ -132,6 +139,7 @@ public class RagAnswerService {
         }
     }
 
+    /** 带指标包装的本地重排阶段，只计耗时不计请求数。 */
     private List<Document> rerankWithMetrics(String prompt, List<Document> docs) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
@@ -148,6 +156,7 @@ public class RagAnswerService {
         }
     }
 
+    /** 按查询词与文档的词面重叠度降序排序（纯本地重排，不依赖外部服务）。 */
     private List<Document> rerank(String prompt, List<Document> docs) {
         Set<String> promptTokens = tokenize(prompt);
         return docs.stream()
@@ -155,6 +164,7 @@ public class RagAnswerService {
                 .collect(Collectors.toList());
     }
 
+    /** 重排得分 = 查询词被文档命中的比例；文档无词时得 0 分。 */
     private double scoreDoc(Set<String> promptTokens, Document doc) {
         Set<String> docTokens = tokenize(doc.getFormattedContent());
         if (docTokens.isEmpty()) {
@@ -164,6 +174,7 @@ public class RagAnswerService {
         return (double) overlap / docTokens.size();
     }
 
+    /** 小写化后按非字母数字字符切词，空白输入返回空集合。 */
     private Set<String> tokenize(String text) {
         if (!StringUtils.hasText(text)) {
             return Set.of();
@@ -173,6 +184,7 @@ public class RagAnswerService {
                 .collect(Collectors.toSet());
     }
 
+    /** 把选中文档拼成 "[n] source=..., chunk=..." 编号上下文块，供 prompt 引用。 */
     private String buildContext(List<Document> docs) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < docs.size(); i++) {
@@ -186,12 +198,14 @@ public class RagAnswerService {
         return sb.toString();
     }
 
+    /** 从文档元数据取 file_name/chunk_index 生成单条引用文本。 */
     private String citationText(Document d) {
         Object file = d.getMetadata().getOrDefault("file_name", "unknown");
         Object chunk = d.getMetadata().getOrDefault("chunk_index", "?");
         return "source=" + file + ", chunk=" + chunk;
     }
 
+    /** 压缩空白并截断到 180 字符生成证据摘要。 */
     private String evidenceText(Document d) {
         String raw = emptyIfBlank(d.getFormattedContent()).replaceAll("\\s+", " ").trim();
         if (raw.length() <= 180) {
@@ -200,15 +214,18 @@ public class RagAnswerService {
         return raw.substring(0, 180) + "...";
     }
 
+    /** null/空白统一返回空串。 */
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
     }
 
+    /** 转义反斜杠与双引号，防止 chatId 等拼入过滤表达式造成注入。 */
     private String escapeFilterValue(String value) {
         String raw = emptyIfBlank(value);
         return raw.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    /** 生成 "引用来源:" 编号脚注；无引用时返回空串。 */
     private String formatCitationFooter(List<String> citations) {
         if (citations == null || citations.isEmpty()) {
             return "";
@@ -220,11 +237,15 @@ public class RagAnswerService {
         return sb.toString();
     }
 
+    /** RAG 问答结果载体。 */
     @Data
     @Builder
     public static class RagResult {
+        /** 最终回答（已追加引用来源脚注） */
         private String answer;
+        /** 引用列表，格式 source=..., chunk=... */
         private List<String> citations;
+        /** 证据摘要列表（正文压缩截断，与选中文档一一对应） */
         private List<String> evidence;
     }
 }

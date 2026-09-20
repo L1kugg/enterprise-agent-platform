@@ -25,11 +25,14 @@ public class RagFactMemoryRecorder {
     /** 与 MemoryService#buildContext 的召回门槛保持一致。 */
     static final double FACT_CONFIDENCE_THRESHOLD = 0.7;
 
+    /** 单次请求最多写入的事实条数（防止记忆表无界增长）。 */
     private static final int MAX_FACTS_PER_REQUEST = 3;
+    /** 单条事实摘录的截断上限（字符）。 */
     private static final int MAX_SNIPPET_CHARS = 400;
 
     private final MemoryService memoryService;
 
+    /** 把置信度达标且带摘录的证据写入 fact 记忆：单次最多 3 条，单条失败只告警、不阻塞其余条目。 */
     public void recordFacts(String tenantId, List<EvidenceItem> evidence) {
         if (!StringUtils.hasText(tenantId) || evidence == null || evidence.isEmpty()) {
             return;
@@ -56,11 +59,13 @@ public class RagFactMemoryRecorder {
         }
     }
 
+    /** 构造 "rag:{sourceType}:{title}" 格式的来源标识，无标题时以 untitled 兜底。 */
     private String factSource(EvidenceItem item) {
         String title = StringUtils.hasText(item.getTitle()) ? item.getTitle() : "untitled";
         return "rag:" + item.getSourceType() + ":" + title;
     }
 
+    /** 空白规范化为单空格后按上限截断，超长补省略号。 */
     private String truncate(String text, int maxChars) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxChars ? normalized : normalized.substring(0, maxChars) + "…";

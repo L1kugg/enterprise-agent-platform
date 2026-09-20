@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/** agent_task 表 Mapper：任务的按租户/按 ID 查询与状态更新（checkstyle 禁止 SQL 拼接，全部参数化）。 */
 @Mapper
 public interface AgentTaskMapper extends BaseMapper<AgentTaskRecord> {
 

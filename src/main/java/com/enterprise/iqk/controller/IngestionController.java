@@ -30,6 +30,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/ingestion")
 @RequiredArgsConstructor
+/**
+ * 文档入库 HTTP 入口：上传 PDF、查询任务状态、手动触发处理。
+ * 全部端点以 MDC 中的租户为作用域（跨租户任务不可见）；process 端点额外要求 ADMIN 角色。
+ */
 public class IngestionController {
 
     private final IngestionService ingestionService;
@@ -38,6 +42,7 @@ public class IngestionController {
     private final IngestionProperties ingestionProperties;
 
     @PostMapping("/upload/{chatId}")
+    /** 上传 PDF 创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。 */
     public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
                                        @RequestParam("file") MultipartFile file,
                                        @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
@@ -52,6 +57,7 @@ public class IngestionController {
     }
 
     @GetMapping("/jobs/{jobId}")
+    /** 查询单个任务详情；不存在或属于其他租户返回 404。 */
     public IngestionJobVO getJob(@PathVariable String jobId) {
         IngestionJob job = ingestionService.getByJobId(currentTenantId(), jobId);
         if (job == null) {
@@ -61,6 +67,7 @@ public class IngestionController {
     }
 
     @GetMapping("/jobs")
+    /** 按 chatId 列出当前租户最近的入库任务，limit 夹取在 1-100。 */
     public List<IngestionJobVO> getJobsByChatId(@RequestParam("chatId") String chatId,
                                                 @RequestParam(value = "limit", defaultValue = "20") int limit) {
         return ingestionService.listByChatId(currentTenantId(), chatId, Math.max(1, Math.min(limit, 100)))
@@ -71,6 +78,7 @@ public class IngestionController {
 
     @PostMapping("/jobs/process")
     @PreAuthorize("hasRole('ADMIN')")
+    /** ADMIN 手动触发：带 jobId 时校验租户归属后同步处理一个任务，不带则批量重入队到期重试。 */
     public IngestionSubmitVO processOne(@RequestParam(value = "jobId", required = false) String jobId) {
         if (!StringUtils.hasText(jobId)) {
             int enqueued = ingestionService.enqueueReadyRetries(20);
@@ -93,6 +101,7 @@ public class IngestionController {
                 .build();
     }
 
+    /** 领域对象转视图对象，附带当前队列后端标识。 */
     private IngestionJobVO toVO(IngestionJob job) {
         return IngestionJobVO.builder()
                 .jobId(job.getJobId())
@@ -110,6 +119,7 @@ public class IngestionController {
                 .build();
     }
 
+    /** 取当前链路 traceId；无 Tracer/Span 时返回空串。 */
     private String currentTraceId() {
         Tracer tracer = tracerProvider.getIfAvailable();
         if (tracer == null) {
@@ -123,6 +133,7 @@ public class IngestionController {
         return StringUtils.hasText(traceId) ? traceId : "";
     }
 
+    /** 从 MDC 取当前租户并归一化。 */
     private String currentTenantId() {
         return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }

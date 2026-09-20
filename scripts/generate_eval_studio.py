@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# 质量分档：通过率落到哪一档，对应报告里的 quality_band 标签
 QUALITY_BANDS = [
     (0.90, "excellent"),
     (0.75, "healthy"),
@@ -25,6 +26,7 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 
+# 通过率映射到质量分档标签
 def band_for(value: float) -> str:
     for threshold, label in QUALITY_BANDS:
         if value >= threshold:
@@ -32,6 +34,7 @@ def band_for(value: float) -> str:
     return "unknown"
 
 
+# 计算当前值相对基线的差值，任一侧缺失返回 None
 def metric_delta(current: float | None, baseline: float | None) -> float | None:
     if current is None or baseline is None:
         return None
@@ -42,6 +45,7 @@ def get_summary(report: dict) -> dict:
     return report.get("summary", {})
 
 
+# 构建评审友好的质量面板：当前 vs 基线的指标对比，外加三条风险队列（失败/引用缺失/幻觉用例）
 def build_studio_report(current: dict, baseline: dict | None) -> dict:
     current_summary = get_summary(current)
     baseline_summary = get_summary(baseline or {})
@@ -102,6 +106,7 @@ def fmt(value: object) -> str:
     return str(value)
 
 
+# 渲染 Studio Markdown：记分卡 + 门禁检查 + 风险队列
 def render_markdown(report: dict) -> str:
     lines = [
         "# RAG Evaluation Studio",
@@ -147,6 +152,7 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
+# 主流程：读当前（可选基线）回归报告，产出 JSON+MD 摘要，状态非 pass 退出码 1
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(

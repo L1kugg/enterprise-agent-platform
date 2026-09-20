@@ -12,6 +12,7 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+/** 工作流步骤 VO：AgentStepRecord 的对外投影，JSON 列已反序列化为结构化字段。 */
 public class WorkflowStepVO {
     private String stepId;
     private String taskId;

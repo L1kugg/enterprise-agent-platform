@@ -11,9 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 评测报告渲染器：把一轮 EvalRunVO 渲染为 Markdown 报告，
+ * 内容固定三段：运行元信息、汇总指标表、逐 case 得分明细表。
+ * 产物供下载归档或随发布附件，不做任何分数计算。
+ */
 @Component
 public class EvaluationReportRenderer {
 
+    /** 渲染 Markdown 报告文本。 */
     public String render(EvalRunVO run) {
         List<String> lines = new ArrayList<>();
         lines.add("# RAG Evaluation Report");
@@ -53,6 +59,7 @@ public class EvaluationReportRenderer {
         return String.join("\n", lines);
     }
 
+    /** 0~1 分值格式化为百分数文本。 */
     private String pct(double value) {
         return String.format(Locale.ROOT, "%.2f%%", value * 100.0);
     }

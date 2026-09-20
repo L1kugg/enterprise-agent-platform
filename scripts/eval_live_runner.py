@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# 在线评测执行器：对数据集逐条调用 /ai/react/chat/stream 流式接口，
+# 采集真实答案、引用、首 token 延迟等指标，输出 predictions.live.json 供回归门禁打分。
 import argparse
 import json
 import os
@@ -8,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 
+# 组装流式请求头：鉴权（Bearer 优先，退回 API Key）+ 租户标识
 def make_headers(args):
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if args.bearer_token:
@@ -19,6 +22,7 @@ def make_headers(args):
     return headers
 
 
+# 从 done 负载的 citations 字段与 trace 各步观测里收集引用
 def extract_citations(done_payload):
     if not isinstance(done_payload, dict):
         return []
@@ -55,6 +59,8 @@ def extract_citations(done_payload):
     return result
 
 
+# 消费 /ai/react/chat/stream 的 SSE 流：记录首 token 延迟、缓冲 token、捕获 done 负载；
+# 答案优先取 done 负载，缺失时回退为 token 拼接
 def stream_chat(base_url, body, headers, timeout):
     url = f"{base_url.rstrip('/')}/ai/react/chat/stream"
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
@@ -146,6 +152,7 @@ def stream_chat(base_url, body, headers, timeout):
     }
 
 
+# 主流程：逐 case 调流式接口采集预测结果并写出 JSON
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="evaluation/dataset.json")
@@ -174,6 +181,7 @@ def main():
             "modelProfile": args.model_profile,
         }
 
+        # 网络/超时等异常记为 error 结果，不中断整批执行
         try:
             result = stream_chat(args.base_url, body, headers, args.timeout)
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, RuntimeError) as exc:

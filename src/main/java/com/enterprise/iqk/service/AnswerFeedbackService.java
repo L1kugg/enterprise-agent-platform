@@ -24,6 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 答案反馈采集服务：用户评分先落 answer_feedback 表，
+ * 开关开启时再把反馈转写成评测数据集条目，追加到 evaluation/feedback_dataset.jsonl，
+ * 形成"线上反馈 → 评测数据集"的闭环。转写规则按评分分档：
+ * 高分（≥4）反馈的关键词进 expected_keywords（复现好答案），
+ * 低分（≤2）反馈的关键词进 forbidden_keywords（防止再现坏答案）。
+ */
 @Service
 @RequiredArgsConstructor
 public class AnswerFeedbackService {
@@ -31,6 +38,7 @@ public class AnswerFeedbackService {
     private final FeedbackProperties feedbackProperties;
     private final ObjectMapper objectMapper;
 
+    /** 提交反馈：校验必填项与评分范围后写库，开关开启时同步转写进评测数据集。 */
     public void submit(String tenantId, AnswerFeedbackSubmitVO payload) {
         if (payload == null) {
             throw new IllegalArgumentException("feedback payload is required");
@@ -66,6 +74,7 @@ public class AnswerFeedbackService {
         }
     }
 
+    /** 把一条反馈转写成评测数据集条目并追加写入 JSONL 文件。 */
     private void appendToDataset(String tenantId, AnswerFeedback feedback, LocalDateTime createdAt) {
         Map<String, Object> datasetItem = new LinkedHashMap<>();
         String feedbackId = feedback.getId() != null ? feedback.getId().toString() : String.valueOf(System.nanoTime());
@@ -82,6 +91,7 @@ public class AnswerFeedbackService {
         List<String> keywords = extractKeywords(
                 defaultText(feedback.getComment(), "") + " " + defaultText(feedback.getAnswerText(), "")
         );
+        // 按评分分档组织期望/禁用关键词：高分学好的、低分防坏的、中评只记关键词
         if (feedback.getRating() >= 4) {
             datasetItem.put("expected_keywords", keywords);
             datasetItem.put("forbidden_keywords", List.of("不知道", "无法回答", "胡编"));
@@ -119,6 +129,7 @@ public class AnswerFeedbackService {
         }
     }
 
+    /** 从评语与答案中抽取关键词：中文/字母/数字分词，去停用词，最多保留 6 个。 */
     private List<String> extractKeywords(String text) {
         if (!StringUtils.hasText(text)) {
             return List.of();
@@ -141,6 +152,7 @@ public class AnswerFeedbackService {
         return new ArrayList<>(values);
     }
 
+    /** 中文高频虚词停用表。 */
     private boolean isStopWord(String token) {
         return Set.of("这个", "那个", "然后", "但是", "我们", "你们", "他们", "以及", "因为").contains(token);
     }

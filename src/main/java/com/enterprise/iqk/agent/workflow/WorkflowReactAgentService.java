@@ -34,11 +34,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+/** ReAct 执行层 Agent：以 AgentWorkflowEngine 留痕驱动 ReAct 循环（reason→harness 执行动作→观测并入滚动上下文，最多 MAX_STEPS 轮），全程可回放；工作流状态由 mapToWorkflowState 按轮次映射，JUDGING/REFLECTING 仅为进度标签而非语义判定。 */
 @Service
 @RequiredArgsConstructor
 public class WorkflowReactAgentService {
 
-    private static final int MAX_STEPS = 6;
+    private static final int MAX_STEPS = 6; // ReAct 最大轮次，用尽仍未 finish 则强制总结成稿
 
     private final AgentWorkflowEngine workflowEngine;
     private final AgentHarnessService agentHarnessService;
@@ -48,7 +49,7 @@ public class WorkflowReactAgentService {
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
 
-    public ReactChatResponseVO chat(ReactChatRequestVO request) {
+    public ReactChatResponseVO chat(ReactChatRequestVO request) { // 同步 ReAct：跑完循环后一次性返回答案+轨迹+引用；异常置任务 FAILED 后上抛
         validateRequest(request);
         String tenantId = currentTenantId();
         long startedNs = System.nanoTime();
@@ -117,7 +118,7 @@ public class WorkflowReactAgentService {
         }
     }
 
-    public Flux<String> stream(ReactChatRequestVO request) {
+    public Flux<String> stream(ReactChatRequestVO request) { // 流式 ReAct（SSE）：先发 trace、再流式发 token、最后发 done；失败发 error 并置任务 FAILED
         long startedNs = System.nanoTime();
         AtomicReference<Long> firstTokenMs = new AtomicReference<>(null);
         AtomicReference<String> outcomeRef = new AtomicReference<>("error");
@@ -340,7 +341,7 @@ public class WorkflowReactAgentService {
                 });
     }
 
-    private WorkflowState mapToWorkflowState(int step) {
+    private WorkflowState mapToWorkflowState(int step) { // 轮次→状态映射：1→SEARCHING、2→RETRIEVING、3→JUDGING、4→REFLECTING、其余→WRITING
         return switch (step) {
             case 1 -> WorkflowState.SEARCHING;
             case 2 -> WorkflowState.RETRIEVING;

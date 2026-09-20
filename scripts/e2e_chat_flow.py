@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# 端到端链路验证：健康检查 → /ai/react/chat 同步问答 → /ai/react/chat/stream 流式问答，
+# 三步全部通过才退出 0，用于部署后的冒烟验证。
 import argparse
 import json
 import os
@@ -7,6 +9,7 @@ import urllib.error
 import urllib.request
 
 
+# 组装请求头：鉴权（Bearer 优先，退回 API Key）+ 租户标识
 def make_headers(args, accept_json=True):
     headers = {"Content-Type": "application/json"}
     if accept_json:
@@ -20,6 +23,7 @@ def make_headers(args, accept_json=True):
     return headers
 
 
+# 发送 JSON 请求（无 body 即 GET），返回状态码与解析后的 JSON
 def http_json(url, body=None, headers=None, timeout=20.0):
     data = None if body is None else json.dumps(body).encode("utf-8")
     method = "GET" if body is None else "POST"
@@ -29,6 +33,7 @@ def http_json(url, body=None, headers=None, timeout=20.0):
         return resp.status, json.loads(text) if text else {}
 
 
+# 消费 SSE 流：记录是否见到 token、捕获 done 负载或 error 消息
 def stream_sse(url, body, headers, timeout=40.0):
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
 
@@ -36,6 +41,7 @@ def stream_sse(url, body, headers, timeout=40.0):
     done_payload = None
     error_message = ""
 
+    # 单事件处理：token 打标记，done/error 终止整个消费循环
     def consume_event(event, data):
         nonlocal token_seen, done_payload, error_message
         if not data:
@@ -102,6 +108,7 @@ def stream_sse(url, body, headers, timeout=40.0):
     return token_seen, done_payload, error_message
 
 
+# 冒烟主流程：健康检查 → 同步问答 → 流式问答，任何一步失败立即终止
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://localhost:8080")

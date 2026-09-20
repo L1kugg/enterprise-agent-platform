@@ -12,6 +12,12 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 向量语义检索器：基于 Spring AI VectorStore 相似度搜索，按租户 + 会话过滤表达式圈定范围，
+ * topK 与相似度阈值取自 RagProperties。
+ * 设计要点：得分优先读向量库元数据（score/distance），不填充这些键的向量库
+ * 回退到按排名衰减的得分，保证下游加权融合始终有分数可用。
+ */
 @Component
 @RequiredArgsConstructor
 public class VectorRetriever {
@@ -20,6 +26,10 @@ public class VectorRetriever {
     private final RagProperties ragProperties;
     private final MeterRegistry meterRegistry;
 
+    /**
+     * 向量相似度检索并映射为 ScoredDocument（docId 形如 vec-0，sourceType=vector）。
+     * 记录延迟指标；异常不在此捕获、直接上抛，由 HybridRetrievalService 统一降级为空结果。
+     */
     public List<ScoredDocument> retrieve(String query, String tenantId, String chatId) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
@@ -56,6 +66,7 @@ public class VectorRetriever {
         }
     }
 
+    /** 读取文档元数据并转字符串，缺失时返回 fallback */
     private String metaStr(Document d, String key, String fallback) {
         Object v = d.getMetadata().get(key);
         return v == null ? fallback : v.toString();
@@ -77,6 +88,7 @@ public class VectorRetriever {
         return Math.max(0.1, fallback);
     }
 
+    /** 从元数据读取数值（接受 Number 或可解析的字符串），取不到返回 null */
     private Double readDouble(java.util.Map<String, Object> metadata, String key) {
         if (metadata == null) {
             return null;
@@ -95,6 +107,7 @@ public class VectorRetriever {
         return null;
     }
 
+    /** 夹紧到 [0,1]，NaN/无穷按 0 处理 */
     private double clamp01(double value) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return 0.0;

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# 回归评测门禁：把数据集与预测结果逐条对齐打分，汇总正确率/引用命中/幻觉率/失败率/延迟指标，
+# 输出 latest.json 与 latest.md，并按阈值给出 gate_passed 结论——不过则以退出码 1 拦下流水线。
 import argparse
 import json
 from datetime import datetime, timezone
@@ -6,6 +8,7 @@ from pathlib import Path
 from statistics import mean
 
 
+# 视为执行成功的状态集合
 SUCCESS_STATUSES = {"ok", "success", "done"}
 
 
@@ -14,6 +17,7 @@ def load_json(path: Path):
         return json.load(f)
 
 
+# 列表归一化为非空小写集合，忽略空值
 def to_lower_set(values):
     result = set()
     for value in values or []:
@@ -25,6 +29,7 @@ def to_lower_set(values):
     return result
 
 
+# 线性插值分位数（用于首 token 延迟 P95）
 def percentile(values, p):
     if not values:
         return None
@@ -38,6 +43,7 @@ def percentile(values, p):
     return float(ordered[low] + (ordered[high] - ordered[low]) * weight)
 
 
+# 预测记录归一化：统一状态/答案/引用/延迟字段并补默认值，容忍来源格式差异
 def normalize_prediction(raw):
     item = raw or {}
     status = str(item.get("status", "ok")).strip().lower() or "ok"
@@ -69,6 +75,7 @@ def normalize_prediction(raw):
     }
 
 
+# 单 case 打分：关键词命中率 × 幻觉惩罚得出得分，再叠加引用命中与执行状态判定 pass
 def evaluate_case(case, prediction, per_case_threshold):
     answer = prediction["answer"]
     answer_lower = answer.lower()
@@ -120,6 +127,7 @@ def evaluate_case(case, prediction, per_case_threshold):
     }
 
 
+# 汇总全量指标并逐项跑门禁检查，全部通过才算 gate_passed
 def summarize(cases, args):
     total = len(cases)
     if total == 0:
@@ -197,6 +205,7 @@ def summarize(cases, args):
     }
 
 
+# 渲染回归报告 Markdown：核心指标表 + 门禁检查 + 逐 case 明细
 def render_markdown(report):
     summary = report["summary"]
 
@@ -251,6 +260,7 @@ def render_markdown(report):
     return "\n".join(lines)
 
 
+# 主流程：加载数据与预测 → 逐 case 打分 → 汇总 → 写报告，门禁不过退出码 1
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="evaluation/dataset.json")
@@ -279,6 +289,7 @@ def main():
             normalized = normalize_prediction(item)
             pred_map[str(normalized.get("id", ""))] = normalized
 
+    # 严格模式：要求全部用例都有 live_api 来源的预测，禁止用合成结果过门禁
     if args.require_live_predictions:
         non_live_ids = [
             str(case.get("id", ""))

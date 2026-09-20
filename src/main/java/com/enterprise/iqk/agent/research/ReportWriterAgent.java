@@ -20,6 +20,7 @@ public class ReportWriterAgent {
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
 
+    /** LLM 成稿：按固定结构（摘要/关键发现/详细分析/结论建议）把研究发现汇总为中文报告。 */
     public String writeReport(String topic, String findings, String conversationId, String tenantId, String modelProfile) {
         String prompt = "Write a comprehensive research report based on the findings below.%nStructure: 1) Executive Summary 2) Key Findings 3) Detailed Analysis 4) Conclusions & Recommendations%n%nTopic: %s%n%nResearch Findings:%n%s%n".formatted(topic, findings);
 

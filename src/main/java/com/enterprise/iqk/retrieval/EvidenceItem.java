@@ -5,6 +5,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 证据判分条目：EvidenceJudgeService 对单条 ScoredDocument 的三维评分结果。
+ * 按综合分降序输出，供下游决定哪些证据进入生成，并由 CitationService 转成引用。
+ */
 @Data
 @Builder
 @NoArgsConstructor

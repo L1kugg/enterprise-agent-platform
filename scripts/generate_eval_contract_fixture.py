@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 
+# 生成"必然通过"的合成预测：答案直接用期望关键词拼成，延迟按序号递变，
+# 只用于验证回归评测器的契约，不能当作模型质量证据
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="evaluation/dataset.large.json")
@@ -23,6 +25,7 @@ def main():
         keywords = case.get("expected_keywords", [])
         answer = " ".join(keywords) if keywords else "已执行并返回结果。"
 
+        # 有期望引用直接复用；rag 类用例补一条合成引用满足引用检查，其余不带引用
         expected_citations = case.get("expected_citations", [])
         is_rag = str(case.get("category", "")).startswith("rag")
         if expected_citations:

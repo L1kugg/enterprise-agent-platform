@@ -33,6 +33,11 @@ import java.util.List;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
+/**
+ * /ai/pdf 入口：PDF 上传入库、原文件下载与 RAG 问答三个端点。
+ * 问答走 RagAnswerService 简单版链路，检索按租户 + chatId 双重过滤；
+ * chatId 传入检索前做单引号清洗，防过滤表达式注入。
+ */
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/ai/pdf")
@@ -43,6 +48,7 @@ public class PdfController {
     private final RagAnswerService ragAnswerService;
     private final IngestionProperties ingestionProperties;
 
+    /** 上传 PDF 并提交异步入库任务（幂等键可选），返回受理状态与任务详情。 */
     @PostMapping("/upload/{chatId}")
     public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
                                        @RequestParam("file") MultipartFile file,
@@ -70,6 +76,7 @@ public class PdfController {
                 .build();
     }
 
+    /** 下载该会话最近一次入库的原始 PDF，无任务或文件缺失返回 404。 */
     @GetMapping("/file/{chatId}")
     public ResponseEntity<Resource> download(@PathVariable("chatId") String chatId) {
         List<IngestionJob> jobs = ingestionService.listByChatId(currentTenantId(), chatId, 1);
@@ -91,6 +98,7 @@ public class PdfController {
                 .body(resource);
     }
 
+    /** 简单版 RAG 问答：同步计算答案后以 Flux 返回最终文本。 */
     @PostMapping(value = "/chat", produces = "text/html;charset=UTF-8")
     public Flux<String> chat(@RequestParam("prompt") String prompt,
                              @RequestParam("chatId") String chatId,
@@ -108,6 +116,7 @@ public class PdfController {
         return Flux.just(result.getAnswer());
     }
 
+    /** 去掉单引号，防止 chatId 拼入向量库过滤表达式造成注入。 */
     private String sanitize(String value) {
         if (!StringUtils.hasText(value)) {
             return "";
@@ -115,6 +124,7 @@ public class PdfController {
         return value.replace("'", "");
     }
 
+    /** 从 MDC 取归一化租户 ID。 */
     private String currentTenantId() {
         return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }

@@ -53,8 +53,11 @@ public class MemoryExtractionService {
             - memory 只在 isProfile 为 true 时填写。
             """;
 
+    /** 画像记忆单条截断上限（字符）。 */
     private static final int MAX_MEMORY_CHARS = 200;
+    /** 去重时回扫的既有 long 记忆条数上限。 */
     private static final int LONG_MEMORY_SCAN_LIMIT = 20;
+    /** 提取调用的端点标识（模型路由与成本记账共用）。 */
     private static final String EXTRACTION_ENDPOINT = "memory_extraction";
 
     private final MemoryService memoryService;
@@ -130,6 +133,7 @@ public class MemoryExtractionService {
         }
     }
 
+    /** 拼接提取用的用户消息：问答各截断 400 字符，回答为空时只送提问。 */
     private String buildUserPrompt(String prompt, String answer) {
         StringBuilder userPrompt = new StringBuilder("用户提问: ").append(truncate(prompt, 400));
         if (StringUtils.hasText(answer)) {
@@ -186,15 +190,18 @@ public class MemoryExtractionService {
                 .anyMatch(old -> old.contains(normalized) || normalized.contains(old));
     }
 
+    /** 规范化用于去重比对的文本：去除全部空白。 */
     private String normalize(String text) {
         return text == null ? "" : text.replaceAll("\\s+", "").trim();
     }
 
+    /** 空白规范化为单空格后按上限截断，超长补省略号。 */
     private String truncate(String text, int maxChars) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxChars ? normalized : normalized.substring(0, maxChars) + "…";
     }
 
+    /** 应用关闭时优雅停机：最多等待 5 秒，超时或被中断则强制关闭。 */
     @PreDestroy
     void shutdownExecutor() {
         executor.shutdown();

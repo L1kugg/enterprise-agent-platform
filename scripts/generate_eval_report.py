@@ -31,6 +31,7 @@ def create_sample_predictions(dataset):
     return preds
 
 
+# 按演示路径分组统计 pass/fail/pending，并汇总出 overall
 def evaluate(dataset, predictions):
     metrics = {}
     for path_key, path_data in dataset.get("paths", {}).items():
@@ -82,6 +83,7 @@ def evaluate(dataset, predictions):
     return metrics
 
 
+# 渲染演示路径评测报告 Markdown：每路径一节 + 整体汇总，达标与否一目了然
 def render_markdown(metrics, threshold=0.60):
     lines = []
     lines.append("# Evaluation Report — Demo Paths")
@@ -131,6 +133,7 @@ def render_markdown(metrics, threshold=0.60):
     return "\n".join(lines)
 
 
+# 主流程：--init 生成占位预测文件；否则统计并渲染报告，整体通过率低于阈值打印 FAIL 并退出码 1
 def main():
     parser = argparse.ArgumentParser(description="Generate evaluation report for demo paths")
     parser.add_argument("--dataset", required=True, help="Path to dataset JSON")

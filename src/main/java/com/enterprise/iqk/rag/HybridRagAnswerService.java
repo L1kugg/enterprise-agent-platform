@@ -32,6 +32,13 @@ import java.util.UUID;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
+/**
+ * 完整版混合 RAG 管线，评测链路专用（唯一调用方 EvaluationService）。
+ * 步骤：1 混合检索 → 2 证据判分 → 2.5 高置信事实沉淀（置信度门槛由 recorder 控制）
+ * → 3 引用构建 → 4.5 记忆召回注入（失败降级为无记忆，不中断管线）→ 5 生成 → 6 引用脚注。
+ * user prompt 为三段式：用户问题 / 检索上下文 / "已知记忆" 段；memoryUsed 上报实际注入的记忆标签。
+ * 已知瑕疵：token 估算未把 memorySection 计入，记账略低估。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -48,6 +55,7 @@ public class HybridRagAnswerService {
     private final RagFactMemoryRecorder ragFactMemoryRecorder;
     private final MemoryService memoryService;
 
+    /** 执行完整混合 RAG 管线：检索为空返回固定话术；每轮生成 traceId 供日志关联，全链路埋点。 */
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
                                    String conversationId, String modelProfile) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
@@ -168,11 +176,13 @@ public class HybridRagAnswerService {
         return labels;
     }
 
+    /** 生成 "type: 内容摘要" 单条记忆标签，内容超 80 字符截断加省略号。 */
     private String label(String type, MemoryItemRecord memory) {
         String content = memory.getContent() == null ? "" : memory.getContent().replaceAll("\\s+", " ").trim();
         return type + ": " + (content.length() <= 80 ? content : content.substring(0, 80) + "…");
     }
 
+    /** 把检索文档拼成 "[n] source=..., title=..., chunk=..." 编号上下文块，供 prompt 引用。 */
     private String buildContext(List<ScoredDocument> docs) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < docs.size(); i++) {
@@ -188,21 +198,32 @@ public class HybridRagAnswerService {
         return sb.toString();
     }
 
+    /** 混合 RAG 问答结果载体。 */
     @Data
     @Builder
     public static class HybridRagResult {
+        /** 最终回答（已追加引用来源脚注） */
         private String answer;
+        /** 引用列表（CitationService 构建） */
         private List<CitationItem> citations;
+        /** 判分后的证据列表 */
         private List<EvidenceItem> evidence;
+        /** 本次管线追踪 ID，用于日志关联 */
         private String traceId;
+        /** 实际注入上下文的记忆标签（type + 内容摘要） */
         private List<String> memoryUsed;
+        /** 检索去重前后的数量统计 */
         private RetrievalStats retrievalStats;
 
+        /** 检索各阶段数量统计 */
         @Data
         @Builder
         public static class RetrievalStats {
+            /** 去重前召回总数 */
             private int totalRetrieved;
+            /** 去重后数量 */
             private int afterDedup;
+            /** 最终进入上下文的数量 */
             private int finalCount;
         }
     }

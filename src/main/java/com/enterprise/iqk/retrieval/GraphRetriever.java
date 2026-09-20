@@ -13,6 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 知识图谱检索器：从查询中提取主关键词，在图谱中分别检索实体与事实两类证据。
+ * 实体条目附带一跳邻居关系作为上下文（固定得分 0.85）；
+ * 事实条目以图谱置信度作为检索得分（缺失时默认 0.7）。
+ */
 @Component
 @RequiredArgsConstructor
 public class GraphRetriever {
@@ -20,6 +25,10 @@ public class GraphRetriever {
     private final GraphService graphService;
     private final MeterRegistry meterRegistry;
 
+    /**
+     * 图谱检索：按主关键词各取至多 topK 条实体与事实（sourceType=graph），
+     * 提取不到有效关键词时返回空列表；异常上抛由混合检索层降级。
+     */
     public List<ScoredDocument> retrieve(String query, String tenantId, int topK) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
@@ -78,6 +87,7 @@ public class GraphRetriever {
         }
     }
 
+    /** 提取查询主关键词：取最长的 token（至少 2 字符），无合适 token 时回退整句 trim */
     private String extractMainKeyword(String query) {
         if (!StringUtils.hasText(query)) return "";
         // 简单策略：取最长的 token 作为关键词
@@ -90,6 +100,7 @@ public class GraphRetriever {
         return longest.length() >= 2 ? longest : query.trim();
     }
 
+    /** 邻居列表拼接为 "关系 → 实体名" 的分号分隔串，空列表返回空串 */
     private String buildNeighborContext(List<GraphService.GraphNeighbor> neighbors) {
         if (neighbors == null || neighbors.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
@@ -100,6 +111,7 @@ public class GraphRetriever {
         return sb.toString();
     }
 
+    /** 文本有内容则原样返回，否则返回 fallback */
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
     }

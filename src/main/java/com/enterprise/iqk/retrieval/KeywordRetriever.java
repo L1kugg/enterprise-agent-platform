@@ -27,6 +27,11 @@ public class KeywordRetriever {
     private final VectorStore vectorStore;
     private final MeterRegistry meterRegistry;
 
+    /**
+     * 关键词检索：借向量库按租户/会话拉取候选（max(topK×2, 20) 条，相似度阈值 0.25），
+     * 再按查询词与标题/内容的重叠度重打分（标题 0.6 + 内容 0.4），
+     * 仅保留得分 &gt; 0.05 的条目并截断到 topK；异常上抛由混合检索层降级。
+     */
     public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, int topK) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
@@ -81,12 +86,14 @@ public class KeywordRetriever {
         }
     }
 
+    /** 查询 token 在目标 token 集中的命中占比（目标为空记 0） */
     private double overlapScore(Set<String> query, Set<String> target) {
         if (target.isEmpty()) return 0.0;
         long overlap = query.stream().filter(target::contains).count();
         return (double) overlap / target.size();
     }
 
+    /** 小写化后按非字母数字字符切分为 token 集合，空白文本返回空集 */
     private Set<String> tokenize(String text) {
         if (!StringUtils.hasText(text)) return Set.of();
         return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{Nd}]+"))
@@ -94,11 +101,13 @@ public class KeywordRetriever {
                 .collect(Collectors.toSet());
     }
 
+    /** 读取文档元数据并转字符串，缺失时返回 fallback */
     private String metaStr(Document d, String key, String fallback) {
         Object v = d.getMetadata().get(key);
         return v == null ? fallback : v.toString();
     }
 
+    /** 转义过滤表达式值中的反斜杠与双引号，防止突破过滤条件注入额外谓词 */
     private String escapeFilter(String v) {
         if (v == null) return "";
         return v.replace("\\", "\\\\").replace("\"", "\\\"");

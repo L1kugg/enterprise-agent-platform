@@ -28,6 +28,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/ai/workflow")
 @RequiredArgsConstructor
+/** 工作流任务 API：ReAct 同步/流式入口，以及任务详情、事件、列表查询（租户隔离）。 */
 public class WorkflowController {
 
     private final WorkflowReactAgentService workflowReactAgentService;
@@ -35,18 +36,21 @@ public class WorkflowController {
 
     @Operation(summary = "同步ReAct工作流")
     @PostMapping("/react/chat")
+    /** 同步 ReAct 工作流：阻塞执行，返回完整答案+轨迹 */
     public ResponseEntity<ReactChatResponseVO> reactChat(@RequestBody ReactChatRequestVO request) {
         return ResponseEntity.ok(workflowReactAgentService.chat(request));
     }
 
     @Operation(summary = "流式ReAct工作流 (SSE)")
     @PostMapping(value = "/react/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    /** 流式 ReAct 工作流（SSE）：trace→token→done 事件流 */
     public Flux<String> reactChatStream(@RequestBody ReactChatRequestVO request) {
         return workflowReactAgentService.stream(request);
     }
 
     @Operation(summary = "查询工作流任务详情")
     @GetMapping("/tasks/{taskId}")
+    /** 查询工作流任务详情（含步骤与事件）；不存在返回 404 */
     public ResponseEntity<?> getTask(@PathVariable String taskId) {
         WorkflowTaskVO task = workflowEngine.getTask(TenantContext.currentTenantId(), taskId);
         if (task == null) {
@@ -57,12 +61,14 @@ public class WorkflowController {
 
     @Operation(summary = "查询工作流任务事件列表")
     @GetMapping("/tasks/{taskId}/events")
+    /** 查询工作流任务事件列表（时间升序，可回放） */
     public ResponseEntity<List<WorkflowEventVO>> getTaskEvents(@PathVariable String taskId) {
         return ResponseEntity.ok(workflowEngine.getTaskEvents(TenantContext.currentTenantId(), taskId));
     }
 
     @Operation(summary = "查询租户工作流任务列表")
     @GetMapping("/tasks")
+    /** 分页查询当前租户的工作流任务列表 */
     public ResponseEntity<List<WorkflowTaskVO>> listTasks(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {

@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/** eval_dataset 表 Mapper：数据集按租户查询与基线运行标记。 */
 @Mapper
 public interface EvalDatasetMapper extends BaseMapper<EvalDatasetRecord> {
 

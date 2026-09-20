@@ -18,11 +18,14 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class ChatTurnMemoryRecorder {
 
+    /** 问题侧截断上限（字符）。 */
     private static final int MAX_PROMPT_CHARS = 200;
+    /** 回答侧截断上限（字符）。 */
     private static final int MAX_ANSWER_CHARS = 400;
 
     private final MemoryService memoryService;
 
+    /** 把一轮问答按 "Q: .../A: ..." 格式写入 short 记忆；prompt 或 answer 为空白时静默跳过，失败只告警不抛出。 */
     public void recordTurn(String tenantId, String chatId, String prompt, String answer) {
         if (!StringUtils.hasText(prompt) || !StringUtils.hasText(answer)) {
             return;
@@ -36,6 +39,7 @@ public class ChatTurnMemoryRecorder {
         }
     }
 
+    /** 空白规范化为单空格后按上限截断，超长补省略号。 */
     private String truncate(String text, int maxChars) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxChars ? normalized : normalized.substring(0, maxChars) + "…";

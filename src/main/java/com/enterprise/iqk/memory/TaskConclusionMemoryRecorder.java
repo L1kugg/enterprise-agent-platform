@@ -18,11 +18,14 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class TaskConclusionMemoryRecorder {
 
+    /** 目标（用户输入）侧截断上限（字符）。 */
     private static final int MAX_USER_INPUT_CHARS = 160;
+    /** 结论侧截断上限（字符）。 */
     private static final int MAX_CONCLUSION_CHARS = 600;
 
     private final MemoryService memoryService;
 
+    /** 把任务结论写入 task 记忆（仅在 DONE 时由调用方触发，FAILED 不写）；缺 taskId 或结论为空白时静默跳过，失败只告警不抛出。 */
     public void recordConclusion(String tenantId, String taskId, String taskType,
                                  String userInput, String conclusion, String chatId) {
         if (!StringUtils.hasText(taskId) || !StringUtils.hasText(conclusion)) {
@@ -35,6 +38,7 @@ public class TaskConclusionMemoryRecorder {
         }
     }
 
+    /** 拼接 "[类型] 目标: .../结论: ..." 格式的记忆内容，类型与目标缺失时省略对应段。 */
     private String buildContent(String taskType, String userInput, String conclusion) {
         StringBuilder content = new StringBuilder();
         if (StringUtils.hasText(taskType)) {
@@ -47,6 +51,7 @@ public class TaskConclusionMemoryRecorder {
         return content.toString();
     }
 
+    /** 空白规范化为单空格后按上限截断，超长补省略号。 */
     private String truncate(String text, int maxChars) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxChars ? normalized : normalized.substring(0, maxChars) + "…";

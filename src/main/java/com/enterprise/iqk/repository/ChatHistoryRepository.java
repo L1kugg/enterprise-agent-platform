@@ -4,6 +4,7 @@ import com.enterprise.iqk.domain.vo.MessageVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 
 
+/** 会话历史仓储：按业务类型管理会话 ID 列表与分页消息查询，有内存与 MySQL 两套实现。 */
 public interface ChatHistoryRepository {
     /**
      * 保存会话记录

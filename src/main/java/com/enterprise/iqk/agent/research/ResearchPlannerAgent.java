@@ -27,6 +27,7 @@ public class ResearchPlannerAgent {
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
 
+    /** LLM 拆题：把主题分解为 3-5 个子问题+关键词；解析失败或结果为空时降级为原主题单问（strategy=direct）。 */
     public ResearchPlan plan(String topic, String conversationId, String tenantId, String modelProfile) {
         String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n".formatted(topic);
 
@@ -74,6 +75,7 @@ public class ResearchPlannerAgent {
                 .toList();
     }
 
+    /** 从模型输出中截取首个 {...} JSON 块；无花括号时返回 "{}" 由调用方走降级 */
     private String extractJson(String raw) {
         if (!StringUtils.hasText(raw)) return "{}";
         int start = raw.indexOf('{');
@@ -81,5 +83,6 @@ public class ResearchPlannerAgent {
         return (start < 0 || end <= start) ? "{}" : raw.substring(start, end + 1);
     }
 
+    /** 拆题结果：子问题列表、检索关键词、检索策略（如 breadth_first / direct） */
     public record ResearchPlan(List<String> subQuestions, List<String> keywords, String strategy) {}
 }

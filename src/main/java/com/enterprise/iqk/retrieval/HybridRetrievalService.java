@@ -19,6 +19,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+/**
+ * 混合检索核心服务：向量 / 关键词 / 图谱 / 网络四路并行召回，
+ * 各路结果按来源权重加权（finalScore = retrievalScore × 权重），再按内容指纹去重、
+ * 按 finalScore 降序取 topK。
+ * 设计要点：各源均为阻塞 IO，跑在专用 8 线程池上以免拖垮公共 ForkJoinPool；
+ * 单路异常只记警告日志返回空列表、3 秒超时静默降级，整体检索不因某一路故障而中断。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,15 +45,18 @@ public class HybridRetrievalService {
         return thread;
     });
 
+    /** 应用关闭时立即关闭检索线程池，避免残留阻塞中的检索任务 */
     @PreDestroy
     void shutdownRetrievalExecutor() {
         retrievalExecutor.shutdownNow();
     }
 
+    /** 默认来源权重（向量/关键词/图谱/网络），与 HybridWeights.DEFAULT 保持一致 */
     private static final double VECTOR_WEIGHT = 0.40;
     private static final double KEYWORD_WEIGHT = 0.25;
     private static final double GRAPH_WEIGHT = 0.20;
     private static final double WEB_WEIGHT = 0.15;
+    /** 单路检索超时（秒），超时按降级处理返回空列表 */
     private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
     /**
@@ -118,6 +128,7 @@ public class HybridRetrievalService {
         }
     }
 
+    /** 将各文档原始检索分乘以来源权重写入 finalScore，返回同一列表 */
     private List<ScoredDocument> applyWeight(List<ScoredDocument> docs, double weight) {
         for (ScoredDocument d : docs) {
             d.setFinalScore(d.getRetrievalScore() * weight);
@@ -125,6 +136,7 @@ public class HybridRetrievalService {
         return docs;
     }
 
+    /** 在专用线程池上异步执行单路检索并加权；该路异常返回空列表，3 秒超时也返回空列表 */
     private CompletableFuture<List<ScoredDocument>> retrieveAsync(String source,
                                                                   Supplier<List<ScoredDocument>> retrieval,
                                                                   double weight) {
@@ -138,6 +150,7 @@ public class HybridRetrievalService {
         }, retrievalExecutor).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
+    /** 按内容指纹去重，同指纹保留 finalScore 更高者，整体保持首次出现顺序 */
     private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {
         Map<String, ScoredDocument> seen = new LinkedHashMap<>();
         for (ScoredDocument d : docs) {
@@ -150,6 +163,7 @@ public class HybridRetrievalService {
         return new ArrayList<>(seen.values());
     }
 
+    /** 生成去重指纹：内容折叠空白后取前 200 个字符（null 内容按空串处理） */
     private String fingerprint(ScoredDocument d) {
         String content = d.getContent() != null ? d.getContent() : "";
         // 取前 200 个字符作为去重键
@@ -157,6 +171,7 @@ public class HybridRetrievalService {
         return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
     }
 
+    /** 混合检索结果：topK 文档 + 去重前/后的总条数（用于观测召回质量） */
     public record HybridRetrievalResult(List<ScoredDocument> documents, int totalBeforeDedup,
                                          int totalAfterDedup) {}
 }

@@ -20,11 +20,17 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * 租户成本记账三件套：estimateTokens 粗估 → assertBudget 预算闸门 → recordUsage 落账。
+ * 费用按成本档位对应的 USD/1k tokens 单价折算，日用量累加到 tenant_usage_daily；
+ * 成本治理开关关闭时所有入口直接放行，不做任何记账。
+ */
 public class TenantCostService {
     private final TenantBudgetMapper tenantBudgetMapper;
     private final TenantUsageDailyMapper tenantUsageDailyMapper;
     private final CostGovernanceProperties costGovernanceProperties;
 
+    /** 请求前预算闸门：本月已花费 + 预估费用超过月度预算且租户开启硬限制时，直接拒绝请求。 */
     public void assertBudget(String tenantId, String costTier, long inputTokens, long outputTokens) {
         if (!costGovernanceProperties.isEnabled()) {
             return;
@@ -41,6 +47,7 @@ public class TenantCostService {
         }
     }
 
+    /** 请求后落账：按档位单价折算费用，把请求数/token 数/费用累加进当日用量行。 */
     public void recordUsage(String tenantId,
                             String costTier,
                             long inputTokens,
@@ -63,6 +70,7 @@ public class TenantCostService {
         );
     }
 
+    /** 汇总租户本月/今日的请求量、token 与费用，并给出预算余量与是否超限。 */
     public TenantCostSummaryVO summary(String tenantId) {
         String tenant = TenantContext.normalize(tenantId);
         TenantBudget budget = ensureBudget(tenant);
@@ -99,6 +107,7 @@ public class TenantCostService {
                 .build();
     }
 
+    /** 更新租户月度预算与硬限制开关（负数预算拒绝）；无预算记录时先按默认值初始化。 */
     public TenantCostSummaryVO updateBudget(TenantBudgetUpdateVO request) {
         if (request == null) {
             throw new IllegalArgumentException("budget payload is required");
@@ -119,6 +128,7 @@ public class TenantCostService {
         return summary(tenant);
     }
 
+    /** 按码点数除以估算系数粗估 token 数：空文本返回 0，非空文本至少记 1。 */
     public long estimateTokens(String text) {
         if (!StringUtils.hasText(text)) {
             return 0;
@@ -128,6 +138,7 @@ public class TenantCostService {
         return Math.max(1L, (length + divisor - 1L) / divisor);
     }
 
+    /** 读取租户预算记录，不存在时按默认配置初始化一条。 */
     private TenantBudget ensureBudget(String tenantId) {
         TenantBudget existing = tenantBudgetMapper.findByTenantId(tenantId);
         if (existing != null) {
@@ -145,11 +156,13 @@ public class TenantCostService {
         return tenantBudgetMapper.findByTenantId(tenantId);
     }
 
+    /** 汇总指定月份的费用，空值归零。 */
     private BigDecimal monthCost(String tenantId, YearMonth month) {
         BigDecimal total = tenantUsageDailyMapper.sumCostUsd(tenantId, month.atDay(1), month.atEndOfMonth());
         return defaultDecimal(total);
     }
 
+    /** 按档位单价折算费用（保留 6 位小数），未知档位回落 medium。 */
     private BigDecimal calculateCost(String costTier, long totalTokens) {
         String tier = StringUtils.hasText(costTier) ? costTier.trim().toLowerCase(Locale.ROOT) : "medium";
         BigDecimal unit = costGovernanceProperties.getUsdPer1kTokens().getOrDefault(
@@ -161,14 +174,17 @@ public class TenantCostService {
                 .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP);
     }
 
+    /** Long 空值归 0。 */
     private Long safeLong(Long value) {
         return value == null ? 0L : value;
     }
 
+    /** BigDecimal 空值归零。 */
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
 
+    /** 统一保留 4 位小数（HALF_UP）。 */
     private BigDecimal scale(BigDecimal value) {
         return defaultDecimal(value).setScale(4, RoundingMode.HALF_UP);
     }

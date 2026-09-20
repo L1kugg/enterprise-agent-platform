@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+# 评测数据集生成脚本：按序号轮转五类题型构造 240 条用例，
+# 写出 evaluation/dataset.large.json，供契约 fixture 与回归评测使用。
 import json
 from pathlib import Path
 
 
+# 按序号轮转五类题型（多跳检索/工具路由/幻觉防护/跨库引用/召回），每类绑定独立 chatId 前缀
 def build_case(i: int):
     if i % 5 == 0:
         return {
@@ -50,6 +53,7 @@ def build_case(i: int):
     }
 
 
+# 生成 240 条用例并落盘为 JSON
 def main():
     dataset = [build_case(i) for i in range(1, 241)]
     target = Path("evaluation/dataset.large.json")

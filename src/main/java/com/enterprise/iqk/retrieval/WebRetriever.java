@@ -42,6 +42,10 @@ public class WebRetriever {
         this.meterRegistry = meterRegistry;
     }
 
+    /**
+     * 网络检索：功能未启用或无可用后端时直接返回空列表（不抛异常），
+     * 否则取第一个可用后端搜索并映射为 web 类型文档（docId 取随机 UUID 前 8 位）。
+     */
     public List<ScoredDocument> retrieve(String query, int topK) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "disabled";

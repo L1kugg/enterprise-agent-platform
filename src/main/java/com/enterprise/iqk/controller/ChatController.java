@@ -49,6 +49,7 @@ public class ChatController {
     private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
     private final MemoryExtractionService memoryExtractionService;
 
+    /** POST /ai/chat 聊天入口（text/html 流式响应）：保存会话后按有无附件分流纯文本/多模态链路。 */
     @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
             @RequestParam("prompt") String prompt,
@@ -68,6 +69,7 @@ public class ChatController {
         }
     }
 
+    /** POST /ai/chat/stream 聊天入口（SSE 流式响应）：内部直接复用 /ai/chat。 */
     @RequestMapping(value = "/chat/stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> chatStream(
             @RequestParam("prompt") String prompt,
@@ -77,6 +79,7 @@ public class ChatController {
         return chat(prompt, chatId, modelProfile, files);
     }
 
+    /** 多模态聊天：把附件转成 Media 附到用户消息上，再走统一跟踪流。 */
     private Flux<String> multiModalChat(String prompt,
                                         String conversationId,
                                         List<MultipartFile> files,
@@ -100,6 +103,7 @@ public class ChatController {
                 spec -> spec.user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new))));
     }
 
+    /** 纯文本聊天：直接把 prompt 作为用户消息走统一跟踪流。 */
     private Flux<String> textChat(String prompt, String conversationId, String modelProfile, String chatId) {
         return trackedChatStream(
                 prompt, modelProfile, chatId, conversationId, "chat",
