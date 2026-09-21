@@ -2,7 +2,8 @@
 
 > 记录记忆子系统（`memory/`）两轮 code review 发现的问题、根因、修法与验证，
 > 对应提交：第一轮 `27bcea6` + `ea541b1`，第二轮 `b362dd7`。
-> 配套设计文档见 [architecture-memory-system.md](architecture-memory-system.md)。
+> 配套设计文档见 [architecture-memory-system.md](architecture-memory-system.md)；
+> 五轮整改总览见 [review-fixes-overview.md](review-fixes-overview.md)。
 
 ## 背景
 
