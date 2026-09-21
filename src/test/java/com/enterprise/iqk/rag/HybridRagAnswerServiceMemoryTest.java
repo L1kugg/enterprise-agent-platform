@@ -57,7 +57,7 @@ class HybridRagAnswerServiceMemoryTest {
                 .content("缓存穿透的解决方案").retrievalScore(0.9)
                 .metadata(Map.of()).build();
         when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
-                .thenReturn(new HybridRetrievalService.HybridRetrievalResult(List.of(doc), 1, 1));
+                .thenReturn(new HybridRetrievalService.HybridRetrievalResult(List.of(doc), 1, 1, List.of()));
         when(evidenceJudgeService.judge(any(), anyString())).thenReturn(List.of());
         when(citationService.buildCitations(any())).thenReturn(List.of());
         when(citationService.formatCitationFooter(any())).thenReturn("");

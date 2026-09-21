@@ -62,7 +62,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `HybridRetrievalService.java` | 核心：`retrieve()`（:82）四路并行（CompletableFuture + 专用 8 线程池）→ `applyWeight()` 加权（:121，finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（:141，内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路异常返回空、3 秒超时静默降级（:138 `completeOnTimeout`） |
+| `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，可配 `app.retrieval.pool-size` 默认 16）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路异常/超时降级为空且**真取消**底层任务（调度超时 → `cancel(true)`：排队任务跳过、运行中任务中断，区别于 completeOnTimeout 的"只完成不取消"）；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued） |
 | `HybridWeights.java` | 权重配置：DEFAULT 0.40/0.25/0.20/0.15（向量/关键词/图谱/网络），预置 SEMANTIC/KEYWORD/BALANCED 档位，`normalize()` 归一化 |
 | `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；web 默认关闭（`app.web-search.enabled`） |
 | `web/WebSearchBackend.java` + `SearXNGBackend` / `BingSearchBackend` / `WebSearchProperties` | 外部搜索适配层（SearXNG 自托管 / Bing API） |

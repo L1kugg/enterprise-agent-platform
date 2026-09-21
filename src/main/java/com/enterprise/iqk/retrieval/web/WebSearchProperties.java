@@ -40,14 +40,18 @@ public class WebSearchProperties {
     private String bingEndpoint = "https://api.bing.microsoft.com/v7.0";
 
     /**
-     * 连接超时时间，单位毫秒。
+     * 连接超时时间，单位毫秒。需小于混合检索的单路超时预算
+     * （app.retrieval.source-timeout-ms，默认 3000），否则线程会在调用方
+     * 已放弃后继续被占用。
      */
-    private int connectTimeoutMs = 3000;
+    private int connectTimeoutMs = 1000;
 
     /**
-     * 读取超时时间，单位毫秒。
+     * 读取超时时间，单位毫秒。需小于混合检索的单路超时预算 ——
+     * 原默认 8000 超过 3 秒预算：调用方 3 秒已降级返回，线程却还要
+     * 空转 5 秒，多路并发时会把检索线程池拖满。
      */
-    private int readTimeoutMs = 8000;
+    private int readTimeoutMs = 2500;
 
     /**
      * 向后端请求的搜索结果最大数量。
