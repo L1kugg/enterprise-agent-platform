@@ -22,4 +22,6 @@ public class ReactChatResponseVO {
     private String experimentVariant;
     private Integer experimentBucket;
     private List<ReactTraceStepVO> trace;
+    /** 本次注入规划/成稿上下文的记忆标签（type + 内容摘要），观测记忆闭环是否生效 */
+    private List<String> memoryUsed;
 }

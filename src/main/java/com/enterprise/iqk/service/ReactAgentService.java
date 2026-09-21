@@ -6,11 +6,14 @@ import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.security.TenantContext;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.slf4j.MDC;
@@ -35,6 +38,7 @@ import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
  * 规划调用/解析失败走 decisionParser.fallback() 规则兜底；
  * callModel/callModelStream 统一预算断言与租户用量记账。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReactAgentService {
@@ -48,6 +52,10 @@ public class ReactAgentService {
     private final MeterRegistry meterRegistry;
     private final ReactDecisionParser decisionParser;
     private final ReactResponseFormatter responseFormatter;
+    /** 记忆子系统：召回 short/long/fact 注入规划与成稿（读侧闭环）。 */
+    private final MemoryService memoryService;
+    /** 对话轮次 short 记忆写入器：成稿后写回，让下一轮召回有内容（写侧闭环）。 */
+    private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
 
     /** 同步对话：跑完 ReAct 循环后一次性返回完整响应（含轨迹、引用与路由信息）。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
@@ -63,15 +71,19 @@ public class ReactAgentService {
         List<ReactTraceStepVO> trace = new ArrayList<>();
         String rollingContext = "";
         boolean usedFallback = false;
+        // 记忆召回（尽力而为，循环外一次）：planner 不挂 ChatMemory，
+        // short/long/fact 全量注入 —— 会话前情、用户画像与租户可信事实
+        // 都会影响动作选择与最终措辞。
+        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, request.getChatId());
 
         for (int step = 1; step <= MAX_STEPS; step++) {
-            ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+            ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
             usedFallback = usedFallback || decision.fallback();
 
             if ("finish".equals(decision.action())) {
                 AnswerResult answer = StringUtils.hasText(decision.answer())
                         ? new AnswerResult(decision.answer(), false)
-                        : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
+                        : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId, memorySnapshot);
                 usedFallback = usedFallback || answer.fallback();
                 Map<String, Object> observation = new LinkedHashMap<>();
                 observation.put("status", "completed");
@@ -89,7 +101,7 @@ public class ReactAgentService {
                         .actionInput(decision.actionInput())
                         .observation(observation)
                         .build());
-                return responseFormatter.success(request.getChatId(), answer.answer(), trace, routeDecision, usedFallback);
+                return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback, memorySnapshot, tenantId);
             }
 
             Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
@@ -104,8 +116,8 @@ public class ReactAgentService {
             rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
         }
 
-        AnswerResult answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
-        return responseFormatter.success(request.getChatId(), answer.answer(), trace, routeDecision, usedFallback || answer.fallback());
+        AnswerResult answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId, memorySnapshot);
+        return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback || answer.fallback(), memorySnapshot, tenantId);
     }
 
     /** SSE 流式对话：先推 trace 事件，再流式推 token，最后推 done；任何异常转 error 事件。 */
@@ -128,9 +140,11 @@ public class ReactAgentService {
                     String rollingContext = "";
                     String directAnswer = "";
                     boolean usedFallback = false;
+                    // 记忆召回（尽力而为，循环外一次）：与同步链路同构
+                    MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, request.getChatId());
 
                     for (int step = 1; step <= MAX_STEPS; step++) {
-                        ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+                        ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
                         usedFallback = usedFallback || decision.fallback();
                         if ("finish".equals(decision.action())) {
                             Map<String, Object> observation = new LinkedHashMap<>();
@@ -174,7 +188,7 @@ public class ReactAgentService {
                             ? Flux.just(directAnswer)
                             : callModelStream(
                             "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
-                            buildFinalPrompt(request, trace, rollingContext),
+                            buildFinalPrompt(request, trace, rollingContext, memorySnapshot),
                             routeDecision,
                             tenantId,
                             "react_final"
@@ -196,6 +210,10 @@ public class ReactAgentService {
                                 }
                                 ReactChatResponseVO response = responseFormatter.success(
                                         request.getChatId(), answerBuilder.toString(), trace, routeDecision, responseUsedFallback);
+                                // 流式收尾同样回填 memoryUsed 并写回 short 记忆（读写两侧闭环）
+                                response.setMemoryUsed(memorySnapshot == null ? List.of() : memorySnapshot.usedLabels());
+                                chatTurnMemoryRecorder.recordTurn(tenantId, request.getChatId(),
+                                        request.getPrompt(), answerBuilder.toString());
                                 outcomeRef.set("success");
                                 return Flux.just(responseFormatter.formatSse("done", responseFormatter.toJson(response)));
                             }));
@@ -243,7 +261,8 @@ public class ReactAgentService {
                                   String rollingContext,
                                   List<ReactTraceStepVO> trace,
                                   ModelRouter.ModelRouteDecision routeDecision,
-                                  String tenantId) {
+                                  String tenantId,
+                                  MemoryService.MemoryContextSnapshot memorySnapshot) {
         String planningPrompt = """
                 You are a ReAct planner for an education assistant.
                 You must choose exactly one action for the next step.
@@ -266,12 +285,16 @@ public class ReactAgentService {
                 User question:
                 %s
                 %n
+                Known memories (user profile / prior turns / verified facts, use as background):
+                %s
+                %n
                 Rolling context:
                 %s
                 %n
                 Existing trace:
                 %s%n""".formatted(
                 request.getPrompt(),
+                memoryBlock(memorySnapshot),
                 emptyIfBlank(rollingContext),
                 responseFormatter.toJson(trace)
         );
@@ -312,8 +335,9 @@ public class ReactAgentService {
                                          List<ReactTraceStepVO> trace,
                                          String rollingContext,
                                          ModelRouter.ModelRouteDecision routeDecision,
-                                         String tenantId) {
-        String finalPrompt = buildFinalPrompt(request, trace, rollingContext);
+                                         String tenantId,
+                                         MemoryService.MemoryContextSnapshot memorySnapshot) {
+        String finalPrompt = buildFinalPrompt(request, trace, rollingContext, memorySnapshot);
         try {
             String answer = callModel(
                     "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
@@ -331,12 +355,16 @@ public class ReactAgentService {
         return new AnswerResult("当前未能生成最终答案，请稍后重试。", true);
     }
 
-    /** 构造汇总提示词：用户问题 + ReAct 轨迹 JSON + 观察上下文三段。 */
+    /** 构造汇总提示词：用户问题 + 已知记忆 + ReAct 轨迹 JSON + 观察上下文四段。 */
     private String buildFinalPrompt(ReactChatRequestVO request,
                                     List<ReactTraceStepVO> trace,
-                                    String rollingContext) {
+                                    String rollingContext,
+                                    MemoryService.MemoryContextSnapshot memorySnapshot) {
         return """
                 用户问题:
+                %s
+                %n
+                已知记忆:
                 %s
                 %n
                 ReAct轨迹:
@@ -346,7 +374,38 @@ public class ReactAgentService {
                 %s
                 %n
                 请输出最终中文答案，要求简洁、可执行、结构清晰。
-                %n""".formatted(request.getPrompt(), responseFormatter.toJson(trace), emptyIfBlank(rollingContext));
+                %n""".formatted(request.getPrompt(), memoryBlock(memorySnapshot),
+                responseFormatter.toJson(trace), emptyIfBlank(rollingContext));
+    }
+
+    /** 记忆召回：任何失败返回 null，按"无记忆可用"降级，绝不中断 ReAct 主链路。 */
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String chatId) {
+        try {
+            return memoryService.buildContext(tenantId, chatId);
+        } catch (Exception ex) {
+            log.warn("记忆召回失败（不影响 ReAct 链路）: chatId={}, reason={}", chatId, ex.toString());
+            return null;
+        }
+    }
+
+    /** 记忆快照转 prompt 段；空快照用 "(none)" 占位，保持提示词结构稳定。 */
+    private String memoryBlock(MemoryService.MemoryContextSnapshot snapshot) {
+        return snapshot != null && StringUtils.hasText(snapshot.contextText())
+                ? snapshot.contextText().trim() : "(none)";
+    }
+
+    /** 成稿收尾：回填 memoryUsed 观测标签，并把本轮问答尽力而为写回 short 记忆（读写两侧闭环）。 */
+    private ReactChatResponseVO finalizeResponse(ReactChatRequestVO request,
+                                                 String answer,
+                                                 List<ReactTraceStepVO> trace,
+                                                 ModelRouter.ModelRouteDecision routeDecision,
+                                                 boolean fallback,
+                                                 MemoryService.MemoryContextSnapshot memorySnapshot,
+                                                 String tenantId) {
+        ReactChatResponseVO response = responseFormatter.success(request.getChatId(), answer, trace, routeDecision, fallback);
+        response.setMemoryUsed(memorySnapshot == null ? List.of() : memorySnapshot.usedLabels());
+        chatTurnMemoryRecorder.recordTurn(tenantId, request.getChatId(), request.getPrompt(), answer);
+        return response;
     }
 
     /** 解析本次请求的模型路由决策（场景 react，主体键为 chatId）。 */

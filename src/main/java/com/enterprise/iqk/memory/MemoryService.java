@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -113,12 +114,21 @@ public class MemoryService {
     }
 
     /**
-     * 构建进入生成上下文的记忆快照：近期会话要点 + 用户画像 + 高置信事实。
+     * 构建进入生成上下文的记忆快照（全量三层）：近期会话要点 + 用户画像 + 高置信事实。
      * 召回即留痕 —— 每条被召回的记忆都会写入 USE 事件，
      * 使记忆从写入、召回到失效的全程都可以在 memory_event 里追溯。
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId) {
-        List<MemoryItemRecord> shortMem = queryShortMemory(tenantId, userId, 5);
+        return buildContext(tenantId, userId, true);
+    }
+
+    /**
+     * 可裁剪变体：includeShort=false 时跳过 short 层的查询与拼装。
+     * 供已挂 ChatMemory advisor 的链路使用 —— 会话内近况已由 advisor
+     * 保真注入，short 摘要再进一次会让同一信息双份进入 prompt。
+     */
+    public MemoryContextSnapshot buildContext(String tenantId, String userId, boolean includeShort) {
+        List<MemoryItemRecord> shortMem = includeShort ? queryShortMemory(tenantId, userId, 5) : List.of();
         List<MemoryItemRecord> longMem = queryLongMemory(tenantId, userId, 10);
         List<MemoryItemRecord> facts = queryFactMemory(tenantId, 0.7, 5);
 
@@ -138,6 +148,13 @@ public class MemoryService {
         if (!shortMem.isEmpty()) {
             context.append("近期对话要点:\n");
             for (MemoryItemRecord m : shortMem) {
+                context.append("- ").append(m.getContent()).append("\n");
+            }
+            context.append("\n");
+        }
+        if (!facts.isEmpty()) {
+            context.append("可信事实:\n");
+            for (MemoryItemRecord m : facts) {
                 context.append("- ").append(m.getContent()).append("\n");
             }
         }
@@ -192,5 +209,21 @@ public class MemoryService {
     public record MemoryContextSnapshot(String contextText,
                                          List<MemoryItemRecord> shortMemories,
                                          List<MemoryItemRecord> longMemories,
-                                         List<MemoryItemRecord> facts) {}
+                                         List<MemoryItemRecord> facts) {
+
+        /** 观测标签：把注入上下文的记忆整理为 "type: 内容摘要"，供响应的 memoryUsed 上报。 */
+        public List<String> usedLabels() {
+            List<String> labels = new ArrayList<>();
+            shortMemories.forEach(m -> labels.add(label("short", m)));
+            longMemories.forEach(m -> labels.add(label("long", m)));
+            facts.forEach(m -> labels.add(label("fact", m)));
+            return labels;
+        }
+
+        /** 单条标签：内容超 80 字符截断加省略号。 */
+        private static String label(String type, MemoryItemRecord memory) {
+            String content = memory.getContent() == null ? "" : memory.getContent().replaceAll("\\s+", " ").trim();
+            return type + ": " + (content.length() <= 80 ? content : content.substring(0, 80) + "…");
+        }
+    }
 }

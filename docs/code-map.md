@@ -145,7 +145,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `ReactAgentService.java` | ReAct 主循环：`reason()` 规划（:234-264，动作白名单硬编码）→ `executeAction()` 工具执行（:280-294）→ `summarizeAnswer()` 汇总（:296-317）；`callModel/callModelStream` 统一 LLM 调用（:348-388） |
+| `ReactAgentService.java` | ReAct 主循环：`reason()` 规划（:234-264，动作白名单硬编码，含 Known memories 记忆段）→ `executeAction()` 工具执行（:280-294）→ `summarizeAnswer()` 汇总（:296-317）；`recallMemory` 循环外一次召回，`finalizeResponse` 回填 memoryUsed + 写回 short 记忆；`callModel/callModelStream` 统一 LLM 调用 |
 | `ReactDecisionParser.java` | 解析模型 JSON 决策（含兜底） |
 | `ReactResponseFormatter.java` | 观测上下文滚动拼接（`appendContext`） |
 | `controller/ReactController.java` | SSE 流式对话入口 |
@@ -161,7 +161,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 主题 | 代码位置 |
 |---|---|
 | 生成 prompt 三段式拼装 | `rag/HybridRagAnswerService.java:109`：`"用户问题:%n%s%n%n上下文:%n%s%s%s%n"`（问题 → 检索证据 → 记忆段）；`buildContext()`（:176）证据 `[n] source=... chunk=...` 格式化 |
-| 记忆注入 | `memory/MemoryService.buildContext()`（:99-124）→ memorySection `"\n\n已知记忆:\n"+…`（HybridRagAnswerService:95-97）；注入预算：short 5 / long 10 / fact 5 条 |
+| 记忆注入 | `memory/MemoryService.buildContext()`（:99-124，`includeShort` 变体供挂 ChatMemory 的链路裁剪）→ memorySection `"\n\n已知记忆:\n"+…`；注入预算：short 5 / long 10 / fact 5 条。三条链路已接：评测（HybridRagAnswerService:99-105 全量）、chat（ChatController.recallMemorySection，long/fact）、react（ReactAgentService.recallMemory 全量 + 成稿写回 short + memoryUsed 上报） |
 | System prompt | `constants/SystemConstants.java`：CUSTOMER_SERVICE_SYSTEM（客服小星）、RAG_ANSWER_SYSTEM、HYBRID_RAG_ANSWER_SYSTEM |
 | 会话内记忆 | `config/MysqlChatMemory.java` + `repository/`（ChatHistoryRepository 的 InMemory/Mysql 实现）+ `util/ConversationIdHelper`（会话 ID 派生：prefix+chatId） |
 | 上下文预算（工具侧） | `HarnessPayloadSanitizer`（观测裁剪）、`HttpMcpToolAdapter` 2MiB 响应上限、`WorkspaceRuntime` 搜索截断/文件大小上限 |
@@ -214,6 +214,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `agent/workflow/` | AgentWorkflowEngineTenantIsolationTest | 引擎租户隔离 + DONE 才写任务记忆 |
 | `memory/`（5 个） | MemoryServiceTenantIsolationTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离 |
 | `rag/` | HybridRagAnswerServiceMemoryTest | 记忆注入断言 + 召回失败降级 |
+| `controller/`、`service/` | ChatControllerMemoryTest、ReactAgentServiceTest | chat/react 链路记忆注入断言、原始 prompt 写回（防自我循环）+ 召回失败降级 |
 | `retrieval/`（3 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest | 加权融合、去重计数、分数下限 |
 | `service/`（3 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest | ReAct 决策解析与格式化 |
 | `controller/`（5 个） | AgentHarnessControllerWebMvcTest、AuthControllerWebMvcTest、IngestionControllerWebMvcTest、JavaApiContractTest、MemoryControllerTest | Web 层契约 |

@@ -59,7 +59,8 @@
 | `queryLongMemory()` | 查询用户长期记忆 |
 | `queryTaskMemory()` | 按 taskId 查询任务记忆 |
 | `queryFactMemory()` | 按置信度阈值查询事实 |
-| `buildContext()` | 构建记忆上下文（拼接到 system prompt） |
+| `buildContext()` | 构建记忆上下文（全量三层，拼接到 user prompt 末尾"已知记忆"段） |
+| `buildContext(…, includeShort)` | 可裁剪变体：已挂 ChatMemory 的链路跳过 short 层，避免同信息双份 |
 | `cleanExpiredMemories()` | 定时清理过期记忆（每天 3am） |
 
 ## 目标记忆写入时机
@@ -75,9 +76,17 @@
 
 1. 用户发起请求
 2. `buildContext(tenantId, userId)` 检索相关记忆
-3. 召回内容拼接到 LLM system prompt 或 user prompt
-4. 在 SSE 事件中通过 MEMORY(1007) 事件标记记忆命中
+3. 召回内容拼接到 LLM user prompt 末尾的"已知记忆"段
+4. 记忆命中的观测标记：`memoryUsed`（HybridRagResult / ReactChatResponseVO）或链路日志
 5. 本轮结束后写入新的 short memory
+
+## 各链路注入现状（读侧闭环）
+
+| 链路 | 注入内容 | 说明 |
+|---|---|---|
+| 混合 RAG（评测） | short + long + fact | HybridRagAnswerService，先例实现 |
+| chat（/ai/chat） | long + fact | 已挂 ChatMemory advisor，short 摘要跳过防双份；token 记账按增强后 prompt |
+| react（/ai/react/chat） | short + long + fact | planner 无 ChatMemory，全量注入规划与成稿 prompt；成稿后写回 short（读写双侧闭环），响应带 memoryUsed |
 
 ## 自动过期
 

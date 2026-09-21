@@ -88,16 +88,18 @@ class HybridRagAnswerServiceMemoryTest {
         MemoryItemRecord fact = MemoryItemRecord.builder()
                 .memoryId("mem-f1").type("fact").content("事实: 布隆过滤器可防缓存穿透").build();
         setUp("答案 [1]", new MemoryService.MemoryContextSnapshot(
-                "用户长期记忆:\n- 画像: 用户是 Java 后端开发者\n",
+                "用户长期记忆:\n- 画像: 用户是 Java 后端开发者\n\n可信事实:\n- 事实: 布隆过滤器可防缓存穿透\n",
                 List.of(), List.of(profile), List.of(fact)));
 
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("缓存穿透怎么防", "tenant-1", "chat-1", "conv-1", null);
 
-        // 记忆进入生成上下文
+        // 记忆进入生成上下文（画像与事实都要出现在 user prompt 里）
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
         verify(requestSpec).user(userPrompt.capture());
-        assertThat(userPrompt.getValue()).contains("已知记忆").contains("Java 后端开发者");
+        assertThat(userPrompt.getValue()).contains("已知记忆")
+                .contains("Java 后端开发者")
+                .contains("布隆过滤器可防缓存穿透");
 
         // memoryUsed 标记实际使用的记忆
         assertThat(result.getMemoryUsed())
