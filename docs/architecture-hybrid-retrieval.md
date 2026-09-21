@@ -44,13 +44,19 @@ flowchart TD
 ### VectorRetriever（语义检索）
 - 后端：pgvector + HNSW 索引
 - 相似度阈值：0.45
-- 过滤条件：`tenant_id + chat_id`
+- 过滤条件：`tenant_id`（租户共享知识库；chat_id 不做硬过滤，
+  同会话命中的文档获得 +0.05 有界加分，见 ChatScope 软作用域）
 - 向量维度：1024（text-embedding-v4）
 
 ### KeywordRetriever（关键词检索）
-- 标题关键词匹配（权重 0.6）+ 内容关键词重叠（权重 0.4）
-- 对向量检索的补充：捕获精确术语匹配，如"Redis 缓存穿透"
-- 使用 Jaccard 类重叠系数评分
+- 候选池：租户级、相似度阈值放开为 0（ACCEPT_ALL）、池扩到 max(topK×4, 40)
+  ——嵌入距离远但词面精确命中的文档也能进入候选
+- 打分：标题召回分（权重 0.6）+ 内容召回分（权重 0.4），
+  分母 = 查询 token 数（查询词有多大比例命中，长文档不被稀释）
+- 切词 CJK 感知：中文连续段切字符 2-gram（LexicalMatcher），
+  拉丁/数字 token 整体保留——中文查询不再"整句单 token 必空"
+- 诚实边界：候选仍来自向量库（无独立倒排索引），本路是
+  "向量候选池上的词法重排"；独立 BM25/全文索引是演进方向
 
 ### GraphRetriever（图谱检索）
 - 实体名/别名搜索
@@ -73,11 +79,15 @@ EvidenceJudgeService 对每条证据做三维评分：
 
 | 维度 | 权重 | 评分依据 |
 |---|---|---|
-| 相关性 (Relevance) | 0.50 | 检索分数 + query-doc 关键词命中 |
+| 相关性 (Relevance) | 0.50 | 检索分数 + query-doc 关键词命中（切词 CJK 2-gram） |
 | 权威性 (Authority) | 0.30 | 来源类型（graph > vector > keyword > web） |
-| 时效性 (Timeliness) | 0.20 | 元数据中的时间戳（<30天: 1.0, <365天: 0.7） |
+| 时效性 (Timeliness) | 0.20 | 元数据 `created_at`（入库时写入 epoch 毫秒；<30天: 1.0, 一年以上: 0.5，缺失: 中性 0.70） |
 
 综合评分：`score = relevance × 0.50 + authority × 0.30 + timeliness × 0.20`
+
+**判分结果会被消费**（评审不只喂展示层）：HybridRagAnswerService 按综合分
+降序组织生成上下文、剔除低于垃圾线（0.30）的证据、截断到 rerankTopK 条进入
+prompt；判分为空或全部低于垃圾线时降级回检索序，评审失效不阻塞管线。
 
 ## 引用溯源
 

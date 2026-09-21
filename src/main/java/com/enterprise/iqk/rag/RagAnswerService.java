@@ -4,6 +4,8 @@ import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
+import com.enterprise.iqk.retrieval.ChatScope;
+import com.enterprise.iqk.retrieval.LexicalMatcher;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
@@ -21,18 +23,17 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
- * 简单版 RAG 问答链路：向量检索（租户 + chatId 过滤）→ 本地词面重排 → 引用化生成。
+ * 简单版 RAG 问答链路：向量检索（租户过滤，会话软作用域）→ 本地词面重排 → 引用化生成。
  * 既是用户可见 /ai/pdf/chat 的后端，也被 BuiltinToolRuntime 的 rag_search 动作复用；
  * 检索为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
+ * chat_id 不做硬过滤（否则知识库按会话割裂），同会话命中文档由 ChatScope 有界加分。
  */
 @Service
 @RequiredArgsConstructor
@@ -52,8 +53,7 @@ public class RagAnswerService {
 
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
-            String filterExpression = "tenant_id == \"" + escapeFilterValue(normalizedTenantId)
-                    + "\" && chat_id == \"" + escapeFilterValue(chatId) + "\"";
+            String filterExpression = "tenant_id == \"" + escapeFilterValue(normalizedTenantId) + "\"";
             SearchRequest request = SearchRequest.builder()
                     .query(prompt)
                     .topK(ragProperties.getRetrieveTopK())
@@ -71,7 +71,7 @@ public class RagAnswerService {
                         .build();
             }
 
-            List<Document> reranked = rerankWithMetrics(prompt, retrieved);
+            List<Document> reranked = rerankWithMetrics(prompt, retrieved, chatId);
             List<Document> selected = reranked.stream()
                     .limit(Math.max(1, ragProperties.getRerankTopK()))
                     .toList();
@@ -147,11 +147,11 @@ public class RagAnswerService {
     }
 
     /** 带指标包装的本地重排阶段，只计耗时不计请求数。 */
-    private List<Document> rerankWithMetrics(String prompt, List<Document> docs) {
+    private List<Document> rerankWithMetrics(String prompt, List<Document> docs, String chatId) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            List<Document> reranked = rerank(prompt, docs);
+            List<Document> reranked = rerank(prompt, docs, chatId);
             outcome = reranked.isEmpty() ? "empty" : "success";
             return reranked;
         } finally {
@@ -163,32 +163,22 @@ public class RagAnswerService {
         }
     }
 
-    /** 按查询词与文档的词面重叠度降序排序（纯本地重排，不依赖外部服务）。 */
-    private List<Document> rerank(String prompt, List<Document> docs) {
-        Set<String> promptTokens = tokenize(prompt);
+    /** 按查询词召回分降序排序（纯本地重排，不依赖外部服务；同会话命中有界加分）。 */
+    List<Document> rerank(String prompt, List<Document> docs, String chatId) {
+        Set<String> promptTokens = LexicalMatcher.tokenize(prompt);
         return docs.stream()
-                .sorted((a, b) -> Double.compare(scoreDoc(promptTokens, b), scoreDoc(promptTokens, a)))
+                .sorted((a, b) -> Double.compare(scoreDoc(promptTokens, b, chatId),
+                        scoreDoc(promptTokens, a, chatId)))
                 .collect(Collectors.toList());
     }
 
-    /** 重排得分 = 查询词被文档命中的比例；文档无词时得 0 分。 */
-    private double scoreDoc(Set<String> promptTokens, Document doc) {
-        Set<String> docTokens = tokenize(doc.getFormattedContent());
-        if (docTokens.isEmpty()) {
-            return 0.0;
-        }
-        long overlap = promptTokens.stream().filter(docTokens::contains).count();
-        return (double) overlap / docTokens.size();
-    }
-
-    /** 小写化后按非字母数字字符切词，空白输入返回空集合。 */
-    private Set<String> tokenize(String text) {
-        if (!StringUtils.hasText(text)) {
-            return Set.of();
-        }
-        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{Nd}]+"))
-                .filter(StringUtils::hasText)
-                .collect(Collectors.toSet());
+    /** 重排得分 = 查询词被文档命中的比例（分母 = 查询 token 数）+ 同会话有界加分；查询无词时得 0 分。 */
+    private double scoreDoc(Set<String> promptTokens, Document doc, String chatId) {
+        // 用纯正文匹配——getFormattedContent 会拼上元数据前缀（file_name/chat_id 等），
+        // 元数据词混入词面匹配会造成"查 pdf 命中所有文档"这类噪声
+        double recall = LexicalMatcher.recallScore(promptTokens,
+                LexicalMatcher.tokenize(doc.getText()));
+        return ChatScope.boost(recall, doc, chatId);
     }
 
     /** 把选中文档拼成 "[n] source=..., chunk=..." 编号上下文块，供 prompt 引用。 */

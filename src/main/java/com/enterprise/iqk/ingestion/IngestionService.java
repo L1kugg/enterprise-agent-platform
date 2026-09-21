@@ -284,8 +284,13 @@ public class IngestionService {
         persistSimpleVectorStoreIfNeeded();
     }
 
-    /** 按配置的 chunk 参数切块，并为每个 chunk 覆写 tenant_id/chat_id/job_id 等元数据。 */
-    private List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
+    /**
+     * 按配置的 chunk 参数切块，并为每个 chunk 覆写 tenant_id/chat_id/job_id 等元数据。
+     * created_at 写入库时刻的 epoch 毫秒——激活 EvidenceJudge 的时效度维度
+     * （此前从不写时间戳，timeliness 恒中性 0.70，新文档的"新鲜度"信息全部丢失）。
+     * 包私有以便直接对元数据契约做单元测试（不依赖真实 PDF 解析）。
+     */
+    List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
         TokenTextSplitter splitter = TokenTextSplitter.builder()
                 .withChunkSize(ragProperties.getSplit().getChunkSize())
                 .withMinChunkSizeChars(ragProperties.getSplit().getMinChunkSize())
@@ -294,6 +299,7 @@ public class IngestionService {
                 .withKeepSeparator(true)
                 .build();
         List<Document> chunks = splitter.apply(pages);
+        long ingestedAt = System.currentTimeMillis();
         for (int i = 0; i < chunks.size(); i++) {
             Document chunk = chunks.get(i);
             Map<String, Object> metadata = new HashMap<>(chunk.getMetadata());
@@ -303,6 +309,7 @@ public class IngestionService {
             metadata.put("file_name", job.getSourceName());
             metadata.put("source_type", job.getSourceType());
             metadata.put("chunk_index", i);
+            metadata.put("created_at", ingestedAt);
             chunk.getMetadata().clear();
             chunk.getMetadata().putAll(metadata);
         }

@@ -68,15 +68,15 @@ public class EvidenceJudgeService {
 
     /** 相关度：以 finalScore 为基础，按查询词命中内容的个数加成（每个 +0.05、上限 +0.3，封顶 1.0） */
     private double scoreRelevance(ScoredDocument doc, String query) {
-        // 以检索得分为基础，再按关键词重叠度加成
+        // 以检索得分为基础，再按关键词重叠度加成；
+        // 切词走 LexicalMatcher（CJK 2-gram）——此前中文查询整句成单 token，命中检查必然落空
         double base = doc.getFinalScore();
         if (!StringUtils.hasText(query) || !StringUtils.hasText(doc.getContent())) {
             return base;
         }
         String lowerContent = doc.getContent().toLowerCase(Locale.ROOT);
-        String lowerQuery = query.toLowerCase(Locale.ROOT);
         long hits = 0;
-        for (String token : lowerQuery.split("[^\\p{L}\\p{Nd}]+")) {
+        for (String token : LexicalMatcher.tokenize(query)) {
             if (token.length() >= 2 && lowerContent.contains(token)) {
                 hits++;
             }

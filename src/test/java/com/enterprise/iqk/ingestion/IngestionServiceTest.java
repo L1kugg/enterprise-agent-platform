@@ -10,15 +10,18 @@ import com.enterprise.iqk.mapper.IngestionJobMapper;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.document.Document;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -109,5 +112,36 @@ class IngestionServiceTest {
         IngestionProcessResult result = service.processQueuedJob("job-1", "trace-a");
         assertFalse(result.isPicked());
         assertEquals(IngestionJobStatus.RUNNING, result.getStatus());
+    }
+
+    @Test
+    void chunkMetadataCarriesScopeKeysAndIngestTimestamp() {
+        IngestionService service = buildService(
+                mock(IngestionJobMapper.class),
+                mock(org.springframework.ai.vectorstore.VectorStore.class),
+                new IngestionProperties(), new VectorStoreProperties(),
+                mock(IngestionQueue.class), mock(FileSafetyScanner.class));
+        IngestionJob job = IngestionJob.builder()
+                .jobId("job-1").tenantId("public").chatId("chat-1")
+                .sourceName("a.pdf").sourceType("pdf").build();
+        // 足够长的文本保证切分器至少产出一个 chunk
+        String pageText = "企业级检索增强生成系统的设计与实践。".repeat(30);
+
+        List<Document> chunks = service.splitDocuments(
+                List.of(Document.builder().text(pageText).build()), job);
+
+        assertFalse(chunks.isEmpty());
+        Document chunk = chunks.get(0);
+        assertEquals("public", chunk.getMetadata().get("tenant_id"));
+        assertEquals("chat-1", chunk.getMetadata().get("chat_id"));
+        assertEquals("job-1", chunk.getMetadata().get("job_id"));
+        assertEquals("a.pdf", chunk.getMetadata().get("file_name"));
+        assertEquals("pdf", chunk.getMetadata().get("source_type"));
+        assertEquals(0, chunk.getMetadata().get("chunk_index"));
+        // created_at 必须写入（epoch 毫秒）：激活证据判分的时效度维度，
+        // 此前从不写时间戳，timeliness 恒中性 0.70
+        Object createdAt = chunk.getMetadata().get("created_at");
+        assertTrue(createdAt instanceof Long);
+        assertTrue((Long) createdAt > 0);
     }
 }

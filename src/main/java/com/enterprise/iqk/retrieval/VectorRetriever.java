@@ -13,8 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 向量语义检索器：基于 Spring AI VectorStore 相似度搜索，按租户 + 会话过滤表达式圈定范围，
+ * 向量语义检索器：基于 Spring AI VectorStore 相似度搜索，按租户过滤表达式圈定范围，
  * topK 与相似度阈值取自 RagProperties。
+ * 作用域设计：chat_id 不做硬过滤（否则知识库按会话割裂，临时 chatId 的调用方
+ * 如 DeepResearch 必然空结果），改为同会话命中的文档获得 {@link ChatScope#BOOST} 有界加分。
  * 设计要点：得分优先读向量库元数据（score/distance），不填充这些键的向量库
  * 回退到按排名衰减的得分，保证下游加权融合始终有分数可用。
  */
@@ -34,8 +36,7 @@ public class VectorRetriever {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            String filter = "tenant_id == \"" + escapeFilter(tenantId)
-                    + "\" && chat_id == \"" + escapeFilter(chatId) + "\"";
+            String filter = filterExpression(tenantId);
             SearchRequest request = SearchRequest.builder()
                     .query(query)
                     .topK(ragProperties.getRetrieveTopK())
@@ -53,7 +54,7 @@ public class VectorRetriever {
                         .title(metaStr(d, "file_name", "unknown"))
                         .chunkId("chunk-" + metaStr(d, "chunk_index", String.valueOf(i)))
                         .content(d.getFormattedContent())
-                        .retrievalScore(extractScore(d, i))
+                        .retrievalScore(ChatScope.boost(extractScore(d, i), d, chatId))
                         .metadata(d.getMetadata())
                         .build());
             }
@@ -64,6 +65,14 @@ public class VectorRetriever {
                     .publishPercentileHistogram()
                     .register(meterRegistry));
         }
+    }
+
+    /**
+     * 租户级过滤表达式（包私有以便测试断言作用域语义）：不含 chat_id——
+     * 知识库按租户共享，会话相关性由 {@link ChatScope} 的有界加分表达。
+     */
+    String filterExpression(String tenantId) {
+        return "tenant_id == \"" + escapeFilter(tenantId) + "\"";
     }
 
     /** 读取文档元数据并转字符串，缺失时返回 fallback */

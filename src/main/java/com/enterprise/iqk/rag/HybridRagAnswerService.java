@@ -27,7 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
@@ -35,7 +37,8 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 /**
  * 完整版混合 RAG 管线，评测链路专用（唯一调用方 EvaluationService）。
  * 步骤：1 混合检索 → 2 证据判分 → 2.5 高置信事实沉淀（置信度门槛由 recorder 控制）
- * → 3 引用构建 → 4.5 记忆召回注入（失败降级为无记忆，不中断管线）→ 5 生成 → 6 引用脚注。
+ * → 3 引用构建 → 4 判分结果消费（按综合分降序组织上下文、剔除低分、截断 rerankTopK）
+ * → 4.5 记忆召回注入（失败降级为无记忆，不中断管线）→ 5 生成 → 6 引用脚注。
  * user prompt 为三段式：用户问题 / 检索上下文 / "已知记忆" 段；memoryUsed 上报实际注入的记忆标签。
  * 已知瑕疵：token 估算未把 memorySection 计入，记账略低估。
  */
@@ -93,8 +96,10 @@ public class HybridRagAnswerService {
             // 第 3 步：构建引用
             List<CitationItem> citations = citationService.buildCitations(evidence);
 
-            // 第 4 步：用头部证据构建上下文
-            String context = buildContext(retrievedDocs);
+            // 第 4 步：消费判分结果——评审不再只喂展示层：
+            // 按综合分降序组织上下文、剔除低于垃圾线的证据、截断到 rerankTopK 条进入 prompt
+            List<ScoredDocument> contextDocs = selectContextDocs(retrievedDocs, evidence);
+            String context = buildContext(contextDocs);
 
             // Step 4.5: 召回记忆（用户画像 / 近期会话要点 / 高置信事实）
             // 注入生成上下文。尽力而为：召回失败只记日志，绝不中断 RAG 管线。
@@ -136,7 +141,7 @@ public class HybridRagAnswerService {
                     .retrievalStats(HybridRagResult.RetrievalStats.builder()
                             .totalRetrieved(retrievalResult.totalBeforeDedup())
                             .afterDedup(retrievalResult.totalAfterDedup())
-                            .finalCount(retrievedDocs.size())
+                            .finalCount(contextDocs.size())
                             .build())
                     .build();
 
@@ -180,6 +185,47 @@ public class HybridRagAnswerService {
     private String label(String type, MemoryItemRecord memory) {
         String content = memory.getContent() == null ? "" : memory.getContent().replaceAll("\\s+", " ").trim();
         return type + ": " + (content.length() <= 80 ? content : content.substring(0, 80) + "…");
+    }
+
+    /** 证据垃圾线：综合分低于此值的证据不进入生成上下文（避免噪声证据稀释 prompt） */
+    private static final double CONTEXT_SCORE_FLOOR = 0.30;
+
+    /**
+     * 用判分结果组织进入 prompt 的文档集（评审的消费端）：
+     * evidence 已按综合分降序，取分数 ≥ 垃圾线的头部 rerankTopK 条，
+     * 按 sourceType|chunkId 关联回原文档（EvidenceItem 不携带正文）。
+     * 降级：判分为空退回检索序；全部低于垃圾线时退回判分序头部——
+     * 评审失效不阻塞管线，宁可用次优上下文也不返回假"知识库为空"。
+     */
+    private List<ScoredDocument> selectContextDocs(List<ScoredDocument> retrievedDocs,
+                                                   List<EvidenceItem> evidence) {
+        int limit = Math.max(1, ragProperties.getRerankTopK());
+        if (evidence == null || evidence.isEmpty()) {
+            return retrievedDocs;
+        }
+        Map<String, ScoredDocument> byKey = new HashMap<>();
+        for (ScoredDocument d : retrievedDocs) {
+            byKey.put(contextKey(d.getSourceType(), d.getChunkId()), d);
+        }
+        List<ScoredDocument> selected = new ArrayList<>();
+        for (EvidenceItem item : evidence) {
+            if (item.getScore() < CONTEXT_SCORE_FLOOR) {
+                continue;
+            }
+            ScoredDocument doc = byKey.get(contextKey(item.getSourceType(), item.getChunkId()));
+            if (doc != null) {
+                selected.add(doc);
+            }
+            if (selected.size() >= limit) {
+                return selected;
+            }
+        }
+        return selected.isEmpty() ? retrievedDocs.stream().limit(limit).toList() : selected;
+    }
+
+    /** 证据与原文档的关联键（EvidenceItem 是对外契约结构，不加内部字段） */
+    private String contextKey(String sourceType, String chunkId) {
+        return sourceType + "|" + chunkId;
     }
 
     /** 把检索文档拼成 "[n] source=..., title=..., chunk=..." 编号上下文块，供 prompt 引用。 */

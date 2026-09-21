@@ -64,18 +64,20 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 |---|---|
 | `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，可配 `app.retrieval.pool-size` 默认 16）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路异常/超时降级为空且**真取消**底层任务（调度超时 → `cancel(true)`：排队任务跳过、运行中任务中断，区别于 completeOnTimeout 的"只完成不取消"）；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued） |
 | `HybridWeights.java` | 权重配置：DEFAULT 0.40/0.25/0.20/0.15（向量/关键词/图谱/网络），预置 SEMANTIC/KEYWORD/BALANCED 档位，`normalize()` 归一化 |
-| `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；web 默认关闭（`app.web-search.enabled`） |
+| `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；向量/关键词路均为租户级过滤 + 会话软作用域（chat_id 不硬过滤，同会话命中 +0.05 有界加分）；keyword 路在向量候选池（阈值 0、池 max(topK×4,40)）上做 CJK 2-gram 词法重排；web 默认关闭（`app.web-search.enabled`） |
+| `ChatScope.java` | 会话软作用域：租户共享知识库，chat_id 只作有界加分不作硬边界（防跨会话割裂与临时 chatId 必空） |
+| `LexicalMatcher.java` | 词面匹配共用工具：CJK 感知切词（中文段 2-gram、拉丁段整token）+ 查询召回分（分母=查询 token 数），keyword 路/线上重排/证据判分三处共用 |
 | `web/WebSearchBackend.java` + `SearXNGBackend` / `BingSearchBackend` / `WebSearchProperties` | 外部搜索适配层（SearXNG 自托管 / Bing API） |
 | `Reranker.java` / `IdentityReranker.java` | 重排接口与恒等实现 |
 | `ScoredDocument.java` | 检索结果统一结构（docId/sourceType/title/content/retrievalScore/finalScore） |
-| `EvidenceJudgeService.java` / `EvidenceItem.java` | 证据判分：相关性/可信度评分，决定哪些证据进入生成 |
+| `EvidenceJudgeService.java` / `EvidenceItem.java` | 证据判分：相关性/权威性/时效性三维评分（时效度由入库 `created_at` 激活）；判分结果被消费——按综合分组织生成上下文、剔除低于 0.30 垃圾线的证据、截断 rerankTopK |
 | `CitationService.java` / `CitationItem.java` | 引用构建与脚注格式化（`formatCitationFooter`） |
 
 ### 数据供给（`ingestion/`、`graph/`）
 
 | 类 | 职责 |
 |---|---|
-| `ingestion/IngestionService.java` | PDF/文档入库：解析、分块、向量化、元数据（tenant_id/chat_id） |
+| `ingestion/IngestionService.java` | PDF/文档入库：解析、分块、向量化、元数据（tenant_id/chat_id/job_id/file_name/source_type/chunk_index/created_at，时间戳激活证据判分时效度） |
 | `ingestion/IngestionWorker.java` + `queue/`（RabbitMq / RedisStream / Noop / db_polling） | 异步入队消费，多后端可切换 |
 | `graph/GraphService.java` + `KgEntityRecord` / `KgFactRecord` / `KgRelationRecord` | 知识图谱：课程/难度/主题实体与关系，供 GraphRetriever |
 | `config/VectorStoreConfiguration.java` | pgvector VectorStore 装配（`OpenAiEmbeddingModel`） |
@@ -209,16 +211,16 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `service/AnswerFeedbackService.java` | 答案反馈采集，追加写 `evaluation/feedback_dataset.jsonl`（数据集轮转） |
 | `controller/FeedbackController.java` + `domain/AnswerFeedback*` | 反馈提交接口与模型 |
 
-### 测试清单（43 个文件、123 个测试，全 mock 无外部依赖）
+### 测试清单（49 个文件、173 个测试，全 mock 无外部依赖）
 
 | 包 | 测试类 | 覆盖点 |
 |---|---|---|
 | `agent/harness/`（10 个） | ActionPolicyGuardTest、AgentHarnessServiceTest、AgentObservationTest、BuiltinToolRuntimeTest、HarnessEvaluationTest、HarnessEventRecorderTest、HttpMcpToolAdapterTest、McpToolRuntimeTest、TrustedActionServiceTest、WorkspaceRuntimeTest | 策略守卫、动作分发、SSRF 防护、工作区安全 |
 | `agent/workflow/` | AgentWorkflowEngineTenantIsolationTest | 引擎租户隔离 + DONE 才写任务记忆 |
 | `memory/`（6 个） | MemoryServiceTenantIsolationTest、MemoryInjectionAdvisorTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离；advisor 注入契约（system 首插/user 原文不动/未传参透传/召回失败降级） |
-| `rag/` | HybridRagAnswerServiceMemoryTest | 记忆注入断言 + 召回失败降级 |
+| `rag/` | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、RagAnswerServiceRerankTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；重排分母 + 会话加成 |
 | `controller/`、`service/` | ChatControllerMemoryTest、ReactAgentServiceTest | chat/react 链路记忆注入断言、原始 prompt 写回（防自我循环）+ 召回失败降级 |
-| `retrieval/`（3 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest | 加权融合、去重计数、分数下限 |
+| `retrieval/`（7 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest、KeywordRetrieverTest、EvidenceJudgeServiceTest、LexicalMatcherTest、ChatScopeTest | 加权融合、去重计数、分数下限、租户级过滤断言；中文 bigram 命中、长文档不稀释、会话加成；时效度激活；切词/召回分契约；软作用域加成封顶 |
 | `service/`（3 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest | ReAct 决策解析与格式化 |
 | `controller/`（5 个） | AgentHarnessControllerWebMvcTest、AuthControllerWebMvcTest、IngestionControllerWebMvcTest、JavaApiContractTest、MemoryControllerTest | Web 层契约 |
 | `evaluation/` | EvaluationScorerTest | 打分逻辑 |
@@ -226,7 +228,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `config/`（4 个） | FlywayMigrationVersionTest、MysqlChatMemoryTest、ProdProfileConfigTest、SecurityDefaultsTest | 迁移版本、配置安全默认值 |
 | 其他 | IngestionServiceTest、ModelRouterTest、HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
 
-**运行**：`mvn test`（当前基线 123 个测试全绿，2 个跳过为 TestVector 需外部模型）。
+**运行**：`mvn test`（当前基线 173 个测试全绿，2 个跳过为 TestVector 需外部模型）。
 
 ---
 
