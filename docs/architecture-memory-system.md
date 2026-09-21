@@ -1,6 +1,7 @@
 # 长短期记忆系统设计
 
 > 当前状态：读写闭环已全线接入 —— 写侧（对话轮次 short / 画像提取 long / 任务结论 task / RAG 事实 fact）与读侧（全部 7 条生成链路，见下方“各链路注入现状”）均已打通；REST 查询/管理端点见 `MemoryController`（`/ai/memory/**`）。user 键 = 认证主体（匿名回落 chatId），画像跨会话生效。
+> 两轮 review 整改的完整问题清单（根因/修法/验证/面试话术）见 [memory-review-fixes.md](memory-review-fixes.md)。
 
 ## 四层记忆模型
 

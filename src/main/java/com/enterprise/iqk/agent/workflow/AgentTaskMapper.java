@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /** agent_task 表 Mapper：任务的按租户/按 ID 查询与状态更新（checkstyle 禁止 SQL 拼接，全部参数化）。 */
@@ -40,4 +41,14 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskRecord> {
     int completeTask(@Param("taskId") String taskId,
                      @Param("status") String status,
                      @Param("finalOutput") String finalOutput);
+
+    /** 孤儿任务排查：停留在非终态且 updated_at 早于截止时间的任务（断连/进程重启遗留）。 */
+    @Select("SELECT * FROM agent_task WHERE status NOT IN ('DONE', 'FAILED') AND updated_at < #{cutoff} ORDER BY updated_at ASC LIMIT #{limit}")
+    List<AgentTaskRecord> findStaleTasks(@Param("cutoff") LocalDateTime cutoff,
+                                         @Param("limit") int limit);
+
+    /** 守卫式收尾：仅当任务仍在非终态时置 FAILED，返回是否实际更新（防"取消与完成竞态"把 DONE 覆盖成 FAILED）。 */
+    @Update("UPDATE agent_task SET status = 'FAILED', final_output = #{reason}, updated_at = NOW() WHERE task_id = #{taskId} AND status NOT IN ('DONE', 'FAILED')")
+    int failIfNotTerminal(@Param("taskId") String taskId,
+                          @Param("reason") String reason);
 }

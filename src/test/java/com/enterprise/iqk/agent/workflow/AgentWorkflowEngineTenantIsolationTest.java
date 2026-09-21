@@ -195,4 +195,24 @@ class AgentWorkflowEngineTenantIsolationTest {
         verify(taskMapper).updateStatus("task-stale", WorkflowState.PLANNING.name());
         verifyNoInteractions(eventMapper);
     }
+
+    @Test
+    void abandonTaskFailsNonTerminalTaskAndEmitsEvent() {
+        when(taskMapper.failIfNotTerminal("task-1", "client disconnected")).thenReturn(1);
+
+        assertThat(engine.abandonTask("task-1", "client disconnected")).isTrue();
+
+        verify(eventMapper, org.mockito.Mockito.times(1))
+                .insert(org.mockito.ArgumentMatchers.<AgentEventRecord>any());
+    }
+
+    @Test
+    void abandonTaskNeverOverwritesTerminalTask() {
+        // 守卫式更新命中 0 行（任务已 DONE/FAILED）：不发事件、返回 false
+        when(taskMapper.failIfNotTerminal("task-done", "reclaim")).thenReturn(0);
+
+        assertThat(engine.abandonTask("task-done", "reclaim")).isFalse();
+
+        verifyNoInteractions(eventMapper);
+    }
 }

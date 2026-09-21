@@ -109,6 +109,23 @@ workflowEngine.transitionStatus(task.getTaskId(),
 workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, finalReport);
 ```
 
+## SSE 流式与任务收尾
+
+`POST /ai/workflow/react/chat/stream` 的两个工程保证：
+
+1. **真流式**：ReAct 循环以递归单步流（`stepFlux`）驱动，每完成一轮
+   reason→动作执行立即向下游发一条 `trace` 帧，不等整循环跑完才发首帧；
+   成稿 token 流式下发。帧序不变（`trace*` → `token*` → `done`），仅时机提前。
+2. **断连不产生孤儿任务**：Reactor 的 cancel 不是 error —— 用户断连时
+   `onErrorResume` 不触发、尾部的 `completeTask` 帧永不被订阅。
+   `doFinally` 识别 `SignalType.CANCEL`，经 `abandonTask` 守卫式置 FAILED
+   （守卫 = `UPDATE ... WHERE status NOT IN ('DONE','FAILED')`，与正常完成
+   竞态时不会把 DONE 覆盖成 FAILED）。
+
+兜底回收：`WorkflowTaskReclaimer` @Scheduled 每 5 分钟扫描非终态超过 30 分钟
+（`app.workflow.stale-task-minutes`）的任务守卫式置 FAILED，覆盖两类第一现场
+收不住的遗留：进程重启/强杀（cancel 信号来不及处理）与编排层异常路径遗漏收尾。
+
 ## API 端点
 
 | 端点 | 说明 |

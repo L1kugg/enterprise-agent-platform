@@ -127,9 +127,11 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 类 | 职责 |
 |---|---|
 | `WorkflowState.java` | 状态枚举：CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE（另有 NEED_MORE_EVIDENCE/FAILED）；`canTransitionTo` 守卫合法转移 |
-| `AgentWorkflowEngine.java` | 任务生命周期/状态管理/事件溯源：startStep/completeStep、状态落库、`completeTask` 触发任务结论记忆 |
-| `AgentTaskRecord` / `AgentStepRecord` / `AgentEventRecord` + 各 Mapper | 任务/步骤/事件持久化（agent_task / agent_step / agent_event 表） |
-| `WorkflowReactAgentService.java` | ReAct 迭代与状态映射：`mapToWorkflowState(step)`（:1→SEARCHING、2→RETRIEVING、3→JUDGING、4→REFLECTING、其余→WRITING） |
+| `AgentWorkflowEngine.java` | 任务生命周期/状态管理/事件溯源：startStep/completeStep、状态落库、`completeTask` 触发任务结论记忆、`abandonTask` 守卫式收尾（SSE 断连/孤儿回收用，不覆盖已终态任务） |
+| `AgentTaskRecord` / `AgentStepRecord` / `AgentEventRecord` + 各 Mapper | 任务/步骤/事件持久化（agent_task / agent_step / agent_event 表）；`findStaleTasks`/`failIfNotTerminal` 支撑孤儿回收 |
+| `WorkflowReactAgentService.java` | ReAct 迭代与状态映射：`mapToWorkflowState(step)`（:1→SEARCHING、2→RETRIEVING、3→JUDGING、4→REFLECTING、其余→WRITING）；`stream()` 真流式（`stepFlux` 递归单步流，每步完成即发 trace 帧）+ 断连处理（doFinally 识别 CANCEL → abandonTask，任务不停在非终态） |
+| `WorkflowTaskReclaimer.java` | 孤儿任务回收：@Scheduled 每 5 分钟把非终态超 30 分钟的任务守卫式置 FAILED（兜底断连漏网与进程重启遗留） |
+| `ReactPlannerFallbacks.java` | 规划器确定性降级（关键词路由预设动作）+ 动作白名单归一 |
 | `controller/WorkflowController.java` | 工作流任务提交与状态查询 |
 
 ### 编排层（`agent/research/`）

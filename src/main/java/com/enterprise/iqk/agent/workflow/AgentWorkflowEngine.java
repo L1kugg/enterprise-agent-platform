@@ -140,6 +140,20 @@ public class AgentWorkflowEngine {
         emitEvent(taskId, null, "TASK_FAILED", Map.of("error", errorMessage));
     }
 
+    /**
+     * 守卫式收尾：仅当任务仍在非终态时置为 FAILED 并发 TASK_FAILED 事件，
+     * 已 DONE / FAILED 的任务不被覆盖，返回是否实际置失败。
+     * 供 SSE 断连取消与孤儿任务回收使用 —— 这两个路径与正常完成路径存在竞态
+     * （取消信号恰在 completeTask 落库前后到达），无守卫会把 DONE 覆盖成 FAILED。
+     */
+    public boolean abandonTask(String taskId, String reason) {
+        boolean updated = taskMapper.failIfNotTerminal(taskId, reason) > 0;
+        if (updated) {
+            emitEvent(taskId, null, "TASK_FAILED", Map.of("error", reason, "abandoned", true));
+        }
+        return updated;
+    }
+
     // ── 状态管理 ─────────────────────────────────────────
 
     /** 经 canTransitionTo 守卫后更新状态并发 STATE_CHANGED 事件；非法转移或已终态只告警、不抛错。 */

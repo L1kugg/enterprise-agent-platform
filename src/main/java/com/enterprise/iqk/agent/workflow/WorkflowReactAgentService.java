@@ -23,13 +23,13 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -120,92 +120,27 @@ public class WorkflowReactAgentService {
         }
     }
 
-    public Flux<String> stream(ReactChatRequestVO request) { // 流式 ReAct（SSE）：先发 trace、再流式发 token、最后发 done；失败发 error 并置任务 FAILED
+    public Flux<String> stream(ReactChatRequestVO request) { // 真流式 ReAct（SSE）：每步完成即发 trace 帧，再流式发 token，最后发 done；断连取消时任务守卫式置 FAILED 防孤儿
         long startedNs = System.nanoTime();
         AtomicReference<Long> firstTokenMs = new AtomicReference<>(null);
         AtomicReference<String> outcomeRef = new AtomicReference<>("error");
         AtomicReference<String> taskIdRef = new AtomicReference<>("");
 
         return Flux.defer(() -> {
-            validateRequest(request);
-            String tenantId = currentTenantId();
+                    validateRequest(request);
+                    String tenantId = currentTenantId();
 
-            AgentTaskRecord task = workflowEngine.startTask(
-                    tenantId, "REACT_STREAM", request.getPrompt(),
-                    request.getModelProfile(), request.getChatId(), null);
-            taskIdRef.set(task.getTaskId());
+                    AgentTaskRecord task = workflowEngine.startTask(
+                            tenantId, "REACT_STREAM", request.getPrompt(),
+                            request.getModelProfile(), request.getChatId(), null);
+                    taskIdRef.set(task.getTaskId());
 
-            ModelRouter.ModelRouteDecision routeDecision = resolveRouteDecision(
-                    request.getModelProfile(), "react", request.getChatId(), tenantId);
-
-            List<ReactTraceStepVO> trace = new ArrayList<>();
-            String rollingContext = "";
-            String directAnswer = "";
-
-            for (int stepNum = 1; stepNum <= MAX_STEPS; stepNum++) {
-                AgentStepRecord stepRecord = workflowEngine.startStep(
-                        task.getTaskId(), "planner", stepNum,
-                        Map.of("prompt", request.getPrompt()));
-
-                long stepStartNs = System.nanoTime();
-                ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
-
-                if ("finish".equals(decision.action())) {
-                    Map<String, Object> obs = new LinkedHashMap<>();
-                    obs.put("status", "completed");
-                    trace.add(buildTraceStep(stepNum, decision, obs));
-                    directAnswer = emptyIfBlank(decision.answer());
-                    workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
-                            Map.of("answer", directAnswer), obs,
-                            decision.thought(), "finish", decision.actionInput(),
-                            0, 0, elapsedMs(stepStartNs), null);
-                    break;
-                }
-
-                Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
-                        task.getTaskId(), stepRecord.getStepId());
-                trace.add(buildTraceStep(stepNum, decision, observation));
-                workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
-                        null, observation,
-                        decision.thought(), decision.action(), decision.actionInput(),
-                        0, 0, elapsedMs(stepStartNs), null);
-                rollingContext = appendContext(rollingContext, decision.action(), observation);
-            }
-
-            Flux<String> traceFlux = Flux.fromIterable(trace)
-                    .map(step -> formatSse("trace", toJson(step)));
-
-            StringBuilder answerBuilder = new StringBuilder();
-            Flux<String> answerFlux = StringUtils.hasText(directAnswer)
-                    ? Flux.just(directAnswer)
-                    : callModelStream(
-                    "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
-                    buildFinalPrompt(request, trace, rollingContext),
-                    routeDecision, tenantId, "react_final");
-
-            Flux<String> tokenFlux = answerFlux
-                    .map(token -> {
-                        if (firstTokenMs.get() == null) {
-                            firstTokenMs.set(elapsedMs(startedNs));
-                        }
-                        answerBuilder.append(token);
-                        return formatSse("token", toJson(Map.of("token", token)));
-                    });
-
-            String finalTaskId = task.getTaskId();
-            return Flux.concat(traceFlux, tokenFlux)
-                    .concatWith(Flux.defer(() -> {
-                        if (firstTokenMs.get() == null) {
-                            firstTokenMs.set(elapsedMs(startedNs));
-                        }
-                        String answer = answerBuilder.toString();
-                        ReactChatResponseVO response = success(
-                                request.getChatId(), answer, trace, routeDecision, finalTaskId);
-                        workflowEngine.completeTask(finalTaskId, WorkflowState.DONE, answer);
-                        outcomeRef.set("success");
-                        return Flux.just(formatSse("done", toJson(response)));
-                    }));
-        })
+                    StreamState state = new StreamState(request, task,
+                            resolveRouteDecision(request.getModelProfile(), "react", request.getChatId(), tenantId),
+                            tenantId, new ArrayList<>(), new AtomicReference<>(""),
+                            new AtomicReference<>(""), firstTokenMs, outcomeRef, startedNs);
+                    return stepFlux(state, 1).concatWith(finalAnswerFlux(state));
+                })
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage())
                             ? ex.getMessage() : "stream failed";
@@ -218,7 +153,102 @@ public class WorkflowReactAgentService {
                     }
                     return Flux.just(formatSse("error", toJson(Map.of("message", message))));
                 })
-                .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenMs.get(), outcomeRef.get()));
+                .doFinally(signal -> {
+                    // Reactor 的 cancel 不是 error：断连时 onErrorResume 不触发，
+                    // 尾部 completeTask 帧也不会被订阅，任务会永久停在非终态 ——
+                    // 在此显式收尾（守卫式：恰与正常完成竞态时不覆盖 DONE）。
+                    if (signal == SignalType.CANCEL) {
+                        outcomeRef.set("cancelled");
+                        String taskId = taskIdRef.get();
+                        if (StringUtils.hasText(taskId)) {
+                            workflowEngine.abandonTask(taskId, "client disconnected (stream cancelled)");
+                        }
+                    }
+                    recordStreamMetrics(startedNs, firstTokenMs.get(), outcomeRef.get());
+                });
+    }
+
+    /** 递归单步流：每完成一轮 ReAct（reason→动作执行）立即向下游发一条 trace 帧，循环不再整体阻塞在 defer 里跑完才发首帧。 */
+    private Flux<String> stepFlux(StreamState state, int stepNum) {
+        return Flux.defer(() -> {
+            if (stepNum > MAX_STEPS) {
+                return Flux.<String>empty(); // 轮次用尽，交由 finalAnswerFlux 强制总结成稿
+            }
+            AgentStepRecord stepRecord = workflowEngine.startStep(
+                    state.task().getTaskId(), "planner", stepNum,
+                    Map.of("prompt", state.request().getPrompt()));
+
+            long stepStartNs = System.nanoTime();
+            ReasonDecision decision = reason(state.request(), state.rollingContext().get(),
+                    state.trace(), state.routeDecision(), state.tenantId());
+
+            if ("finish".equals(decision.action())) {
+                Map<String, Object> obs = new LinkedHashMap<>();
+                obs.put("status", "completed");
+                ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, obs);
+                state.trace().add(stepVo);
+                state.directAnswer().set(emptyIfBlank(decision.answer()));
+                workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
+                        Map.of("answer", state.directAnswer().get()), obs,
+                        decision.thought(), "finish", decision.actionInput(),
+                        0, 0, elapsedMs(stepStartNs), null);
+                return Flux.just(formatSse("trace", toJson(stepVo)));
+            }
+
+            Object observation = executeAction(state.request(), decision.action(), decision.actionInput(),
+                    state.tenantId(), state.task().getTaskId(), stepRecord.getStepId());
+            ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, observation);
+            state.trace().add(stepVo);
+            workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
+                    null, observation,
+                    decision.thought(), decision.action(), decision.actionInput(),
+                    0, 0, elapsedMs(stepStartNs), null);
+            state.rollingContext().set(
+                    appendContext(state.rollingContext().get(), decision.action(), observation));
+            return Flux.just(formatSse("trace", toJson(stepVo)))
+                    .concatWith(stepFlux(state, stepNum + 1));
+        });
+    }
+
+    /** 成稿流：finish 直答则原样发 token，否则流式调用模型；末尾发 done 帧并置任务 DONE。 */
+    private Flux<String> finalAnswerFlux(StreamState state) {
+        StringBuilder answerBuilder = new StringBuilder();
+        return Flux.<String>defer(() -> {
+                    String direct = state.directAnswer().get();
+                    return StringUtils.hasText(direct) ? Flux.just(direct)
+                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                            buildFinalPrompt(state.request(), state.trace(), state.rollingContext().get()),
+                            state.routeDecision(), state.tenantId(), "react_final");
+                })
+                .map(token -> {
+                    if (state.firstTokenMs().get() == null) {
+                        state.firstTokenMs().set(elapsedMs(state.startedNs()));
+                    }
+                    answerBuilder.append(token);
+                    return formatSse("token", toJson(Map.of("token", token)));
+                })
+                .concatWith(Flux.defer(() -> {
+                    if (state.firstTokenMs().get() == null) {
+                        state.firstTokenMs().set(elapsedMs(state.startedNs())); // 零 token 兜底计时
+                    }
+                    String answer = answerBuilder.toString();
+                    ReactChatResponseVO response = success(state.request().getChatId(), answer,
+                            state.trace(), state.routeDecision(), state.task().getTaskId());
+                    workflowEngine.completeTask(state.task().getTaskId(), WorkflowState.DONE, answer);
+                    state.outcomeRef().set("success");
+                    return Flux.just(formatSse("done", toJson(response)));
+                }));
+    }
+
+    /** 流式链路共享状态：递归 flux 之间传递的可变载体。 */
+    private record StreamState(ReactChatRequestVO request, AgentTaskRecord task,
+                               ModelRouter.ModelRouteDecision routeDecision, String tenantId,
+                               List<ReactTraceStepVO> trace,
+                               AtomicReference<String> rollingContext,
+                               AtomicReference<String> directAnswer,
+                               AtomicReference<Long> firstTokenMs,
+                               AtomicReference<String> outcomeRef,
+                               long startedNs) {
     }
 
     private ReasonDecision reason(ReactChatRequestVO request,
@@ -233,7 +263,9 @@ public class WorkflowReactAgentService {
                     planningPrompt, routeDecision, tenantId, "react_planner");
             return parseDecision(raw);
         } catch (RuntimeException ex) {
-            return fallbackDecision(request.getPrompt());
+            ReactPlannerFallbacks.ReasonFallback fallback = ReactPlannerFallbacks.fallbackDecision(request.getPrompt());
+            return new ReasonDecision(fallback.thought(), fallback.action(), fallback.actionInput(),
+                    fallback.answer(), fallback.citations(), fallback.evidence());
         }
     }
 
@@ -360,7 +392,7 @@ public class WorkflowReactAgentService {
         }
         try {
             JsonNode node = objectMapper.readTree(json);
-            String action = normalizeAction(node.path("action").asText("finish"));
+            String action = ReactPlannerFallbacks.normalizeAction(node.path("action").asText("finish"));
             Map<String, Object> input = objectMapper.convertValue(
                     node.path("action_input"), new TypeReference<Map<String, Object>>() {});
             if (input == null) {
@@ -376,36 +408,6 @@ public class WorkflowReactAgentService {
             return new ReasonDecision("Parse failed.", "finish",
                     Collections.emptyMap(), emptyIfBlank(raw), List.of(), List.of());
         }
-    }
-
-    private ReasonDecision fallbackDecision(String prompt) {
-        String safe = emptyIfBlank(prompt).toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(safe)) {
-            return new ReasonDecision("Empty prompt.", "finish", Collections.emptyMap(),
-                    "当前请求内容为空，请补充问题后重试。",
-                    List.of("source=fallback://input_validation, chunk=1"),
-                    List.of("规则兜底：空问题时引导用户补充输入。"));
-        }
-        if (containsAny(safe, "校区", "campus")) {
-            return new ReasonDecision("Fallback school query.", "finish", Collections.emptyMap(),
-                    "已识别为校区查询请求：可以返回校区列表，并按城市或课程类型做进一步筛选。",
-                    List.of("source=fallback://school_query_flow, chunk=1"),
-                    List.of("校区查询流程：先列出校区，再按城市/课程类型筛选。"));
-        }
-        if (containsAny(safe, "课程预约", "预约字段", "预约需要", "联系方式", "姓名")) {
-            return new ReasonDecision("Fallback reservation.", "finish", Collections.emptyMap(),
-                    "课程预约建议至少包含：课程、姓名、联系方式、校区。",
-                    List.of("source=fallback://course_reservation_schema, chunk=1"),
-                    List.of("预约字段模板。"));
-        }
-        if (containsAny(safe, "知识库", "引用", "来源", "pdf", "文档", "source")) {
-            return new ReasonDecision("Fallback rag.", "rag_search",
-                    Map.of("query", prompt), "", List.of(), List.of());
-        }
-        return new ReasonDecision("Generic fallback.", "finish", Collections.emptyMap(),
-                "当前规划器暂不可用，建议稍后重试或细化问题关键词。",
-                List.of("source=fallback://planner_unavailable, chunk=1"),
-                List.of("系统兜底。"));
     }
 
     private String extractJson(String raw) {
@@ -473,18 +475,8 @@ public class WorkflowReactAgentService {
                 .register(meterRegistry).increment();
     }
 
-    private String normalizeAction(String a) {
-        return (!StringUtils.hasText(a)) ? "finish" : a.trim().toLowerCase(Locale.ROOT);
-    }
     private long elapsedMs(long startedNs) { return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs); }
     private String emptyIfBlank(String v) { return StringUtils.hasText(v) ? v : ""; }
-    private boolean containsAny(String text, String... keywords) {
-        if (!StringUtils.hasText(text) || keywords == null) return false;
-        for (String kw : keywords) {
-            if (StringUtils.hasText(kw) && text.contains(kw.toLowerCase(Locale.ROOT))) return true;
-        }
-        return false;
-    }
     private String currentTenantId() { return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE)); }
     private void validateRequest(ReactChatRequestVO r) {
         if (r == null || !StringUtils.hasText(r.getPrompt())) throw new IllegalArgumentException("prompt is required");
