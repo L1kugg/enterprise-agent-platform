@@ -3,13 +3,13 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryExtractionService;
-import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.content.Media;
@@ -37,8 +37,12 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  * TenantCostService。若不这样做，持有 PERM_CHAT_WRITE 的调用者
  * 可以无限发起 /ai/chat 请求并消耗 LLM token，却从不计入租户的
  * 月度预算，使 cost_governance.enabled = true 配置形同虚设。
+ *
+ * 记忆闭环：读侧经 MemoryInjectionAdvisor 在请求组装期注入"已知记忆"
+ * system 消息（不落 ChatMemory、不随会话历史逐轮累积，每轮最新一份）；
+ * 写侧在流结束后写 short 记忆并提交画像提取，均按认证主体
+ * （userKey，匿名回落 chatId）存取 —— 画像跨会话可召回。
  */
-@Slf4j
 @RestController
 @RequestMapping("/ai")
 @RequiredArgsConstructor
@@ -51,8 +55,6 @@ public class ChatController {
     private final ChatHistoryRepository chatHistoryRepository;
     private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
     private final MemoryExtractionService memoryExtractionService;
-    /** 记忆子系统：召回跨会话记忆（long/fact）注入生成上下文（读侧闭环）。 */
-    private final MemoryService memoryService;
 
     /** POST /ai/chat 聊天入口（text/html 流式响应）：保存会话后按有无附件分流纯文本/多模态链路。 */
     @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
@@ -64,18 +66,15 @@ public class ChatController {
         // 1.保存会话id
         chatHistoryRepository.save("chat", chatId);
         String conversationId = ConversationIdHelper.build("chat", chatId);
-        // 2.召回跨会话记忆（long/fact），追加到发给模型的用户消息末尾。
-        // 本链路已挂 ChatMemory advisor，会话内近况由 advisor 保真注入，
-        // 因此只取跨会话视图，避免 short 摘要与原文双份进 prompt。
-        String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
-        String enrichedPrompt = prompt + recallMemorySection(tenantId, chatId);
+        // 2.解析记忆 user 键：认证主体优先，匿名回落 chatId（画像按人存、跨会话召回）
+        String memoryUserKey = UserContext.currentUserId(chatId);
         // 3.请求模型
         if (files == null || files.isEmpty()) {
             // 没有附件，纯文本聊天
-            return textChat(prompt, enrichedPrompt, conversationId, modelProfile, chatId);
+            return textChat(prompt, memoryUserKey, conversationId, modelProfile, chatId);
         } else {
             // 有附件，多模态聊天
-            return multiModalChat(prompt, enrichedPrompt, conversationId, files, modelProfile, chatId);
+            return multiModalChat(prompt, memoryUserKey, conversationId, files, modelProfile, chatId);
         }
     }
 
@@ -89,9 +88,9 @@ public class ChatController {
         return chat(prompt, chatId, modelProfile, files);
     }
 
-    /** 多模态聊天：把附件转成 Media 附到用户消息上，再走统一跟踪流（文本部分用增强后 prompt）。 */
+    /** 多模态聊天：把附件转成 Media 附到用户消息上，再走统一跟踪流。 */
     private Flux<String> multiModalChat(String prompt,
-                                        String enrichedPrompt,
+                                        String memoryUserKey,
                                         String conversationId,
                                         List<MultipartFile> files,
                                         String modelProfile,
@@ -110,19 +109,19 @@ public class ChatController {
         }).toList();
 
         return trackedChatStream(
-                prompt, enrichedPrompt, modelProfile, chatId, conversationId, "chat",
-                spec -> spec.user(t -> t.text(enrichedPrompt).media(mediaList.toArray(Media[]::new))));
+                prompt, memoryUserKey, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new))));
     }
 
-    /** 纯文本聊天：把增强后 prompt（原始问题 + 已知记忆段）作为用户消息走统一跟踪流。 */
+    /** 纯文本聊天：直接把 prompt 作为用户消息走统一跟踪流。 */
     private Flux<String> textChat(String prompt,
-                                  String enrichedPrompt,
+                                  String memoryUserKey,
                                   String conversationId,
                                   String modelProfile,
                                   String chatId) {
         return trackedChatStream(
-                prompt, enrichedPrompt, modelProfile, chatId, conversationId, "chat",
-                spec -> spec.user(enrichedPrompt));
+                prompt, memoryUserKey, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(prompt));
     }
 
     /**
@@ -133,7 +132,7 @@ public class ChatController {
      * 检查所标记的问题。
      */
     private Flux<String> trackedChatStream(String prompt,
-                                          String enrichedPrompt,
+                                          String memoryUserKey,
                                           String modelProfile,
                                           String chatId,
                                           String conversationId,
@@ -141,15 +140,20 @@ public class ChatController {
                                           Function<ChatClient.ChatClientRequestSpec, ChatClient.ChatClientRequestSpec> userCustomizer) {
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "chat", tenantId, chatId);
-        // 预算与记账按增强后 prompt 估算 —— 记忆段真实消耗了 token，
-        // 不计入会造成租户用量低估（评测链路的记忆段就漏了这笔账）。
-        long inputTokens = tenantCostService.estimateTokens(enrichedPrompt);
+        // 记账按用户原始问题估算；advisor 注入的记忆段未计入（与评测链路
+        // 同款低估，演进方向为 advisor 侧回填 usage 统计）。
+        long inputTokens = tenantCostService.estimateTokens(prompt);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         StringBuilder outputCollector = new StringBuilder();
         AtomicBoolean recorded = new AtomicBoolean(false);
         return userCustomizer.apply(chatClient.prompt()
                         .options(ChatOptions.builder().model(decision.model()).build()))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId)
+                        // 记忆注入参数：advisor 召回 long/fact 跨会话视图（short 由
+                        // ChatMemory advisor 保真注入，防同信息双份），组装期插入
+                        // system 消息 —— 不进会话历史，不会逐轮累积。
+                        .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId)
+                        .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, memoryUserKey))
                 .stream()
                 .content()
                 .doOnNext(outputCollector::append)
@@ -158,32 +162,15 @@ public class ChatController {
                         long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
                         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
                     }
-                    // 本轮结束后用原始 prompt（非增强版）写入会话级 short 记忆
-                    // 并异步提交画像提取（命中才升级 long）：若把注入的记忆段
-                    // 也存回去，记忆会自我循环增殖。两者都是尽力而为：
-                    // 异常在各自内部吞掉，绝不影响流收尾与计费。
+                    // 本轮结束后用用户原始问题写入 short 记忆并异步提交画像提取
+                    // （命中才升级 long），记忆按 userKey 存、chatId 记入 source 溯源。
+                    // 两者都是尽力而为：异常在各自内部吞掉，绝不影响流收尾与计费。
                     if (signal == SignalType.ON_COMPLETE) {
-                        chatTurnMemoryRecorder.recordTurn(tenantId, chatId, prompt, outputCollector.toString());
-                        memoryExtractionService.submitAsync(tenantId, chatId, prompt, outputCollector.toString());
+                        chatTurnMemoryRecorder.recordTurn(tenantId, memoryUserKey, chatId,
+                                prompt, outputCollector.toString());
+                        memoryExtractionService.submitAsync(tenantId, memoryUserKey, chatId,
+                                prompt, outputCollector.toString());
                     }
                 });
-    }
-
-    /**
-     * 召回跨会话记忆段（long/fact）：拼成 "\n\n已知记忆:\n..." 追加到用户消息末尾。
-     * 尽力而为 —— 召回失败或空快照返回空串，绝不影响聊天主链路。
-     */
-    private String recallMemorySection(String tenantId, String chatId) {
-        try {
-            MemoryService.MemoryContextSnapshot snapshot = memoryService.buildContext(tenantId, chatId, false);
-            if (snapshot == null || !StringUtils.hasText(snapshot.contextText())) {
-                return "";
-            }
-            log.info("记忆注入 chat 链路: chatId={}, 注入 {} 字符", chatId, snapshot.contextText().length());
-            return "\n\n已知记忆:\n" + snapshot.contextText().trim();
-        } catch (Exception ex) {
-            log.warn("记忆召回失败（不影响聊天链路）: chatId={}, reason={}", chatId, ex.toString());
-            return "";
-        }
     }
 }

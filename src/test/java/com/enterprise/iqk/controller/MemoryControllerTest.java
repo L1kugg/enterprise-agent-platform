@@ -69,6 +69,15 @@ class MemoryControllerTest {
     }
 
     @Test
+    void taskMemoriesQueryByTaskIdUnderCurrentTenant() {
+        // task 层读侧：按 taskId 精确召回该任务沉淀的结论，租户取自上下文
+        when(memoryService.queryTaskMemory("tenant-1", "task-9")).thenReturn(List.of(
+                MemoryItemRecord.builder().memoryId("mem-t").type("task").build()));
+
+        assertThat(controller.taskMemories("task-9")).hasSize(1);
+    }
+
+    @Test
     void eventsDelegateToTenantScopedService() {
         // 服务层按租户隔离：他租户记忆返回空（此处模拟服务层判定结果）
         when(memoryService.getEvents("tenant-1", "mem-x")).thenReturn(List.of());

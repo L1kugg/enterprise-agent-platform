@@ -9,6 +9,7 @@ import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserContext;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -73,8 +74,9 @@ public class ReactAgentService {
         boolean usedFallback = false;
         // 记忆召回（尽力而为，循环外一次）：planner 不挂 ChatMemory，
         // short/long/fact 全量注入 —— 会话前情、用户画像与租户可信事实
-        // 都会影响动作选择与最终措辞。
-        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, request.getChatId());
+        // 都会影响动作选择与最终措辞。user 键取认证主体，匿名回落 chatId。
+        String memoryUserKey = UserContext.currentUserId(request.getChatId());
+        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
 
         for (int step = 1; step <= MAX_STEPS; step++) {
             ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
@@ -101,7 +103,8 @@ public class ReactAgentService {
                         .actionInput(decision.actionInput())
                         .observation(observation)
                         .build());
-                return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback, memorySnapshot, tenantId);
+                return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback,
+                        memorySnapshot, tenantId, memoryUserKey);
             }
 
             Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
@@ -117,7 +120,8 @@ public class ReactAgentService {
         }
 
         AnswerResult answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId, memorySnapshot);
-        return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback || answer.fallback(), memorySnapshot, tenantId);
+        return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback || answer.fallback(),
+                memorySnapshot, tenantId, memoryUserKey);
     }
 
     /** SSE 流式对话：先推 trace 事件，再流式推 token，最后推 done；任何异常转 error 事件。 */
@@ -141,7 +145,8 @@ public class ReactAgentService {
                     String directAnswer = "";
                     boolean usedFallback = false;
                     // 记忆召回（尽力而为，循环外一次）：与同步链路同构
-                    MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, request.getChatId());
+                    String memoryUserKey = UserContext.currentUserId(request.getChatId());
+                    MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
 
                     for (int step = 1; step <= MAX_STEPS; step++) {
                         ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
@@ -212,7 +217,7 @@ public class ReactAgentService {
                                         request.getChatId(), answerBuilder.toString(), trace, routeDecision, responseUsedFallback);
                                 // 流式收尾同样回填 memoryUsed 并写回 short 记忆（读写两侧闭环）
                                 response.setMemoryUsed(memorySnapshot == null ? List.of() : memorySnapshot.usedLabels());
-                                chatTurnMemoryRecorder.recordTurn(tenantId, request.getChatId(),
+                                chatTurnMemoryRecorder.recordTurn(tenantId, memoryUserKey, request.getChatId(),
                                         request.getPrompt(), answerBuilder.toString());
                                 outcomeRef.set("success");
                                 return Flux.just(responseFormatter.formatSse("done", responseFormatter.toJson(response)));
@@ -379,11 +384,11 @@ public class ReactAgentService {
     }
 
     /** 记忆召回：任何失败返回 null，按"无记忆可用"降级，绝不中断 ReAct 主链路。 */
-    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String chatId) {
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey) {
         try {
-            return memoryService.buildContext(tenantId, chatId);
+            return memoryService.buildContext(tenantId, userKey);
         } catch (Exception ex) {
-            log.warn("记忆召回失败（不影响 ReAct 链路）: chatId={}, reason={}", chatId, ex.toString());
+            log.warn("记忆召回失败（不影响 ReAct 链路）: user={}, reason={}", userKey, ex.toString());
             return null;
         }
     }
@@ -394,17 +399,18 @@ public class ReactAgentService {
                 ? snapshot.contextText().trim() : "(none)";
     }
 
-    /** 成稿收尾：回填 memoryUsed 观测标签，并把本轮问答尽力而为写回 short 记忆（读写两侧闭环）。 */
+    /** 成稿收尾：回填 memoryUsed 观测标签，并把本轮问答尽力而为写回 short 记忆（读写两侧闭环，user 键 = userKey）。 */
     private ReactChatResponseVO finalizeResponse(ReactChatRequestVO request,
                                                  String answer,
                                                  List<ReactTraceStepVO> trace,
                                                  ModelRouter.ModelRouteDecision routeDecision,
                                                  boolean fallback,
                                                  MemoryService.MemoryContextSnapshot memorySnapshot,
-                                                 String tenantId) {
+                                                 String tenantId,
+                                                 String memoryUserKey) {
         ReactChatResponseVO response = responseFormatter.success(request.getChatId(), answer, trace, routeDecision, fallback);
         response.setMemoryUsed(memorySnapshot == null ? List.of() : memorySnapshot.usedLabels());
-        chatTurnMemoryRecorder.recordTurn(tenantId, request.getChatId(), request.getPrompt(), answer);
+        chatTurnMemoryRecorder.recordTurn(tenantId, memoryUserKey, request.getChatId(), request.getPrompt(), answer);
         return response;
     }
 

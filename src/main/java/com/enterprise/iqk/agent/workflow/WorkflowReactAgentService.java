@@ -6,7 +6,9 @@ import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -219,8 +221,6 @@ public class WorkflowReactAgentService {
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenMs.get(), outcomeRef.get()));
     }
 
-    // ── 推理 / 行动 / 总结（逻辑同原实现，现已接入引擎） ──
-
     private ReasonDecision reason(ReactChatRequestVO request,
                                   String rollingContext,
                                   List<ReactTraceStepVO> trace,
@@ -276,8 +276,6 @@ public class WorkflowReactAgentService {
         return "用户问题:%n%s%n%nReAct轨迹:%n%s%n%n观察上下文:%n%s%n%n请输出最终中文答案，要求简洁、可执行、结构清晰。%n".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
-    // ── 辅助方法（自原 ReactAgentService 迁移） ──────
-
     private ReactTraceStepVO buildTraceStep(int step, ReasonDecision d, Object obs) {
         return ReactTraceStepVO.builder()
                 .step(step).thought(d.thought()).action(d.action())
@@ -316,6 +314,8 @@ public class WorkflowReactAgentService {
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         String output = chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
+                // 记忆注入：认证主体为 user 键（匿名时空键不注入），advisor 组装期插"已知记忆"system 消息
+                .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
                 .system(system).user(user).call().content();
         long outputTokens = tenantCostService.estimateTokens(output);
         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
@@ -332,6 +332,7 @@ public class WorkflowReactAgentService {
         AtomicBoolean recorded = new AtomicBoolean(false);
         return chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
+                .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
                 .system(system).user(user).stream().content()
                 .doOnNext(collector::append)
                 .doFinally(sig -> {
@@ -350,8 +351,6 @@ public class WorkflowReactAgentService {
             default -> WorkflowState.WRITING;
         };
     }
-
-    // ── 委托辅助方法（与原 ReactAgentService 相同） ───
 
     private ReasonDecision parseDecision(String raw) {
         String json = extractJson(raw);
@@ -473,8 +472,6 @@ public class WorkflowReactAgentService {
         Counter.builder("react.stream.requests").tag("outcome", outcome)
                 .register(meterRegistry).increment();
     }
-
-    // ── 简单委托方法 ──────────────────────────────────────────
 
     private String normalizeAction(String a) {
         return (!StringUtils.hasText(a)) ? "finish" : a.trim().toLowerCase(Locale.ROOT);

@@ -27,9 +27,9 @@ public class ResearchPlannerAgent {
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
 
-    /** LLM 拆题：把主题分解为 3-5 个子问题+关键词；解析失败或结果为空时降级为原主题单问（strategy=direct）。 */
-    public ResearchPlan plan(String topic, String conversationId, String tenantId, String modelProfile) {
-        String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n".formatted(topic);
+    /** LLM 拆题：把主题分解为 3-5 个子问题+关键词；priorFindings 注入租户内早前任务结论供参考（可传空串）；解析失败或结果为空时降级为原主题单问（strategy=direct）。 */
+    public ResearchPlan plan(String topic, String priorFindings, String conversationId, String tenantId, String modelProfile) {
+        String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n%nPrior research findings from earlier tasks in this tenant (may be empty, use to avoid duplicating settled questions):%n%s%n".formatted(topic, priorFindings);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
         long inputTokens = tenantCostService.estimateTokens(prompt);

@@ -6,10 +6,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * 对话流正常结束后，把本轮问答摘要写入会话级 short 记忆。
+ * 对话流正常结束后，把本轮问答摘要写入 short 记忆。
  *
- * short 记忆按会话（chatId）作用域存储：平台对话链路没有独立的用户身份，
- * 因此 chatId 同时充当记忆的 user 键，source 字段记录所属会话。
+ * user 键与来源分离：记忆按认证主体（userKey，匿名时回落 chatId）存取，
+ * 使画像/要点跨会话可用；chatId 保留在 source 字段做会话级溯源。
  * 写入是尽力而为的 —— 记忆失败绝不能影响对话响应，
  * 也不能影响共享同一个流结束钩子的计费逻辑。
  */
@@ -25,15 +25,15 @@ public class ChatTurnMemoryRecorder {
 
     private final MemoryService memoryService;
 
-    /** 把一轮问答按 "Q: .../A: ..." 格式写入 short 记忆；prompt 或 answer 为空白时静默跳过，失败只告警不抛出。 */
-    public void recordTurn(String tenantId, String chatId, String prompt, String answer) {
+    /** 把一轮问答按 "Q: .../A: ..." 格式写入 short 记忆（user 键 = userKey，source 记 chatId）；prompt 或 answer 为空白时静默跳过，失败只告警不抛出。 */
+    public void recordTurn(String tenantId, String userKey, String chatId, String prompt, String answer) {
         if (!StringUtils.hasText(prompt) || !StringUtils.hasText(answer)) {
             return;
         }
         try {
             String content = "Q: " + truncate(prompt, MAX_PROMPT_CHARS)
                     + "\nA: " + truncate(answer, MAX_ANSWER_CHARS);
-            memoryService.saveShortMemory(tenantId, chatId, content, "chat:" + chatId);
+            memoryService.saveShortMemory(tenantId, userKey, content, "chat:" + chatId);
         } catch (Exception ex) {
             log.warn("short memory persistence failed: chatId={}, reason={}", chatId, ex.toString());
         }

@@ -2,8 +2,10 @@ package com.enterprise.iqk.controller;
 
 
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
@@ -42,11 +44,13 @@ public class CustomerServiceController {
         // ReAct 端点计入相同的统计口径。
         long inputTokens = tenantCostService.estimateTokens(prompt);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
-        // 2.请求模型
+        // 2.请求模型（记忆注入：认证主体为 user 键，advisor 组装期插"已知记忆" system 消息）
         String answer = serviceChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .user(prompt)
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId)
+                        .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId)
+                        .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId(chatId)))
                 .call()
                 .content();
         long outputTokens = tenantCostService.estimateTokens(answer);

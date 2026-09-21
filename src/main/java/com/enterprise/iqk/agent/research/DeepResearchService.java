@@ -2,6 +2,8 @@ package com.enterprise.iqk.agent.research;
 
 import com.enterprise.iqk.agent.workflow.AgentWorkflowEngine;
 import com.enterprise.iqk.agent.workflow.WorkflowState;
+import com.enterprise.iqk.memory.MemoryItemRecord;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.security.TenantContext;
@@ -33,6 +35,8 @@ public class DeepResearchService {
     private final HybridRetrievalService hybridRetrievalService;
     private final AgentWorkflowEngine workflowEngine;
     private final MeterRegistry meterRegistry;
+    /** 记忆子系统：召回租户内早前任务结论（task 层读侧），拆题时避免重复已解决的问题。 */
+    private final MemoryService memoryService;
 
     /** 执行完整研究剧本并全程留痕；返回报告全文，失败时置任务 FAILED 后重抛原异常。 */
     public DeepResearchResult executeResearch(ResearchTaskRequest request, String tenantId) {
@@ -47,8 +51,11 @@ public class DeepResearchService {
             workflowEngine.transitionStatus(task.getTaskId(), WorkflowState.PLANNING, WorkflowState.SEARCHING);
             var planStep = workflowEngine.startStep(task.getTaskId(), "ResearchPlanner", 1,
                     Map.of("topic", request.getTopic()));
+            // 召回租户内最近任务结论注入拆题（task 层记忆的读侧闭环）：
+            // 早前研究已得出的结论不重复拆题，尽力而为，失败按无结论降级。
             ResearchPlannerAgent.ResearchPlan plan = plannerAgent.plan(
-                    request.getTopic(), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
+                    request.getTopic(), recallPriorFindings(normalizedTenant),
+                    "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(planStep.getStepId(), "COMPLETED",
                     Map.of("subQuestions", plan.subQuestions(), "strategy", plan.strategy()),
                     plan, null, null, null, 0, 0,
@@ -110,6 +117,25 @@ public class DeepResearchService {
             workflowEngine.recordTaskMetrics("DEEP_RESEARCH", "FAILED",
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs));
             throw e;
+        }
+    }
+
+    /** 召回租户内最近 5 条任务结论拼成参考文本（每条截 200 字符）；无结论或失败返回空串。 */
+    private String recallPriorFindings(String tenantId) {
+        try {
+            List<MemoryItemRecord> memories = memoryService.queryRecentTaskMemories(tenantId, 5);
+            if (memories == null || memories.isEmpty()) {
+                return "";
+            }
+            StringBuilder findings = new StringBuilder();
+            for (MemoryItemRecord memory : memories) {
+                String content = memory.getContent() == null ? "" : memory.getContent();
+                findings.append("- ").append(content, 0, Math.min(200, content.length())).append("\n");
+            }
+            return findings.toString();
+        } catch (Exception ex) {
+            log.warn("任务结论召回失败（不影响研究主链路）: reason={}", ex.toString());
+            return "";
         }
     }
 

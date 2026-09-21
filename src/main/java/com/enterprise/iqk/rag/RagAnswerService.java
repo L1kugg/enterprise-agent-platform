@@ -3,7 +3,9 @@ package com.enterprise.iqk.rag;
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -78,12 +80,17 @@ public class RagAnswerService {
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag", normalizedTenantId, chatId);
             long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
             tenantCostService.assertBudget(normalizedTenantId, decision.costTier(), inputTokens, 600);
+            // 记忆注入：认证主体为 user 键（匿名回落 chatId），advisor 组装期插
+            // "已知记忆" system 消息（long/fact 跨会话视图，short 留给 ChatMemory）。
+            String memoryUserKey = UserContext.currentUserId(chatId);
             String answer = chatClient.prompt()
                     .options(ChatOptions.builder().model(decision.model())
                             .temperature(ragProperties.getTemperature()).build())
                     .system(SystemConstants.RAG_ANSWER_SYSTEM)
                     .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId)
+                        .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, normalizedTenantId)
+                        .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, memoryUserKey))
                     .call()
                     .content();
             long outputTokens = tenantCostService.estimateTokens(answer);

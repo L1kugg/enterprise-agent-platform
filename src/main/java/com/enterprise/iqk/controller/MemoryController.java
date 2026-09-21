@@ -35,7 +35,7 @@ public class MemoryController {
     /**
      * 查询记忆：不传 type 返回三类聚合；传 type 只返回该类。
      *
-     * @param userId 记忆的用户键（当前实现为会话 chatId）
+     * @param userId 记忆的用户键（认证主体；匿名会话的历史数据为 chatId）
      * @param type   short / long / fact，可选
      */
     @GetMapping("/query")
@@ -56,6 +56,15 @@ public class MemoryController {
                     DEFAULT_FACT_MIN_CONFIDENCE, limit));
         }
         return response;
+    }
+
+    /**
+     * 查询任务关联记忆：按 taskId 精确召回该任务沉淀的结论（30 天内），
+     * 供任务详情页 / 重跑前查看"上次研究到什么"。
+     */
+    @GetMapping("/task/{taskId}")
+    public List<MemoryItemRecord> taskMemories(@PathVariable("taskId") String taskId) {
+        return memoryService.queryTaskMemory(TenantContext.currentTenantId(), taskId);
     }
 
     /**

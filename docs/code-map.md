@@ -92,7 +92,8 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `MemoryService.java` | 统一入口：`saveShortMemory/saveLongMemory/saveTaskMemory/saveFactMemory`（:27-49）、按层查询（:77-92）、`buildContext()` 召回快照（:99-124，5/10/5 条上限 + fact 复验 0.7 + USE 事件留痕）、`cleanExpiredMemories()` 凌晨 3 点清理（:128）、事件读写 `emitEvent/getEvents`（:146-164） |
+| `MemoryService.java` | 统一入口：`saveShortMemory/saveLongMemory/saveTaskMemory/saveFactMemory`（:27-49）、按层查询（:77-92）、`buildContext()` 召回快照（:99-124，5/10/5 条上限 + fact 复验 0.7 + USE 事件留痕）、`queryRecentTaskMemories()` 租户最近任务结论（深度研究拆题注入）、`cleanExpiredMemories()` 凌晨 3 点清理（:128）、事件读写 `emitEvent/getEvents`（:146-164） |
+| `MemoryInjectionAdvisor.java` | advisor 注入：请求组装期把记忆快照插成 prompt 首部独立 SystemMessage —— user 消息保持原文，MessageChatMemoryAdvisor 存的仍是原始对话，会话历史不逐轮累积记忆段；调用方传 `memory.tenantId`+`memory.userId` 参数显式 opt-in，未传参/召回失败一律透传 |
 | `MemoryItemRecord.java` | memory_item 表：type 区分四层、expiresAt 控生命周期、confidence、source 来源追溯 |
 | `MemoryEventRecord.java` | memory_event 表：CREATE/UPDATE/DELETE/EXPIRE/HIT/USE 事件溯源 |
 
@@ -109,7 +110,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 位置 | 内容 |
 |---|---|
-| `controller/ChatController.java` | `trackedChatStream` 的 `doFinally`（ON_COMPLETE）→ `ChatTurnMemoryRecorder.recordTurn` + `MemoryExtractionService.submitAsync` |
+| `controller/ChatController.java` | `trackedChatStream` 的 `doFinally`（ON_COMPLETE）→ `ChatTurnMemoryRecorder.recordTurn` + `MemoryExtractionService.submitAsync`；生成调用带 `memory.tenantId`/`memory.userId` advisor 参数（user 键 = 认证主体，匿名回落 chatId），记忆由 MemoryInjectionAdvisor 注入 |
 | `agent/workflow/AgentWorkflowEngine.java` | `completeTask`（finalStatus==DONE）→ `TaskConclusionMemoryRecorder.recordConclusion`；FAILED 不写 |
 | `rag/HybridRagAnswerService.java` | Step 2.5 事实沉淀（:83）+ Step 4.5 召回注入（:93-97）；`recallMemory()` 失败降级 null（:150-157） |
 
@@ -161,7 +162,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 主题 | 代码位置 |
 |---|---|
 | 生成 prompt 三段式拼装 | `rag/HybridRagAnswerService.java:109`：`"用户问题:%n%s%n%n上下文:%n%s%s%s%n"`（问题 → 检索证据 → 记忆段）；`buildContext()`（:176）证据 `[n] source=... chunk=...` 格式化 |
-| 记忆注入 | `memory/MemoryService.buildContext()`（:99-124，`includeShort` 变体供挂 ChatMemory 的链路裁剪）→ memorySection `"\n\n已知记忆:\n"+…`；注入预算：short 5 / long 10 / fact 5 条。三条链路已接：评测（HybridRagAnswerService:99-105 全量）、chat（ChatController.recallMemorySection，long/fact）、react（ReactAgentService.recallMemory 全量 + 成稿写回 short + memoryUsed 上报） |
+| 记忆注入 | 两种方式：**advisor 注入**（`memory/MemoryInjectionAdvisor`，chat/客服/PDF RAG/工作流 ReAct 四链路 —— SystemMessage 首插不落 ChatMemory、不逐轮累积）与**手工拼段**（评测 HybridRagAnswerService / react ReactAgentService —— 无 ChatMemory 的链路拼 user prompt 无重放问题）。user 键 = `security/UserContext.currentUserId(fallback)` 认证主体（匿名回落 chatId），画像跨会话可召回；注入预算：short 5 / long 10 / fact 5 条 |
 | System prompt | `constants/SystemConstants.java`：CUSTOMER_SERVICE_SYSTEM（客服小星）、RAG_ANSWER_SYSTEM、HYBRID_RAG_ANSWER_SYSTEM |
 | 会话内记忆 | `config/MysqlChatMemory.java` + `repository/`（ChatHistoryRepository 的 InMemory/Mysql 实现）+ `util/ConversationIdHelper`（会话 ID 派生：prefix+chatId） |
 | 上下文预算（工具侧） | `HarnessPayloadSanitizer`（观测裁剪）、`HttpMcpToolAdapter` 2MiB 响应上限、`WorkspaceRuntime` 搜索截断/文件大小上限 |
@@ -212,7 +213,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 |---|---|---|
 | `agent/harness/`（10 个） | ActionPolicyGuardTest、AgentHarnessServiceTest、AgentObservationTest、BuiltinToolRuntimeTest、HarnessEvaluationTest、HarnessEventRecorderTest、HttpMcpToolAdapterTest、McpToolRuntimeTest、TrustedActionServiceTest、WorkspaceRuntimeTest | 策略守卫、动作分发、SSRF 防护、工作区安全 |
 | `agent/workflow/` | AgentWorkflowEngineTenantIsolationTest | 引擎租户隔离 + DONE 才写任务记忆 |
-| `memory/`（5 个） | MemoryServiceTenantIsolationTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离 |
+| `memory/`（6 个） | MemoryServiceTenantIsolationTest、MemoryInjectionAdvisorTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离；advisor 注入契约（system 首插/user 原文不动/未传参透传/召回失败降级） |
 | `rag/` | HybridRagAnswerServiceMemoryTest | 记忆注入断言 + 召回失败降级 |
 | `controller/`、`service/` | ChatControllerMemoryTest、ReactAgentServiceTest | chat/react 链路记忆注入断言、原始 prompt 写回（防自我循环）+ 召回失败降级 |
 | `retrieval/`（3 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest | 加权融合、去重计数、分数下限 |
@@ -235,5 +236,5 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 评测 API | EvaluationController → EvaluationService → HybridRagAnswerService（四路混合 + 证据判分 + 记忆注入 + 引用） |
 | React SSE | ReactController → ReactAgentService（reason/execute/summarize 循环）→ AgentHarnessService → 各 Runtime |
 | 深度研究 | DeepResearchController → DeepResearchService（剧本）→ AgentWorkflowEngine（状态机落库）→ Planner/Writer Agent |
-| 记忆管理 | MemoryController → MemoryService（查询/事件/写入） |
+| 记忆管理 | MemoryController → MemoryService（按 userId 查询/任务结论查询 /task/{taskId}/事件链/写入） |
 | 文档入库 | IngestionController → IngestionService → 队列（RabbitMQ/Redis Stream/DB 轮询）→ IngestionWorker |

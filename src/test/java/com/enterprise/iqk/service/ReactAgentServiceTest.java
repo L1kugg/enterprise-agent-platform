@@ -129,8 +129,9 @@ class ReactAgentServiceTest {
                 .contains("用户是 Java 后端开发者");
         // memoryUsed 上报实际注入的记忆
         assertThat(response.getMemoryUsed()).contains("long: 画像: 用户是 Java 后端开发者");
-        // 成稿写回 short 记忆（写侧闭环）：存的是用户原始问题与最终答案
-        verify(recorder).recordTurn(anyString(), eq("chat-1"), eq("帮我推荐一门课"), eq("推荐《Java并发实战》"));
+        // 成稿写回 short 记忆（写侧闭环）：user 键（匿名回落 chatId）+ 用户原始问题与最终答案
+        verify(recorder).recordTurn(anyString(), eq("chat-1"), eq("chat-1"),
+                eq("帮我推荐一门课"), eq("推荐《Java并发实战》"));
     }
 
     @Test

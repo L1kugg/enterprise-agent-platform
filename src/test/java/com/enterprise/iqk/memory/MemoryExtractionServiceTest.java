@@ -58,10 +58,10 @@ class MemoryExtractionServiceTest {
     void upgradesToLongMemoryWhenModelDetectsProfile() {
         setUp("{\"isProfile\":true,\"memory\":\"用户是 Java 后端开发者，正在学习 AI Agent 开发\"}");
 
-        service.extract("tenant-1", "chat-1", "我是做Java后端的，想学Agent开发", "推荐如下…");
+        service.extract("tenant-1", "user-1", "chat-1", "我是做Java后端的，想学Agent开发", "推荐如下…");
 
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
-        verify(memoryService).saveLongMemory(eq("tenant-1"), eq("chat-1"), content.capture(),
+        verify(memoryService).saveLongMemory(eq("tenant-1"), eq("user-1"), content.capture(),
                 eq("extract:chat:chat-1"));
         assertThat(content.getValue())
                 .startsWith("画像: ")
@@ -75,7 +75,7 @@ class MemoryExtractionServiceTest {
     void doesNotUpgradeWhenVerdictIsNegative() {
         setUp("{\"isProfile\":false,\"memory\":\"\"}");
 
-        service.extract("tenant-1", "chat-1", "Redis 缓存穿透怎么解决", "方案是…");
+        service.extract("tenant-1", "user-1", "chat-1", "Redis 缓存穿透怎么解决", "方案是…");
 
         verify(memoryService, never()).saveLongMemory(anyString(), anyString(), anyString(), anyString());
     }
@@ -84,7 +84,7 @@ class MemoryExtractionServiceTest {
     void doesNotUpgradeWhenResponseIsUnparsable() {
         setUp("这不是 JSON，模型偶尔会这样回答");
 
-        assertThatCode(() -> service.extract("tenant-1", "chat-1", "我喜欢用 IDEA", "嗯"))
+        assertThatCode(() -> service.extract("tenant-1", "user-1", "chat-1", "我喜欢用 IDEA", "嗯"))
                 .doesNotThrowAnyException();
         verify(memoryService, never()).saveLongMemory(anyString(), anyString(), anyString(), anyString());
     }
@@ -97,7 +97,7 @@ class MemoryExtractionServiceTest {
                         .content("画像: 用户是 Java 后端开发者，主攻微服务")
                         .build()));
 
-        service.extract("tenant-1", "chat-1", "我是做Java后端的", "推荐…");
+        service.extract("tenant-1", "user-1", "chat-1", "我是做Java后端的", "推荐…");
 
         verify(memoryService, never()).saveLongMemory(anyString(), anyString(), anyString(), anyString());
     }
@@ -107,7 +107,7 @@ class MemoryExtractionServiceTest {
         setUp("unused");
         when(chatClient.prompt()).thenThrow(new RuntimeException("llm down"));
 
-        assertThatCode(() -> service.extract("tenant-1", "chat-1", "我是做Java后端的", "推荐…"))
+        assertThatCode(() -> service.extract("tenant-1", "user-1", "chat-1", "我是做Java后端的", "推荐…"))
                 .doesNotThrowAnyException();
         verify(memoryService, never()).saveLongMemory(anyString(), anyString(), anyString(), anyString());
     }
@@ -128,7 +128,7 @@ class MemoryExtractionServiceTest {
     void submitAsyncSkipsBlankPromptWithoutCallingModel() {
         setUp("unused");
 
-        service.submitAsync("tenant-1", "chat-1", "   ", "answer");
+        service.submitAsync("tenant-1", "user-1", "chat-1", "   ", "answer");
 
         verify(chatClient, never()).prompt();
     }

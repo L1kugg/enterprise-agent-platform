@@ -76,13 +76,15 @@ public class MemoryExtractionService {
     /**
      * 对话主链路只调这个方法：把提取任务丢进线程池立即返回，
      * 保证记忆提取永远不会拖慢对话响应。
+     * userKey 是记忆的 user 键（认证主体，匿名回落 chatId）——画像按人存，
+     * 跨会话可召回；chatId 仅用于路由分桶与 source 溯源。
      */
-    public void submitAsync(String tenantId, String chatId, String prompt, String answer) {
+    public void submitAsync(String tenantId, String userKey, String chatId, String prompt, String answer) {
         if (!StringUtils.hasText(prompt)) {
             return;
         }
         try {
-            executor.execute(() -> extract(tenantId, chatId, prompt, answer));
+            executor.execute(() -> extract(tenantId, userKey, chatId, prompt, answer));
         } catch (Exception ex) {
             // 线程池饱和或已关闭时直接放弃，画像提取是尽力而为
             log.warn("画像提取任务提交失败（不影响对话）: chatId={}, reason={}", chatId, ex.toString());
@@ -91,10 +93,10 @@ public class MemoryExtractionService {
 
     /**
      * 同步提取逻辑（包内可见，便于直接测试）：
-     * 模型判定 -> JSON 解析 -> 去重 -> 写入 long 记忆 -> 记账。
+     * 模型判定 -> JSON 解析 -> 去重 -> 写入 long 记忆（user 键 = userKey）-> 记账。
      * 全程 try/catch，任何一步失败都按"不升级"收场。
      */
-    void extract(String tenantId, String chatId, String prompt, String answer) {
+    void extract(String tenantId, String userKey, String chatId, String prompt, String answer) {
         try {
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(
                     "economy", EXTRACTION_ENDPOINT, tenantId, chatId);
@@ -123,10 +125,10 @@ public class MemoryExtractionService {
                 return;
             }
             String memory = truncate(verdict.memory(), MAX_MEMORY_CHARS);
-            if (isDuplicate(memoryService.queryLongMemory(tenantId, chatId, LONG_MEMORY_SCAN_LIMIT), memory)) {
+            if (isDuplicate(memoryService.queryLongMemory(tenantId, userKey, LONG_MEMORY_SCAN_LIMIT), memory)) {
                 return;
             }
-            memoryService.saveLongMemory(tenantId, chatId, "画像: " + memory,
+            memoryService.saveLongMemory(tenantId, userKey, "画像: " + memory,
                     "extract:chat:" + chatId);
         } catch (Exception ex) {
             log.warn("画像提取失败（不影响对话）: chatId={}, reason={}", chatId, ex.toString());

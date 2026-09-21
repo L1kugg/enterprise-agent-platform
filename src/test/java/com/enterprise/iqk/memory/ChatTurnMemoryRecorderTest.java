@@ -20,7 +20,7 @@ class ChatTurnMemoryRecorderTest {
         String longPrompt = "p".repeat(500);
         String longAnswer = "a".repeat(1000);
 
-        recorder.recordTurn("tenant-1", "chat-1", longPrompt, longAnswer);
+        recorder.recordTurn("tenant-1", "user-1", "chat-1", longPrompt, longAnswer);
 
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
         verify(memoryService).saveShortMemory(anyString(), anyString(), content.capture(), anyString());
@@ -34,7 +34,7 @@ class ChatTurnMemoryRecorderTest {
         MemoryService memoryService = mock(MemoryService.class);
         ChatTurnMemoryRecorder recorder = new ChatTurnMemoryRecorder(memoryService);
 
-        recorder.recordTurn("tenant-1", "chat-1", "hello   world", "answer\nwith\nnewlines");
+        recorder.recordTurn("tenant-1", "user-1", "chat-1", "hello   world", "answer\nwith\nnewlines");
 
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
         verify(memoryService).saveShortMemory(anyString(), anyString(), content.capture(), anyString());
@@ -47,8 +47,8 @@ class ChatTurnMemoryRecorderTest {
         MemoryService memoryService = mock(MemoryService.class);
         ChatTurnMemoryRecorder recorder = new ChatTurnMemoryRecorder(memoryService);
 
-        recorder.recordTurn("tenant-1", "chat-1", "question", "   ");
-        recorder.recordTurn("tenant-1", "chat-1", "", "answer");
+        recorder.recordTurn("tenant-1", "user-1", "chat-1", "question", "   ");
+        recorder.recordTurn("tenant-1", "user-1", "chat-1", "", "answer");
 
         verify(memoryService, never()).saveShortMemory(anyString(), anyString(), anyString(), anyString());
     }
@@ -60,7 +60,7 @@ class ChatTurnMemoryRecorderTest {
                 .thenThrow(new RuntimeException("db down"));
         ChatTurnMemoryRecorder recorder = new ChatTurnMemoryRecorder(memoryService);
 
-        assertThatCode(() -> recorder.recordTurn("tenant-1", "chat-1", "q", "a"))
+        assertThatCode(() -> recorder.recordTurn("tenant-1", "user-1", "chat-1", "q", "a"))
                 .doesNotThrowAnyException();
     }
 }

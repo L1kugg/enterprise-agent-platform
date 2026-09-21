@@ -107,6 +107,12 @@ public class MemoryService {
         return itemMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
     }
 
+    /** 查询租户内最近的未过期 task 结论（写入时置信度 0.9，复用 0.7 复验门槛），供新任务拆题时参考。 */
+    public List<MemoryItemRecord> queryRecentTaskMemories(String tenantId, int limit) {
+        return itemMapper.findByTypeAndConfidence(
+                TenantContext.normalize(tenantId), "task", 0.7, limit);
+    }
+
     /** 查询租户内置信度不低于 minConfidence 的未过期 fact 记忆（召回侧复验门槛 0.7）。 */
     public List<MemoryItemRecord> queryFactMemory(String tenantId, double minConfidence, int limit) {
         return itemMapper.findByTypeAndConfidence(
