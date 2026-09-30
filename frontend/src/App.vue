@@ -172,18 +172,14 @@
               <el-input v-model="tenantInput" placeholder="public" />
             </el-form-item>
             <el-form-item label="Model Profile">
-              <el-segmented
-                v-model="modelProfile"
-                :options="[
-                  'economy',
-                  'balanced',
-                  'quality',
-                  'ab_auto',
-                  'quality_first',
-                  'cost_first',
-                ]"
-                class="full-width"
-              />
+              <el-select v-model="modelProfile" class="full-width">
+                <el-option label="economy（经济档 qwen-turbo）" value="economy" />
+                <el-option label="balanced（均衡档 qwen-plus）" value="balanced" />
+                <el-option label="quality（质量档 qwen-max）" value="quality" />
+                <el-option label="ab_auto（A/B 自动对比实验）" value="ab_auto" />
+                <el-option label="quality_first（固定最高档）" value="quality_first" />
+                <el-option label="cost_first（固定最低档）" value="cost_first" />
+              </el-select>
             </el-form-item>
             <el-form-item label="响应模式">
               <el-switch v-model="streaming" inline-prompt active-text="SSE" inactive-text="JSON" />
