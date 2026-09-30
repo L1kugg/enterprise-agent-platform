@@ -227,3 +227,26 @@ export interface EvalComparison {
   baseline?: EvalRun | null;
   current?: EvalRun | null;
 }
+
+export type IngestionJobStatus = 'PENDING' | 'RUNNING' | 'RETRY' | 'SUCCEEDED' | 'FAILED';
+
+export interface IngestionJob {
+  jobId: string;
+  chatId: string;
+  sourceName: string;
+  status: IngestionJobStatus;
+  attemptCount?: number;
+  maxRetries?: number;
+  errorMessage?: string;
+  traceId?: string;
+  queueBackend?: string;
+  createdAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface IngestionSubmitResponse {
+  ok: number;
+  msg: string;
+  job?: IngestionJob;
+}

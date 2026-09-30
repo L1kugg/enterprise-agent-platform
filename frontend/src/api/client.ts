@@ -11,6 +11,8 @@ import type {
   EvalRun,
   EvalRunRequest,
   FeedbackRequest,
+  IngestionJob,
+  IngestionSubmitResponse,
   ReactChatRequest,
   ReactChatResponse,
   ReactStreamEvent,
@@ -586,6 +588,82 @@ export async function exportEvalRunReport(runId: string, auth?: AuthContext): Pr
   const text = await response.text();
   if (!response.ok) {
     throw formatHttpError(response.status, text || 'export evaluation report failed');
+  }
+  return text;
+}
+
+export async function uploadIngestionPdf(
+  chatId: string,
+  file: File,
+  auth?: AuthContext,
+): Promise<IngestionSubmitResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(resolveApi(`/ingestion/upload/${encodeURIComponent(chatId)}`), {
+    credentials: 'include',
+    method: 'POST',
+    // 不手动设 Content-Type：multipart 的边界串由浏览器自动生成
+    headers: buildAuthHeaders(auth),
+    body: form,
+  });
+  const payload = await parseJsonSafely<IngestionSubmitResponse>(response);
+  if (!response.ok || !payload || payload.ok !== 1) {
+    throw formatHttpError(response.status, payload?.msg ?? 'upload pdf failed');
+  }
+  return payload;
+}
+
+export async function listRecentIngestionJobs(auth?: AuthContext, limit = 20): Promise<IngestionJob[]> {
+  const response = await fetch(resolveApi(withQuery('/ingestion/jobs/recent', { limit })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<IngestionJob[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list ingestion jobs failed');
+  }
+  return payload;
+}
+
+export async function deleteIngestionDocument(chatId: string, auth?: AuthContext): Promise<string> {
+  const response = await fetch(resolveApi(`/ingestion/documents/${encodeURIComponent(chatId)}`), {
+    credentials: 'include',
+    method: 'DELETE',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<BasicResult>(response);
+  if (!response.ok || !payload || payload.ok !== 1) {
+    throw formatHttpError(response.status, payload?.msg ?? 'delete document failed');
+  }
+  return payload.msg;
+}
+
+/** 知识库问答：后端同步计算答案，返回纯文本（含引用脚注）。 */
+export async function pdfChat(
+  prompt: string,
+  chatId: string,
+  options?: { docOnly?: boolean; modelProfile?: string },
+  auth?: AuthContext,
+): Promise<string> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ai/pdf/chat', {
+        prompt,
+        chatId,
+        modelProfile: options?.modelProfile,
+        docOnly: options?.docOnly,
+      }),
+    ),
+    {
+      credentials: 'include',
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const text = await response.text();
+  if (!response.ok) {
+    throw formatHttpError(response.status, text || 'pdf chat failed');
   }
   return text;
 }

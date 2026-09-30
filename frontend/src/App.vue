@@ -24,6 +24,20 @@
         >
           Evaluation
         </button>
+        <button
+          type="button"
+          :class="{ active: activeView === 'knowledge' }"
+          @click="activateView('knowledge')"
+        >
+          知识库
+        </button>
+        <button
+          type="button"
+          :class="{ active: activeView === 'pdfchat' }"
+          @click="activateView('pdfchat')"
+        >
+          文档问答
+        </button>
       </div>
 
       <section class="session-tools">
@@ -545,6 +559,168 @@
         </footer>
       </template>
 
+      <section v-else-if="activeView === 'knowledge'" class="knowledge-page">
+        <aside class="eval-side-panel">
+          <div class="eval-panel-head">
+            <div>
+              <p class="section-label">文档入库</p>
+              <strong>知识库</strong>
+            </div>
+          </div>
+
+          <el-upload
+            v-model:file-list="knowledgeUploadFiles"
+            class="knowledge-uploader"
+            drag
+            accept=".pdf"
+            :auto-upload="false"
+            :limit="1"
+            :on-exceed="() => ElMessage.warning('一次只能传一个文件，先移除已选文件')"
+          >
+            <p class="uploader-title">点击或拖拽 PDF 到这里</p>
+            <p class="uploader-sub">上传后自动切分、向量化并入知识库</p>
+          </el-upload>
+
+          <el-button
+            type="primary"
+            :loading="knowledgeUploading"
+            :disabled="knowledgeUploadFiles.length === 0"
+            @click="submitKnowledgeUpload"
+            >提交入库</el-button
+          >
+
+          <p class="knowledge-tip">入库是异步的：提交后等状态变成 SUCCEEDED 才能被检索到；失败会自动重试。</p>
+        </aside>
+
+        <section v-loading="knowledgeLoading" class="eval-main-panel">
+          <div class="knowledge-list-head">
+            <p class="section-label">入库任务（最近 20 条）</p>
+            <el-button size="small" @click="loadKnowledgeJobs()">刷新</el-button>
+          </div>
+          <el-table :data="knowledgeJobs" height="100%" empty-text="还没有入库记录，先上传一个 PDF">
+            <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="重试" width="80">
+              <template #default="{ row }">{{ row.attemptCount ?? 0 }}/{{ row.maxRetries ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="上传时间" width="120">
+              <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="errorMessage" label="错误" min-width="160" show-overflow-tooltip />
+            <el-table-column label="操作" width="90">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </section>
+      </section>
+
+      <section v-else-if="activeView === 'pdfchat'" class="pdfchat-page">
+        <aside class="eval-side-panel">
+          <div class="eval-panel-head">
+            <div>
+              <p class="section-label">选择提问范围</p>
+              <strong>文档问答</strong>
+            </div>
+          </div>
+
+          <el-upload
+            v-model:file-list="pdfUploadFiles"
+            class="knowledge-uploader"
+            drag
+            accept=".pdf"
+            :auto-upload="false"
+            :limit="1"
+            :on-exceed="() => ElMessage.warning('一次只能传一个文件，先移除已选文件')"
+          >
+            <p class="uploader-title">+ 上传新 PDF</p>
+            <p class="uploader-sub">入库成功后可直接就着它提问</p>
+          </el-upload>
+          <el-button
+            type="primary"
+            :loading="pdfUploading"
+            :disabled="pdfUploadFiles.length === 0"
+            @click="onPdfPageUpload"
+            >上传并入库</el-button
+          >
+
+          <div class="eval-dataset-list pdf-scope-list">
+            <button type="button" :class="{ active: pdfActiveChatId === '' }" @click="pdfActiveChatId = ''">
+              <span>整个知识库</span>
+              <small>在所有文档里检索答案</small>
+            </button>
+            <button
+              v-for="doc in pdfDocs"
+              :key="doc.chatId"
+              type="button"
+              :class="{ active: pdfActiveChatId === doc.chatId }"
+              @click="pdfActiveChatId = doc.chatId"
+            >
+              <span>{{ doc.sourceName }}</span>
+              <small>{{ formatJobTime(doc.createdAt) }} · 仅检索这份文档</small>
+            </button>
+            <div v-if="!pdfDocs.length" class="session-empty">还没有入库成功的文档</div>
+          </div>
+        </aside>
+
+        <section class="eval-main-panel pdfchat-main">
+          <div class="knowledge-list-head">
+            <p class="section-label">
+              {{ pdfActiveChatId ? `正在问：${pdfDocName(pdfActiveChatId)}` : '正在问：整个知识库' }}
+            </p>
+          </div>
+
+          <div ref="pdfMessageContainer" class="pdfchat-messages">
+            <div v-if="!pdfActiveMessages.length" class="pdfchat-empty">
+              选好范围，问点什么吧。回答基于知识库检索生成，末尾附引用来源。
+            </div>
+            <article
+              v-for="m in pdfActiveMessages"
+              :key="m.id"
+              class="message-row"
+              :class="m.role"
+            >
+              <div class="avatar">{{ m.role === 'user' ? 'U' : 'AI' }}</div>
+              <div class="bubble-wrap">
+                <div class="bubble">
+                  <div v-if="m.role === 'assistant' && !m.content" class="assistant-skeleton">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                  </div>
+                  <!-- eslint-disable-next-line vue/no-v-html -->
+                  <div v-else class="markdown" v-html="renderMarkdown(m.content)"></div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="pdfchat-composer">
+            <el-input
+              v-model="pdfPrompt"
+              type="textarea"
+              :rows="2"
+              resize="none"
+              placeholder="基于知识库提问，Ctrl+Enter 发送"
+              @keydown.ctrl.enter.prevent="sendPdfQuestion"
+            />
+            <el-button
+              type="primary"
+              :loading="pdfAnswering"
+              :disabled="!pdfPrompt.trim()"
+              @click="sendPdfQuestion"
+              >发送</el-button
+            >
+          </div>
+        </section>
+      </section>
+
       <section v-else class="evaluation-page">
         <aside class="eval-side-panel">
           <div class="eval-panel-head">
@@ -655,17 +831,21 @@ import sqlLang from 'highlight.js/lib/languages/sql';
 import typescriptLang from 'highlight.js/lib/languages/typescript';
 import xmlLang from 'highlight.js/lib/languages/xml';
 import yamlLang from 'highlight.js/lib/languages/yaml';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import type { UploadUserFile } from 'element-plus';
 import { marked } from 'marked';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { Ref } from 'vue';
 import {
   compareSessionBranches,
   createEvalDataset,
+  deleteIngestionDocument,
   exchangeApiKey,
   exportEvalRunReport,
   getEvalComparison,
   getTenantCostSummary,
   listEvalDatasets,
+  listRecentIngestionJobs,
   markEvalRunBaseline,
   listSessionStates,
   mergeSessionBranches,
@@ -677,6 +857,8 @@ import {
   streamReactChat,
   submitAnswerFeedback,
   triggerEvalRun,
+  pdfChat,
+  uploadIngestionPdf,
 } from './api/client';
 import type {
   EvalCaseCreate,
@@ -684,6 +866,8 @@ import type {
   EvalDataset,
   EvalMetricSummary,
   EvalRun,
+  IngestionJob,
+  IngestionJobStatus,
   ReactChatResponse,
   ReactErrorEvent,
   ReactTokenEvent,
@@ -738,7 +922,7 @@ interface MessageMetric {
 }
 
 type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
-type ConsoleView = 'chat' | 'evaluation';
+type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'pdfchat';
 
 interface EvalMetricCard {
   key: keyof EvalMetricSummary;
@@ -1058,7 +1242,11 @@ const legacy = safeParse(localStorage.getItem(LEGACY_STORAGE_KEY));
 const bootstrap = Object.keys(cached).length > 0 ? cached : legacy;
 
 const darkMode = ref(Boolean(bootstrap.darkMode));
-const activeView = ref<ConsoleView>(bootstrap.activeView === 'evaluation' ? 'evaluation' : 'chat');
+const activeView = ref<ConsoleView>(
+  ['evaluation', 'knowledge', 'pdfchat'].includes(bootstrap.activeView as string)
+    ? (bootstrap.activeView as ConsoleView)
+    : 'chat',
+);
 const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
 const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
 const token = ref((bootstrap.token as string | undefined) ?? '');
@@ -1127,6 +1315,18 @@ const evalReportExporting = ref(false);
 const evalDatasetName = ref('RAG Evaluation Studio Demo');
 const evalDatasetDescription = ref('RAG baseline regression set');
 const evalDatasetJson = ref(JSON.stringify(DEFAULT_EVAL_DATASET, null, 2));
+const knowledgeJobs = ref<IngestionJob[]>([]);
+const knowledgeLoading = ref(false);
+const knowledgeUploading = ref(false);
+const knowledgeUploadFiles = ref<UploadUserFile[]>([]);
+const pdfDocs = ref<IngestionJob[]>([]);
+const pdfLoading = ref(false);
+const pdfUploading = ref(false);
+const pdfUploadFiles = ref<UploadUserFile[]>([]);
+const pdfActiveChatId = ref('');
+const pdfPrompt = ref('');
+const pdfAnswering = ref(false);
+const pdfMessageContainer = ref<HTMLElement | null>(null);
 
 const messageHeights = ref<Record<string, number>>({});
 const viewportHeight = ref(0);
@@ -1412,6 +1612,255 @@ function activateView(view: ConsoleView): void {
   persistState();
   if (view === 'evaluation' && evalDatasets.value.length === 0 && !evalLoading.value) {
     void loadEvalDatasets();
+  }
+  if (view === 'knowledge' && !knowledgeLoading.value) {
+    void loadKnowledgeJobs();
+  }
+  if (view === 'pdfchat' && !pdfLoading.value) {
+    void loadPdfDocs();
+  }
+}
+
+// ---------- 知识库（文档入库） ----------
+
+function statusTagType(status: IngestionJobStatus): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
+  switch (status) {
+    case 'SUCCEEDED':
+      return 'success';
+    case 'FAILED':
+      return 'danger';
+    case 'RETRY':
+      return 'warning';
+    case 'RUNNING':
+      return 'primary';
+    default:
+      return 'info';
+  }
+}
+
+function formatJobTime(value: string | undefined): string {
+  if (!value) {
+    return '-';
+  }
+  return new Date(value).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+async function loadKnowledgeJobs(silent = false): Promise<void> {
+  if (!silent) {
+    knowledgeLoading.value = true;
+  }
+  try {
+    knowledgeJobs.value = await listRecentIngestionJobs(authContext());
+  } catch (error) {
+    if (!silent) {
+      const message = error instanceof Error ? error.message : '入库任务加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      knowledgeLoading.value = false;
+    }
+  }
+}
+
+async function submitIngestionUpload(
+  files: Ref<UploadUserFile[]>,
+  loading: Ref<boolean>,
+  opts?: { afterUpload?: (chatId: string) => void },
+): Promise<void> {
+  const file = files.value[0]?.raw;
+  if (!(file instanceof File)) {
+    ElMessage.warning('请先选择一个 PDF 文件');
+    return;
+  }
+  loading.value = true;
+  try {
+    // 每次上传独立批次：chatId 用时间戳生成，入库任务按批次隔离
+    const stamp = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const chatId = `doc-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}`;
+    const result = await uploadIngestionPdf(chatId, file, authContext());
+    ElMessage.success(`已提交入库任务 ${shortId(result.job?.jobId ?? '')}，切分入库需要一点时间`);
+    files.value = [];
+    opts?.afterUpload?.(chatId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '上传失败';
+    ElMessage.error(message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function submitKnowledgeUpload(): Promise<void> {
+  return submitIngestionUpload(knowledgeUploadFiles, knowledgeUploading, {
+    afterUpload: () => {
+      void loadKnowledgeJobs(true);
+      startKnowledgePolling();
+    },
+  });
+}
+
+async function removeKnowledgeJob(row: IngestionJob): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${row.sourceName}」？将同时清掉它的向量切片和原文件，不可恢复。`,
+      '删除文档',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    );
+  } catch {
+    return; // 用户点了取消
+  }
+  try {
+    const msg = await deleteIngestionDocument(row.chatId, authContext());
+    ElMessage.success(msg || '已删除');
+    await loadKnowledgeJobs(true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '删除失败';
+    ElMessage.error(message);
+  }
+}
+
+// 有进行中的任务时每 3 秒刷新列表，全部到终态自动停表
+let knowledgePollTimer: number | null = null;
+
+function startKnowledgePolling(): void {
+  if (knowledgePollTimer !== null) {
+    return;
+  }
+  knowledgePollTimer = window.setInterval(() => {
+    const hasActive = knowledgeJobs.value.some(
+      (job) => job.status === 'PENDING' || job.status === 'RUNNING' || job.status === 'RETRY',
+    );
+    if (!hasActive) {
+      stopKnowledgePolling();
+      return;
+    }
+    if (activeView.value === 'knowledge') {
+      void loadKnowledgeJobs(true);
+    }
+  }, 3000);
+}
+
+function stopKnowledgePolling(): void {
+  if (knowledgePollTimer !== null) {
+    window.clearInterval(knowledgePollTimer);
+    knowledgePollTimer = null;
+  }
+}
+
+// ---------- 文档问答（知识库检索问答） ----------
+
+interface PdfChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: number;
+}
+
+// 全库模式用固定 key 存消息；选中文档时 key = 该批次 chatId
+const PDF_ALL_KEY = '__kb_all__';
+
+const pdfMessages = ref<Record<string, PdfChatMessage[]>>({});
+const pdfActiveKey = computed(() => pdfActiveChatId.value || PDF_ALL_KEY);
+const pdfActiveMessages = computed(() => pdfMessages.value[pdfActiveKey.value] ?? []);
+
+async function loadPdfDocs(silent = false): Promise<void> {
+  if (!silent) {
+    pdfLoading.value = true;
+  }
+  try {
+    const jobs = await listRecentIngestionJobs(authContext(), 100);
+    const seen = new Set<string>();
+    const docs: IngestionJob[] = [];
+    for (const job of jobs) {
+      if (job.status !== 'SUCCEEDED' || seen.has(job.chatId)) {
+        continue;
+      }
+      seen.add(job.chatId);
+      docs.push(job);
+    }
+    pdfDocs.value = docs;
+  } catch (error) {
+    if (!silent) {
+      const message = error instanceof Error ? error.message : '文档列表加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      pdfLoading.value = false;
+    }
+  }
+}
+
+function pdfDocName(chatId: string): string {
+  return pdfDocs.value.find((doc) => doc.chatId === chatId)?.sourceName ?? shortId(chatId);
+}
+
+function scrollPdfToBottom(): void {
+  const el = pdfMessageContainer.value;
+  if (el) {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+watch(pdfActiveKey, () => {
+  void nextTick(scrollPdfToBottom);
+});
+
+async function onPdfPageUpload(): Promise<void> {
+  await submitIngestionUpload(pdfUploadFiles, pdfUploading, {
+    afterUpload: (chatId) => {
+      pdfActiveChatId.value = chatId;
+      void loadPdfDocs(true);
+    },
+  });
+}
+
+async function sendPdfQuestion(): Promise<void> {
+  const question = pdfPrompt.value.trim();
+  if (!question || pdfAnswering.value) {
+    return;
+  }
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning('请先完成鉴权后再提问');
+    return;
+  }
+  const key = pdfActiveKey.value;
+  const list = (pdfMessages.value[key] ??= []);
+  const now = Date.now();
+  list.push({ id: `u-${now}`, role: 'user', content: question, createdAt: now });
+  const pendingId = `a-${now}`;
+  list.push({ id: pendingId, role: 'assistant', content: '', createdAt: now });
+  pdfPrompt.value = '';
+  pdfAnswering.value = true;
+  void nextTick(scrollPdfToBottom);
+  try {
+    const answer = await pdfChat(
+      question,
+      pdfActiveChatId.value || 'kb-all',
+      {
+        docOnly: Boolean(pdfActiveChatId.value),
+        modelProfile: modelProfile.value,
+      },
+      authContext(),
+    );
+    const pending = (pdfMessages.value[key] ?? []).find((m) => m.id === pendingId);
+    if (pending) {
+      pending.content = answer;
+    }
+  } catch (error) {
+    const pending = (pdfMessages.value[key] ?? []).find((m) => m.id === pendingId);
+    if (pending) {
+      pending.content = `**出错了**：${error instanceof Error ? error.message : '提问失败'}`;
+    }
+  } finally {
+    pdfAnswering.value = false;
+    void nextTick(scrollPdfToBottom);
   }
 }
 
@@ -2561,11 +3010,20 @@ onMounted(() => {
     void loadEvalDatasets();
   }
 
+  if (activeView.value === 'knowledge') {
+    void loadKnowledgeJobs();
+  }
+
+  if (activeView.value === 'pdfchat') {
+    void loadPdfDocs();
+  }
+
   void scrollToBottom(true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewport);
+  stopKnowledgePolling();
 
   if (resizeObserver) {
     messageRowElements.forEach((element) => {
@@ -3401,6 +3859,96 @@ h2 {
   padding: 14px;
 }
 
+.knowledge-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.knowledge-uploader {
+  width: 100%;
+}
+
+.knowledge-uploader :deep(.el-upload),
+.knowledge-uploader :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.knowledge-uploader :deep(.el-upload-dragger) {
+  padding: 22px 12px;
+}
+
+.knowledge-uploader .uploader-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.knowledge-uploader .uploader-sub {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.knowledge-tip {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-muted);
+}
+
+.knowledge-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pdfchat-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.pdf-scope-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.pdfchat-main {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.pdfchat-messages {
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.pdfchat-empty {
+  padding: 32px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ui-muted);
+}
+
+.pdfchat-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.pdfchat-composer .el-button {
+  height: 54px;
+}
+
 .eval-side-panel,
 .eval-main-panel {
   min-height: 0;
@@ -3778,7 +4326,9 @@ h2 {
     position: static;
   }
 
-  .evaluation-page {
+  .evaluation-page,
+  .knowledge-page,
+  .pdfchat-page {
     grid-template-columns: 1fr;
   }
 
@@ -3806,7 +4356,9 @@ h2 {
     width: 120px;
   }
 
-  .evaluation-page {
+  .evaluation-page,
+  .knowledge-page,
+  .pdfchat-page {
     padding: 12px;
   }
 
