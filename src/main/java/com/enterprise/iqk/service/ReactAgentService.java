@@ -47,7 +47,8 @@ public class ReactAgentService {
     private static final int MAX_STEPS = 4;
 
     private final AgentHarnessService agentHarnessService;
-    private final ChatClient chatClient;
+    /** 内部推理专用客户端（无对话记忆组件），避免未设 CONVERSATION_ID 时记忆断言失败 */
+    private final ChatClient agentChatClient;
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
     private final MeterRegistry meterRegistry;
@@ -424,7 +425,7 @@ public class ReactAgentService {
 
     /** 按路由决策构造带模型选项的 prompt 骨架。 */
     private ChatClient.ChatClientRequestSpec routedPrompt(ModelRouter.ModelRouteDecision decision) {
-        return chatClient.prompt()
+        return agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build());
     }
 

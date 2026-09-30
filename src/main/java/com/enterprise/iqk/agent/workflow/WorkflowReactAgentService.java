@@ -45,7 +45,8 @@ public class WorkflowReactAgentService {
 
     private final AgentWorkflowEngine workflowEngine;
     private final AgentHarnessService agentHarnessService;
-    private final ChatClient chatClient;
+    /** 内部推理专用客户端（无对话记忆组件），避免未设 CONVERSATION_ID 时记忆断言失败 */
+    private final ChatClient agentChatClient;
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
@@ -344,7 +345,7 @@ public class WorkflowReactAgentService {
         long inputTokens = tenantCostService.estimateTokens(system)
                 + tenantCostService.estimateTokens(user);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
-        String output = chatClient.prompt()
+        String output = agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 // 记忆注入：认证主体为 user 键（匿名时空键不注入），advisor 组装期插"已知记忆"system 消息
                 .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
@@ -362,7 +363,7 @@ public class WorkflowReactAgentService {
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         StringBuilder collector = new StringBuilder();
         AtomicBoolean recorded = new AtomicBoolean(false);
-        return chatClient.prompt()
+        return agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
                 .system(system).user(user).stream().content()

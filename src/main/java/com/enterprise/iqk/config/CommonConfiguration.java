@@ -66,6 +66,16 @@ public class CommonConfiguration {
                 .build();
     }
 
+    /** Agent 内部推理专用客户端：多步规划/汇总调用没有会话语义，不挂 MessageChatMemoryAdvisor（它要求 CONVERSATION_ID，缺失会断言失败断流） */
+    @Bean
+    public ChatClient agentChatClient(OpenAiChatModel model, MemoryInjectionAdvisor memoryInjectionAdvisor) {
+        return ChatClient
+                .builder(model)
+                .defaultAdvisors(new SimpleLoggerAdvisor())//帮我记录日志
+                .defaultAdvisors(memoryInjectionAdvisor)//记忆注入：仍支持 MEMORY_TENANT/USER 参数
+                .build();
+    }
+
     @Bean
     public ChatMemory chatMemory(MysqlChatMemory mysqlChatMemory) {
         return mysqlChatMemory;
