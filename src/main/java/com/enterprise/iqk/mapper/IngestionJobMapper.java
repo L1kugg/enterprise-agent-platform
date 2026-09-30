@@ -3,6 +3,7 @@ package com.enterprise.iqk.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.enums.IngestionJobStatus;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -86,6 +87,22 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
     List<IngestionJob> findLatestByChatId(@Param("tenantId") String tenantId,
                                           @Param("chatId") String chatId,
                                           @Param("limit") int limit);
+
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
+    List<IngestionJob> findLatestByTenant(@Param("tenantId") String tenantId,
+                                          @Param("limit") int limit);
+
+    @Delete("""
+            DELETE FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND chat_id = #{chatId}
+            """)
+    int deleteByChatIdAndTenant(@Param("tenantId") String tenantId, @Param("chatId") String chatId);
 
     @Select("""
             SELECT * FROM ingestion_job

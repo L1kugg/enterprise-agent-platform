@@ -15,6 +15,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/ingestion")
@@ -74,6 +76,26 @@ public class IngestionController {
                 .stream()
                 .map(this::toVO)
                 .toList();
+    }
+
+    @GetMapping("/jobs/recent")
+    /** 按租户列出最近入库任务（跨 chatId），供控制台知识库页展示，limit 夹取在 1-100。 */
+    public List<IngestionJobVO> getRecentJobs(@RequestParam(value = "limit", defaultValue = "20") int limit) {
+        return ingestionService.listRecentByTenant(currentTenantId(), Math.max(1, Math.min(limit, 100)))
+                .stream()
+                .map(this::toVO)
+                .toList();
+    }
+
+    @DeleteMapping("/documents/{chatId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    /** ADMIN 删除一个入库批次（文档）：清向量切片 → 删原文件 → 删任务记录，任一失败即中止。 */
+    public Map<String, Object> deleteDocument(@PathVariable String chatId) {
+        List<String> removedFiles = ingestionService.deleteDocumentByChat(currentTenantId(), chatId);
+        return Map.of(
+                "ok", 1,
+                "msg", removedFiles.isEmpty() ? "no document deleted" : "deleted: " + String.join(", ", removedFiles)
+        );
     }
 
     @PostMapping("/jobs/process")

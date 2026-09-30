@@ -23,6 +23,8 @@ import org.springframework.ai.reader.pdf.config.PdfDocumentReaderConfig;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
@@ -36,9 +38,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -128,6 +133,40 @@ public class IngestionService {
     /** 按租户 + chatId 列出最近的入库任务，limit 下限保护为 1。 */
     public List<IngestionJob> listByChatId(String tenantId, String chatId, int limit) {
         return ingestionJobMapper.findLatestByChatId(TenantContext.normalize(tenantId), chatId, Math.max(limit, 1));
+    }
+
+    /** 按租户列出最近入库任务（跨 chatId），供控制台知识库页展示，limit 下限保护为 1。 */
+    public List<IngestionJob> listRecentByTenant(String tenantId, int limit) {
+        return ingestionJobMapper.findLatestByTenant(TenantContext.normalize(tenantId), Math.max(limit, 1));
+    }
+
+    /**
+     * 删除一个入库批次（文档）：先按 tenant + chat 过滤清掉向量切片，再删磁盘原文件与任务记录。
+     * 顺序不能反——向量删除失败直接抛异常中止，保证不出现"任务记录删了、切片还在库里当孤儿"。
+     * 返回本次删除的文件名集合（去重）。
+     */
+    public List<String> deleteDocumentByChat(String tenantId, String chatId) {
+        String normalizedTenantId = TenantContext.normalize(tenantId);
+        List<IngestionJob> jobs = ingestionJobMapper.findLatestByChatId(normalizedTenantId, chatId, 100);
+        if (jobs.isEmpty()) {
+            return List.of();
+        }
+        FilterExpressionBuilder builder = new FilterExpressionBuilder();
+        Filter.Expression scope = builder
+                .and(builder.eq("tenant_id", normalizedTenantId), builder.eq("chat_id", chatId))
+                .build();
+        vectorStore.delete(scope);
+        Set<String> removedFiles = new LinkedHashSet<>();
+        for (IngestionJob job : jobs) {
+            File source = new File(job.getFilePath());
+            if (source.exists() && source.delete()) {
+                removedFiles.add(job.getSourceName());
+            }
+        }
+        ingestionJobMapper.deleteByChatIdAndTenant(normalizedTenantId, chatId);
+        log.info("ingestion document deleted: tenant={}, chatId={}, jobs={}, files={}",
+                normalizedTenantId, chatId, jobs.size(), removedFiles);
+        return new ArrayList<>(removedFiles);
     }
 
     /** 无显式租户的重载：认领租户回退到 MDC（仅适用于 HTTP 请求线程调用）。 */
