@@ -233,14 +233,16 @@ A: 单机 compose 不支持多 app 实例（内存限流与本地文件存储是
 
 Dockerfile 已改为"jar 预构建"模式：镜像内不再跑 Maven，只拷贝现成 jar，服务器更新构建从 2-5 分钟降到几秒。前端镜像仍按源码构建，但源码不变时走缓存、秒级完成。
 
-日常更新流程（只改了后端 Java 代码时）：
+**一键发布（推荐）**：在项目根目录执行 `bash scripts/publish.sh`（Windows PowerShell 用 `scripts\publish.cmd`）——自动完成打包、收集 jar + 前端源码 + 部署配置、上传、解压、重建 app/web 容器，走 SSH 密钥认证全程免密，不用逐个 scp 文件。
+
+手动更新流程（只改了后端 Java 代码时）：
 
 ```bash
 # 1. 本地打包（或 make package）
 mvn -DskipTests package
 
 # 2. 上传 jar（约 80MB；已配置 make deploy-jar 一键打包上传）
-scp target/knowledgeops-agent-1.0-SNAPSHOT.jar root@服务器IP:/opt/knowledgeops-agent/target/
+scp target/knowledgeops-agent-1.0-SNAPSHOT.jar ubuntu@服务器IP:/opt/knowledgeops-agent/target/
 
 # 3. 服务器重建 app 镜像并替换（秒级，不动数据库和其他容器）
 cd /opt/knowledgeops-agent/deploy
