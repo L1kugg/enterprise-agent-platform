@@ -98,11 +98,12 @@ public class PdfController {
                 .body(resource);
     }
 
-    /** 简单版 RAG 问答：同步计算答案后以 Flux 返回最终文本。 */
+    /** 简单版 RAG 问答：同步计算答案后以 Flux 返回最终文本；docOnly=true 时仅在该文档切片内检索。 */
     @PostMapping(value = "/chat", produces = "text/html;charset=UTF-8")
     public Flux<String> chat(@RequestParam("prompt") String prompt,
                              @RequestParam("chatId") String chatId,
-                             @RequestParam(value = "modelProfile", required = false) String modelProfile) {
+                             @RequestParam(value = "modelProfile", required = false) String modelProfile,
+                             @RequestParam(value = "docOnly", required = false, defaultValue = "false") boolean docOnly) {
         String tenantId = currentTenantId();
         chatHistoryRepository.save("pdf", chatId);
         String conversationId = ConversationIdHelper.build("pdf", chatId);
@@ -111,7 +112,8 @@ public class PdfController {
                 tenantId,
                 sanitize(chatId),
                 conversationId,
-                modelProfile
+                modelProfile,
+                docOnly
         );
         return Flux.just(result.getAnswer());
     }

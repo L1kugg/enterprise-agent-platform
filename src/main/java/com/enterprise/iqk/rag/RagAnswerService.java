@@ -48,12 +48,22 @@ public class RagAnswerService {
 
     /** 执行完整问答：检索为空返回固定话术，否则重排选优、预算断言后生成并追加引用脚注。 */
     public RagResult answer(String prompt, String tenantId, String chatId, String conversationId, String modelProfile) {
+        return answer(prompt, tenantId, chatId, conversationId, modelProfile, false);
+    }
+
+    /**
+     * 执行完整问答：检索为空返回固定话术，否则重排选优、预算断言后生成并追加引用脚注。
+     * docScoped=true 时在租户范围内追加 chat_id 硬过滤，只在指定文档的切片里检索
+     * （"只根据这份文档回答"模式）；false 为租户全库共享检索。
+     */
+    public RagResult answer(String prompt, String tenantId, String chatId, String conversationId,
+                            String modelProfile, boolean docScoped) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
         String pipelineOutcome = "error";
 
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
-            String filterExpression = "tenant_id == \"" + escapeFilterValue(normalizedTenantId) + "\"";
+            String filterExpression = tenantFilter(normalizedTenantId, chatId, docScoped);
             SearchRequest request = SearchRequest.builder()
                     .query(prompt)
                     .topK(ragProperties.getRetrieveTopK())
@@ -220,6 +230,14 @@ public class RagAnswerService {
     private String escapeFilterValue(String value) {
         String raw = emptyIfBlank(value);
         return raw.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /** 租户过滤表达式；docScoped 时追加 chat_id 硬过滤，圈定单文档检索范围。 */
+    private String tenantFilter(String tenantId, String chatId, boolean docScoped) {
+        String expression = "tenant_id == \"" + escapeFilterValue(tenantId) + "\"";
+        return docScoped
+                ? expression + " && chat_id == \"" + escapeFilterValue(chatId) + "\""
+                : expression;
     }
 
     /** 生成 "引用来源:" 编号脚注；无引用时返回空串。 */
