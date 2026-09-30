@@ -25,9 +25,3 @@ ALTER TABLE course_reservation
 
 CREATE INDEX idx_course_reservation_tenant_id
   ON course_reservation (tenant_id, id);
-
--- Drop the old school-only city index so the new tenant-leading index can
--- take its place as the dominant lookup path. (city is still indexed via
--- idx_school_tenant_id when queries filter by tenant first.)
--- (no-op if the old index does not exist)
-ALTER TABLE school DROP INDEX city;
