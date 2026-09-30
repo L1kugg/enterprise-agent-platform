@@ -1,6 +1,8 @@
 package com.enterprise.iqk.agent.harness;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
@@ -46,6 +48,8 @@ class WorkspaceRuntimeTest {
     }
 
     @Test
+    // pwd 命令在 Windows 上不存在，真实执行路径只在 Linux/Mac 验证；拒绝路径（平台无关）保留全平台断言
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     void runsOnlyAllowedCommandFamilies() {
         WorkspaceRuntime runtime = new WorkspaceRuntime(workspace);
 
