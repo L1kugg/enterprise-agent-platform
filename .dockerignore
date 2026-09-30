@@ -1,5 +1,6 @@
-# Build artifacts
+# Build artifacts（jar 预构建模式：镜像只 COPY target 下的 jar，其余排除）
 target/
+!target/*.jar
 node_modules/
 frontend/node_modules/
 frontend/dist/

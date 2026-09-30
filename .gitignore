@@ -60,8 +60,14 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
+!.env.production.example
 node_modules/
 dist/
 
 # Local work files (not part of the project, kept out of source control).
 考研入警准备手册.txt
+
+# --- Local runtime / deployment junk ---
+/config/
+/*.log
+/*.tar.gz

@@ -1,16 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM maven:3.9.9-eclipse-temurin-17 AS builder
-WORKDIR /app
-
-COPY pom.xml .
-COPY checkstyle.xml pmd-ruleset.xml spotbugs-exclude.xml owasp-suppressions.xml ./
-COPY src ./src
-
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -DskipTests package -q && \
-    mkdir -p deps && \
-    cp target/*.jar deps/app.jar
-
+# jar 预构建模式：本地/CI 先执行 mvn -DskipTests package，再 docker build。
+# 镜像内不再跑 Maven，服务器更新时构建只需数秒。
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
@@ -23,7 +13,7 @@ RUN apk upgrade --no-cache && \
 
 USER appuser
 
-COPY --from=builder --chown=appuser:appgroup /app/deps/app.jar app.jar
+COPY --chown=appuser:appgroup target/knowledgeops-agent-*.jar app.jar
 
 # Read-only root filesystem support
 VOLUME ["/app/data", "/app/logs"]
