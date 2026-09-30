@@ -41,6 +41,12 @@ public class AgentHarnessProperties {
         // 若需要指向 localhost mock，可在此设置为
         // ["localhost", "127.0.0.1", "::1"] 之类的值。
         private java.util.List<String> allowedHosts = new java.util.ArrayList<>();
+        // 瞬时故障重试次数：网络异常（超时/连接失败）与 5xx 在适配器层
+        // 重试消化，不作为失败观测喂给模型——重试发生在 HTTP 层，
+        // 不消耗模型 token。0 表示关闭重试。
+        private int retryAttempts = 2;
+        // 重试基础退避间隔（毫秒），按重试序号线性递增：第 1 次重试睡 1 倍、第 2 次睡 2 倍。
+        private long retryBackoffMs = 200;
     }
 
     @Data

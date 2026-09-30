@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -24,6 +25,8 @@ import java.util.UUID;
  * 超时全部来自 app.agent-harness.mcp 配置，supports() 五重校验通过才放行调用。
  * 安全线：仅 http(s) + SSRF 地址黑名单（私有/回环/链路本地/云元数据）+ 可选
  * allowed-hosts 白名单 + 2 MiB 响应上限。
+ * 韧性线：瞬时故障（网络异常/5xx）在本层带退避重试消化，重试不经过模型、
+ * 不消耗 token，重试次数与退避间隔来自 app.agent-harness.mcp 配置。
  */
 @Slf4j
 @Component
@@ -66,7 +69,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
                 && serverConfig.getTools().get(tool).isEnabled();
     }
 
-    /** 发 JSON-RPC tools/call：先 SSRF 复检 baseUrl，再按 tool 超时设置请求；非 2xx、超限、异常一律转 status=error 的 Map，不抛异常 */
+    /** 发 JSON-RPC tools/call：先 SSRF 复检 baseUrl，再按 tool 超时设置请求（瞬时故障先本层重试）；非 2xx、超限、异常一律转 status=error 的 Map，不抛异常 */
     @Override
     public Object execute(String server, String tool, Map<String, Object> arguments) {
         try {
@@ -84,7 +87,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response = sendWithRetry(request);
             byte[] bodyBytes = response.body();
             if (bodyBytes.length > MAX_MCP_RESPONSE_BYTES) {
                 return Map.of("status", "error", "message",
@@ -95,9 +98,45 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
                 return Map.of("status", "error", "message", "mcp http status: " + response.statusCode());
             }
             return objectMapper.readValue(bodyStr, Object.class);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt(); // 恢复中断标记，交由上层决定收尾方式
+            return Map.of("status", "error", "message", "mcp http call interrupted");
         } catch (Exception ex) {
             return Map.of("status", "error", "message", "mcp http call failed: " + ex.getMessage());
         }
+    }
+
+    /**
+     * 发送请求并重试瞬时故障：网络 IOException（超时/连接失败）与 5xx 视为可重试，
+     * 4xx 与其余异常原样失败——前者是确定性错误，重试无意义。退避按重试序号
+     * 线性递增（第 1 次睡 1 倍、第 2 次睡 2 倍）。重试全部发生在本层，
+     * 成功后模型无感知，不消耗任何模型 token。
+     */
+    private HttpResponse<byte[]> sendWithRetry(HttpRequest request) throws IOException, InterruptedException {
+        int retries = Math.max(0, harnessProperties.getMcp().getRetryAttempts());
+        long backoffMs = Math.max(0, harnessProperties.getMcp().getRetryBackoffMs());
+        for (int attempt = 0; ; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(backoffMs * attempt);
+            }
+            HttpResponse<byte[]> response;
+            try {
+                response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            } catch (IOException ex) {
+                if (attempt >= retries) {
+                    throw ex;
+                }
+                continue;
+            }
+            if (!isRetryableStatus(response.statusCode()) || attempt >= retries) {
+                return response;
+            }
+        }
+    }
+
+    /** 5xx 是服务端瞬时故障可重试；4xx 是确定性错误（参数/权限），重试无意义 */
+    private static boolean isRetryableStatus(int statusCode) {
+        return statusCode >= 500 && statusCode < 600;
     }
 
     /** 不带 server/tool 的调用直接拒绝（本适配器必须显式指定目标） */
