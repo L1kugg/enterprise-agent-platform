@@ -1,6 +1,7 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.config.properties.SecurityProperties;
+import com.enterprise.iqk.domain.UserAccount;
 import com.enterprise.iqk.security.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +47,8 @@ class AuthControllerWebMvcTest {
     private PermissionService permissionService;
     @MockBean
     private SecurityProperties securityProperties;
+    @MockBean
+    private UserAuthService userAuthService;
 
     @Test
     void shouldIssueAccessAndRefreshTokens() throws Exception {
@@ -67,7 +70,8 @@ class AuthControllerWebMvcTest {
                 .andExpect(jsonPath("$.ok").value(1))
                 .andExpect(jsonPath("$.token").value("jwt-token"))
                 .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
-                .andExpect(jsonPath("$.tenantId").value("tenant-a"));
+                .andExpect(jsonPath("$.tenantId").value("tenant-a"))
+                .andExpect(jsonPath("$.role").value("ADMIN"));
     }
 
     @Test
@@ -83,5 +87,93 @@ class AuthControllerWebMvcTest {
                 .andExpect(jsonPath("$.ok").value(1))
                 .andExpect(jsonPath("$.rawApiKey").value("new-raw"))
                 .andExpect(jsonPath("$.tenantId").value("public"));
+    }
+
+    @Test
+    void shouldRegisterAndIssueSession() throws Exception {
+        UserAccount alice = UserAccount.builder()
+                .id(1L)
+                .username("alice")
+                .tenantId("u-alice")
+                .enabled(1)
+                .build();
+        when(userAuthService.register("alice", "password123")).thenReturn(alice);
+        when(userAuthService.roleNamesOf(alice)).thenReturn(List.of("USER"));
+        when(permissionService.permissionsForRoles(any())).thenReturn(List.of("chat:write", "eval:read"));
+        when(jwtService.issueToken(eq("alice"), any(), any(), eq("u-alice"))).thenReturn("jwt-alice");
+        when(refreshTokenService.issue(eq("alice"), any(), eq("u-alice")))
+                .thenReturn(new RefreshTokenService.RefreshTokenIssueResult("refresh-alice", "u-alice", LocalDateTime.now().plusDays(7)));
+        when(securityProperties.getJwtExpireMinutes()).thenReturn(120);
+
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(1))
+                .andExpect(jsonPath("$.token").value("jwt-alice"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-alice"))
+                .andExpect(jsonPath("$.tenantId").value("u-alice"))
+                .andExpect(jsonPath("$.role").value("USER"));
+    }
+
+    @Test
+    void shouldRejectDuplicateRegistration() throws Exception {
+        when(userAuthService.register("alice", "password123"))
+                .thenThrow(new IllegalArgumentException("username already taken"));
+
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(0))
+                .andExpect(jsonPath("$.msg").value("username already taken"));
+    }
+
+    @Test
+    void shouldRejectRegisterWithMissingFields() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(0))
+                .andExpect(jsonPath("$.msg").value("username and password are required"));
+    }
+
+    @Test
+    void shouldRejectLoginWithWrongPassword() throws Exception {
+        when(userAuthService.verify("alice", "wrong-pass")).thenReturn(null);
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\",\"password\":\"wrong-pass\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(0))
+                .andExpect(jsonPath("$.msg").value("invalid username or password"));
+    }
+
+    @Test
+    void shouldLoginAndIssueSession() throws Exception {
+        UserAccount bob = UserAccount.builder()
+                .id(2L)
+                .username("bob")
+                .tenantId("u-bob")
+                .enabled(1)
+                .build();
+        when(userAuthService.verify("bob", "password123")).thenReturn(bob);
+        when(userAuthService.roleNamesOf(bob)).thenReturn(List.of("USER"));
+        when(permissionService.permissionsForRoles(any())).thenReturn(List.of("chat:write"));
+        when(jwtService.issueToken(eq("bob"), any(), any(), eq("u-bob"))).thenReturn("jwt-bob");
+        when(refreshTokenService.issue(eq("bob"), any(), eq("u-bob")))
+                .thenReturn(new RefreshTokenService.RefreshTokenIssueResult("refresh-bob", "u-bob", LocalDateTime.now().plusDays(7)));
+        when(securityProperties.getJwtExpireMinutes()).thenReturn(120);
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"bob\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(1))
+                .andExpect(jsonPath("$.token").value("jwt-bob"))
+                .andExpect(jsonPath("$.tenantId").value("u-bob"))
+                .andExpect(jsonPath("$.role").value("USER"));
     }
 }

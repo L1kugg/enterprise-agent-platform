@@ -1,7 +1,9 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.config.properties.SecurityProperties;
+import com.enterprise.iqk.domain.UserAccount;
 import com.enterprise.iqk.domain.vo.ApiKeyIssueVO;
+import com.enterprise.iqk.domain.vo.AuthCredentialsVO;
 import com.enterprise.iqk.domain.vo.AuthTokenVO;
 import com.enterprise.iqk.security.ApiKeyAuthService;
 import com.enterprise.iqk.security.ApiKeyLifecycleService;
@@ -10,6 +12,7 @@ import com.enterprise.iqk.security.JwtService;
 import com.enterprise.iqk.security.PermissionService;
 import com.enterprise.iqk.security.RefreshTokenService;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.security.UserAuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,6 +44,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final PermissionService permissionService;
     private final SecurityProperties securityProperties;
+    private final UserAuthService userAuthService;
 
     /**
      * 为 true（默认值）时，refresh token cookie 会标记 Secure 并使用
@@ -72,7 +77,7 @@ public class AuthController {
         // 等配套的 PR（PR B）合入且 App.vue 弃用 localStorage 后，
         // 即可移除响应体中的该字段，且不会在升级过程中破坏旧客户端。
         setRefreshCookie(response, refreshIssue);
-        return buildTokenResponse(token, identityTenant, refreshIssue);
+        return buildTokenResponse(token, identityTenant, refreshIssue, firstRole(identity.getRoles()));
     }
 
     @PostMapping("/refresh")
@@ -91,7 +96,60 @@ public class AuthController {
         String token = jwtService.issueToken(identity.getPrincipal(), identity.getRoles(), permissions, tenantId);
         RefreshTokenService.RefreshTokenIssueResult refreshIssue =
                 refreshTokenService.issue(identity.getPrincipal(), identity.getRoles(), tenantId);
-        return buildTokenResponse(token, tenantId, refreshIssue);
+        return buildTokenResponse(token, tenantId, refreshIssue, firstRole(identity.getRoles()));
+    }
+
+    /** 开放注册：用户名 + 密码 → 建号（USER 角色、私有租户）并直接签发会话。 */
+    @PostMapping("/register")
+    public AuthTokenVO register(@RequestBody(required = false) AuthCredentialsVO request,
+                                HttpServletResponse response) {
+        if (request == null || !StringUtils.hasText(request.getUsername())
+                || !StringUtils.hasText(request.getPassword())) {
+            return AuthTokenVO.builder().ok(0).msg("username and password are required").build();
+        }
+        UserAccount user;
+        try {
+            user = userAuthService.register(request.getUsername(), request.getPassword());
+        } catch (IllegalArgumentException ex) {
+            // 与 /auth/token 的 invalid api key 同一契约：HTTP 200 + ok=0 + msg
+            return AuthTokenVO.builder().ok(0).msg(ex.getMessage()).build();
+        }
+        return issuePasswordSession(user, response);
+    }
+
+    /** 密码登录：校验通过即签发会话；失败统一 invalid username or password，防用户名枚举。 */
+    @PostMapping("/login")
+    public AuthTokenVO login(@RequestBody(required = false) AuthCredentialsVO request,
+                             HttpServletResponse response) {
+        if (request == null || !StringUtils.hasText(request.getUsername())
+                || !StringUtils.hasText(request.getPassword())) {
+            return AuthTokenVO.builder().ok(0).msg("username and password are required").build();
+        }
+        UserAccount user = userAuthService.verify(request.getUsername(), request.getPassword());
+        if (user == null) {
+            return AuthTokenVO.builder().ok(0).msg("invalid username or password").build();
+        }
+        return issuePasswordSession(user, response);
+    }
+
+    /** 注册 / 密码登录共用的会话签发：JWT + 一次性旋转 refresh + HttpOnly cookie。 */
+    private AuthTokenVO issuePasswordSession(UserAccount user, HttpServletResponse response) {
+        List<String> roles = userAuthService.roleNamesOf(user);
+        List<String> permissions = permissionService.permissionsForRoles(roles);
+        String tenantId = TenantContext.normalize(user.getTenantId());
+        String token = jwtService.issueToken(user.getUsername(), roles, permissions, tenantId);
+        RefreshTokenService.RefreshTokenIssueResult refreshIssue =
+                refreshTokenService.issue(user.getUsername(), roles, tenantId);
+        setRefreshCookie(response, refreshIssue);
+        return buildTokenResponse(token, tenantId, refreshIssue, firstRole(roles));
+    }
+
+    /** 取首个非空角色作为前端显隐管理员 UI 的依据；无角色返回空串。 */
+    private String firstRole(List<String> roles) {
+        if (roles == null) {
+            return "";
+        }
+        return roles.stream().filter(StringUtils::hasText).findFirst().orElse("");
     }
 
     private void setRefreshCookie(HttpServletResponse response, RefreshTokenService.RefreshTokenIssueResult refreshIssue) {
@@ -172,7 +230,8 @@ public class AuthController {
 
     private AuthTokenVO buildTokenResponse(String token,
                                            String tenantId,
-                                           RefreshTokenService.RefreshTokenIssueResult refreshIssue) {
+                                           RefreshTokenService.RefreshTokenIssueResult refreshIssue,
+                                           String role) {
         LocalDateTime refreshExpiresAt = refreshIssue.expiresAt();
         boolean refreshWillExpireSoon = refreshExpiresAt != null
                 && refreshExpiresAt.isBefore(LocalDateTime.now().plusDays(REFRESH_EXPIRE_SOON_DAYS));
@@ -182,6 +241,7 @@ public class AuthController {
                 .token(token)
                 .refreshToken(refreshIssue.rawToken())
                 .tenantId(tenantId)
+                .role(role)
                 .expiresInSeconds(securityProperties.getJwtExpireMinutes() * 60L)
                 .refreshExpiresAt(refreshExpiresAt)
                 .refreshWillExpireSoon(refreshWillExpireSoon)

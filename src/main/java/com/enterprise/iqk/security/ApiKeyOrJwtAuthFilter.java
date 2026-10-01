@@ -99,6 +99,8 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
                 || uri.startsWith("/swagger-ui")
                 || uri.startsWith("/auth/token")
                 || uri.startsWith("/auth/refresh")
+                || uri.startsWith("/auth/login")
+                || uri.startsWith("/auth/register")
                 || uri.startsWith("/error");
     }
 

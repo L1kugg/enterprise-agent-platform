@@ -13,6 +13,8 @@ public class AuthTokenVO {
     private String token;
     private String refreshToken;
     private String tenantId;
+    /** 首个角色（如 ADMIN / USER），前端据此显隐管理员 UI（如删除文档按钮）。 */
+    private String role;
     private Long expiresInSeconds;
     private LocalDateTime refreshExpiresAt;
     private Boolean refreshWillExpireSoon;

@@ -13,6 +13,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -27,6 +29,12 @@ public class SecurityConfiguration {
     private final RateLimitFilter rateLimitFilter;
     private final AuditLogFilter auditLogFilter;
     private final HttpMetricsFilter httpMetricsFilter;
+
+    /** 注册密码哈希用；BCrypt 默认强度即可，注册/登录是交互式路径不宜再慢。 */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -48,7 +56,7 @@ public class SecurityConfiguration {
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/actuator/prometheus").hasAnyAuthority("PERM_METRICS_READ", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/audit/logs").hasAnyAuthority("PERM_AUDIT_READ", "ROLE_ADMIN", "ROLE_OPS")
-                    .requestMatchers(HttpMethod.POST, "/auth/token", "/auth/refresh").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/token", "/auth/refresh", "/auth/login", "/auth/register").permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/api-keys/**").hasAnyAuthority("PERM_AUTH_KEY_MANAGE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/chat", "/ai/chat/stream", "/ai/service").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")

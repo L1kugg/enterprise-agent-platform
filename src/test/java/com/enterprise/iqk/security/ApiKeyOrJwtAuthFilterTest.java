@@ -57,4 +57,19 @@ class ApiKeyOrJwtAuthFilterTest {
         assertEquals(200, resp.getStatus());
         assertEquals("tenant-a", resp.getHeader(TenantContext.TENANT_HEADER));
     }
+
+    @Test
+    void shouldPassRegisterAndLoginWithoutCredentials() throws ServletException, IOException {
+        SecurityProperties props = new SecurityProperties();
+        props.setEnabled(true);
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props,
+                mock(ApiKeyAuthService.class), mock(JwtService.class));
+
+        for (String path : List.of("/auth/register", "/auth/login")) {
+            MockHttpServletRequest req = new MockHttpServletRequest("POST", path);
+            MockHttpServletResponse resp = new MockHttpServletResponse();
+            filter.doFilter(req, resp, new MockFilterChain());
+            assertEquals(200, resp.getStatus(), path + " should be public");
+        }
+    }
 }
