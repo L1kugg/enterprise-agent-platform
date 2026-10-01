@@ -1,5 +1,46 @@
 <template>
-  <div class="app-shell">
+  <!-- 登录门闩：未登录（无 token 且无 API Key）时整页显示登录/注册，登录后才渲染控制台 -->
+  <div v-if="!canUseRemoteSync" class="auth-gate">
+    <div class="auth-card">
+      <p class="eyebrow">KnowledgeOps Agent</p>
+      <h1>{{ authMode === 'login' ? '登录' : '注册新账号' }}</h1>
+      <el-tabs v-model="authMode">
+        <el-tab-pane label="登录" name="login" />
+        <el-tab-pane label="注册" name="register" />
+      </el-tabs>
+      <el-input
+        v-model="authUsername"
+        placeholder="用户名：3-32 位小写字母、数字、- 或 _"
+        @keyup.enter="handlePasswordAuth"
+      />
+      <el-input
+        v-model="authPassword"
+        type="password"
+        show-password
+        :placeholder="authMode === 'login' ? '密码' : '密码（至少 8 位）'"
+        @keyup.enter="handlePasswordAuth"
+      />
+      <el-button
+        type="primary"
+        class="auth-submit"
+        :loading="authLoading"
+        @click="handlePasswordAuth"
+      >{{ authMode === 'login' ? '登录' : '注册并登录' }}</el-button>
+      <details class="admin-key-login">
+        <summary>管理员 API Key 登录</summary>
+        <el-input
+          v-model="apiKeyInput"
+          type="password"
+          show-password
+          placeholder="X-API-Key（管理员用）"
+        />
+        <el-input v-model="tenantInput" placeholder="租户（默认 public）" />
+        <el-button :loading="authLoading" @click="handleLogin">换取 JWT</el-button>
+      </details>
+    </div>
+  </div>
+
+  <div v-if="canUseRemoteSync" class="app-shell">
     <aside class="sidebar">
       <div class="brand-block">
         <p class="eyebrow">KnowledgeOps Agent</p>
@@ -200,13 +241,14 @@
             </el-form-item>
           </el-form>
           <div class="auth-buttons">
+            <el-tag v-if="role" size="small" :type="isAdmin ? 'danger' : 'info'">{{ role }}</el-tag>
             <el-button type="primary" :loading="authLoading" @click="handleLogin"
               >换取 JWT</el-button
             >
             <el-button :disabled="!refreshToken" :loading="refreshing" @click="handleRefresh"
               >刷新</el-button
             >
-            <el-button @click="clearAuth">清空</el-button>
+            <el-button @click="logout">退出登录</el-button>
           </div>
         </div>
       </details>
@@ -221,12 +263,22 @@
             {{ modelProfile }} · {{ streaming ? 'SSE 流式' : 'JSON 单次' }}
           </p>
         </div>
-        <div v-else>
+        <div v-else-if="activeView === 'evaluation'">
           <p class="workspace-kicker">RAG Evaluation</p>
           <h2>{{ selectedEvalDataset?.name || 'Evaluation Studio' }}</h2>
           <p class="workspace-sub">
             {{ evalCurrentRun?.runId || 'no run' }} · {{ evalCurrentRun?.status || 'idle' }}
           </p>
+        </div>
+        <div v-else-if="activeView === 'knowledge'">
+          <p class="workspace-kicker">Knowledge Base</p>
+          <h2>知识库</h2>
+          <p class="workspace-sub">上传 PDF → 自动切分入库 → 参与全库检索</p>
+        </div>
+        <div v-else>
+          <p class="workspace-kicker">Doc Q&amp;A</p>
+          <h2>文档问答</h2>
+          <p class="workspace-sub">{{ pdfScopeLabel }} · {{ modelProfile }}</p>
         </div>
         <div v-if="activeView === 'chat'" class="head-actions">
           <el-select v-model="activeWorkspaceId" size="small" class="workspace-select">
@@ -273,7 +325,7 @@
             >导出报告</el-button
           >
           <el-button size="small" :disabled="!evalCurrentRun" @click="markCurrentEvalRunBaseline"
-            >设为 Baseline</el-button
+            >设为基线</el-button
           >
         </div>
       </header>
@@ -597,6 +649,15 @@
             <p class="section-label">入库任务（最近 20 条）</p>
             <el-button size="small" @click="loadKnowledgeJobs()">刷新</el-button>
           </div>
+          <el-alert
+            v-if="knowledgeNeedsAuth"
+            class="kb-auth-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="登录后才能看到入库任务"
+            description="请先登录（右上角退出后可重新登录）；如果登录已过期，重新登录后回来点「刷新」即可。"
+          />
           <el-table :data="knowledgeJobs" height="100%" empty-text="还没有入库记录，先上传一个 PDF">
             <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
             <el-table-column label="状态" width="110">
@@ -612,7 +673,7 @@
             </el-table-column>
             <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
             <el-table-column prop="errorMessage" label="错误" min-width="160" show-overflow-tooltip />
-            <el-table-column label="操作" width="90">
+            <el-table-column v-if="isAdmin" label="操作" width="90">
               <template #default="{ row }">
                 <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)">删除</el-button>
               </template>
@@ -649,6 +710,16 @@
             @click="onPdfPageUpload"
             >上传并入库</el-button
           >
+
+          <el-alert
+            v-if="pdfNeedsAuth"
+            class="kb-auth-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="登录后才能选择文档提问"
+            description="请先登录；登录过期时请退出重新登录，再回到本页刷新文档列表。"
+          />
 
           <div class="eval-dataset-list pdf-scope-list">
             <button type="button" :class="{ active: pdfActiveChatId === '' }" @click="pdfActiveChatId = ''">
@@ -725,7 +796,7 @@
         <aside class="eval-side-panel">
           <div class="eval-panel-head">
             <div>
-              <p class="section-label">Datasets</p>
+              <p class="section-label">评测集</p>
               <strong>{{ evalDatasets.length }}</strong>
             </div>
           </div>
@@ -739,15 +810,15 @@
               @click="selectEvalDataset(dataset.datasetId)"
             >
               <span>{{ dataset.name }}</span>
-              <small>{{ dataset.caseCount }} cases · {{ shortId(dataset.datasetId) }}</small>
+              <small>{{ dataset.caseCount }} 道题 · {{ shortId(dataset.datasetId) }}</small>
             </button>
             <div v-if="!evalDatasets.length" class="session-empty">暂无评测集</div>
           </div>
 
           <div class="eval-create-panel">
-            <p class="section-label">Create Dataset</p>
-            <el-input v-model="evalDatasetName" size="small" placeholder="Dataset name" />
-            <el-input v-model="evalDatasetDescription" size="small" placeholder="Description" />
+            <p class="section-label">创建评测集</p>
+            <el-input v-model="evalDatasetName" size="small" placeholder="评测集名称" />
+            <el-input v-model="evalDatasetDescription" size="small" placeholder="描述" />
             <el-input
               v-model="evalDatasetJson"
               class="eval-json-input"
@@ -777,13 +848,13 @@
 
           <div class="eval-run-grid">
             <div class="eval-run-summary">
-              <p class="section-label">Baseline</p>
-              <strong>{{ evalBaselineRun?.runId || 'none' }}</strong>
+              <p class="section-label">基线</p>
+              <strong>{{ evalBaselineRun?.runId || '未设置' }}</strong>
               <span>{{ formatRunScore(evalBaselineRun?.metrics.runScore) }}</span>
             </div>
             <div class="eval-run-summary current">
-              <p class="section-label">Current</p>
-              <strong>{{ evalCurrentRun?.runId || 'none' }}</strong>
+              <p class="section-label">本次运行</p>
+              <strong>{{ evalCurrentRun?.runId || '无' }}</strong>
               <span>{{ formatRunScore(evalCurrentRun?.metrics.runScore) }}</span>
             </div>
           </div>
@@ -794,20 +865,41 @@
             height="100%"
             empty-text="暂无评测结果"
           >
-            <el-table-column prop="caseId" label="Case" min-width="120" />
-            <el-table-column prop="status" label="Status" width="110" />
-            <el-table-column label="Score" width="110">
+            <el-table-column type="expand" width="44">
+              <template #default="{ row }">
+                <div class="eval-expand">
+                  <div class="eval-expand-scores">
+                    <span>检索命中 {{ formatPercent(row.retrievalHit) }}</span>
+                    <span>引用覆盖 {{ formatPercent(row.citationCoverage) }}</span>
+                    <span>关键词 {{ formatPercent(row.keywordScore) }}</span>
+                    <span>忠实度 {{ formatPercent(row.answerFaithfulness) }}</span>
+                  </div>
+                  <p class="eval-expand-label">模型回答</p>
+                  <div class="eval-expand-answer">{{ row.answer || '（无回答）' }}</div>
+                  <template v-if="row.citations?.length">
+                    <p class="eval-expand-label">引用来源</p>
+                    <ul class="eval-expand-citations">
+                      <li v-for="(cite, citeIndex) in row.citations" :key="citeIndex">{{ cite }}</li>
+                    </ul>
+                  </template>
+                  <p v-if="row.errorMessage" class="eval-expand-error">失败原因：{{ row.errorMessage }}</p>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="caseId" label="题目ID" min-width="120" />
+            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column label="得分" width="110">
               <template #default="{ row }">{{ formatPercent(row.score) }}</template>
             </el-table-column>
-            <el-table-column label="Citation" width="120">
+            <el-table-column label="引用" width="120">
               <template #default="{ row }">{{ formatPercent(row.citationCoverage) }}</template>
             </el-table-column>
-            <el-table-column label="Latency" width="120">
+            <el-table-column label="耗时" width="120">
               <template #default="{ row }">{{ row.latencyMs }}ms</template>
             </el-table-column>
             <el-table-column
               prop="question"
-              label="Question"
+              label="问题"
               min-width="280"
               show-overflow-tooltip
             />
@@ -848,9 +940,11 @@ import {
   listRecentIngestionJobs,
   markEvalRunBaseline,
   listSessionStates,
+  loginWithPassword,
   mergeSessionBranches,
   reactChat,
   refreshJwt,
+  registerUser,
   saveSessionState,
   setSessionArchived,
   setSessionPinned,
@@ -1251,6 +1345,12 @@ const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
 const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
 const token = ref((bootstrap.token as string | undefined) ?? '');
 const refreshToken = ref((bootstrap.refreshToken as string | undefined) ?? '');
+// 登录用户的首个角色（ADMIN/USER），控制管理员 UI 显隐
+const role = ref((bootstrap.role as string | undefined) ?? '');
+const authMode = ref<'login' | 'register'>('login');
+const authUsername = ref('');
+const authPassword = ref('');
+const isAdmin = computed(() => role.value === 'ADMIN');
 const sessionSearch = ref((bootstrap.sessionSearch as string | undefined) ?? '');
 const workspaceFilter = ref((bootstrap.workspaceFilter as string | undefined) ?? 'all');
 const showArchivedSessions = ref(Boolean(bootstrap.showArchivedSessions));
@@ -1323,10 +1423,26 @@ const pdfDocs = ref<IngestionJob[]>([]);
 const pdfLoading = ref(false);
 const pdfUploading = ref(false);
 const pdfUploadFiles = ref<UploadUserFile[]>([]);
+// 未登录 / 登录过期时不弹报错，改在页面里给一句提示
+const knowledgeNeedsAuth = ref(false);
+const pdfNeedsAuth = ref(false);
+
+function isAuthError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('HTTP 401');
+}
 const pdfActiveChatId = ref('');
 const pdfPrompt = ref('');
 const pdfAnswering = ref(false);
 const pdfMessageContainer = ref<HTMLElement | null>(null);
+
+// 顶部标题用：当前提问范围的一句话描述
+const pdfScopeLabel = computed(() => {
+  if (!pdfActiveChatId.value) {
+    return '整个知识库';
+  }
+  const doc = pdfDocs.value.find((d) => d.chatId === pdfActiveChatId.value);
+  return doc ? `单文档：${doc.sourceName}` : '单文档';
+});
 
 const messageHeights = ref<Record<string, number>>({});
 const viewportHeight = ref(0);
@@ -1357,12 +1473,12 @@ const evalMetricCards = computed<EvalMetricCard[]>(() => {
   const current = evalCurrentRun.value?.metrics;
   const baseline = evalBaselineRun.value?.metrics;
   return [
-    metricCard('runScore', 'Run Score', current, baseline, 'percent'),
-    metricCard('retrievalHitRate', 'Retrieval Hit', current, baseline, 'percent'),
-    metricCard('citationCoverageRate', 'Citation Coverage', current, baseline, 'percent'),
-    metricCard('answerFaithfulnessScore', 'Faithfulness', current, baseline, 'percent'),
-    metricCard('avgLatencyMs', 'Avg Latency', current, baseline, 'ms', true),
-    metricCard('failureRate', 'Failure Rate', current, baseline, 'percent', true),
+    metricCard('runScore', '总分', current, baseline, 'percent'),
+    metricCard('retrievalHitRate', '检索命中率', current, baseline, 'percent'),
+    metricCard('citationCoverageRate', '引用覆盖率', current, baseline, 'percent'),
+    metricCard('answerFaithfulnessScore', '忠实度', current, baseline, 'percent'),
+    metricCard('avgLatencyMs', '平均耗时', current, baseline, 'ms', true),
+    metricCard('failureRate', '失败率', current, baseline, 'percent', true),
   ];
 });
 
@@ -1589,6 +1705,7 @@ function persistState(): void {
       tenantId: tenantInput.value,
       token: token.value,
       refreshToken: refreshToken.value,
+      role: role.value,
       evalSelectedDatasetId: evalSelectedDatasetId.value,
       activeSessionId: activeSessionId.value,
       sessionSearch: sessionSearch.value,
@@ -1651,13 +1768,24 @@ function formatJobTime(value: string | undefined): string {
 }
 
 async function loadKnowledgeJobs(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    // 压根没登录过，别去打接口，页面里提示即可
+    knowledgeNeedsAuth.value = true;
+    knowledgeJobs.value = [];
+    return;
+  }
   if (!silent) {
     knowledgeLoading.value = true;
   }
   try {
     knowledgeJobs.value = await listRecentIngestionJobs(authContext());
+    knowledgeNeedsAuth.value = false;
   } catch (error) {
-    if (!silent) {
+    if (isAuthError(error)) {
+      // 登录过期（JWT 两小时失效），页面里提示，不弹报错
+      knowledgeNeedsAuth.value = true;
+      knowledgeJobs.value = [];
+    } else if (!silent) {
       const message = error instanceof Error ? error.message : '入库任务加载失败';
       ElMessage.error(message);
     }
@@ -1770,6 +1898,11 @@ const pdfActiveKey = computed(() => pdfActiveChatId.value || PDF_ALL_KEY);
 const pdfActiveMessages = computed(() => pdfMessages.value[pdfActiveKey.value] ?? []);
 
 async function loadPdfDocs(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    pdfNeedsAuth.value = true;
+    pdfDocs.value = [];
+    return;
+  }
   if (!silent) {
     pdfLoading.value = true;
   }
@@ -1785,8 +1918,12 @@ async function loadPdfDocs(silent = false): Promise<void> {
       docs.push(job);
     }
     pdfDocs.value = docs;
+    pdfNeedsAuth.value = false;
   } catch (error) {
-    if (!silent) {
+    if (isAuthError(error)) {
+      pdfNeedsAuth.value = true;
+      pdfDocs.value = [];
+    } else if (!silent) {
       const message = error instanceof Error ? error.message : '文档列表加载失败';
       ElMessage.error(message);
     }
@@ -2691,6 +2828,7 @@ async function handleLogin(): Promise<void> {
     );
     token.value = auth.token ?? '';
     refreshToken.value = auth.refreshToken ?? '';
+    role.value = auth.role ?? '';
     if (auth.tenantId) {
       tenantInput.value = auth.tenantId;
     }
@@ -2716,6 +2854,7 @@ async function handleRefresh(): Promise<void> {
     const auth = await refreshJwt(refreshToken.value);
     token.value = auth.token ?? token.value;
     refreshToken.value = auth.refreshToken ?? refreshToken.value;
+    role.value = auth.role ?? role.value;
     if (auth.tenantId) {
       tenantInput.value = auth.tenantId;
     }
@@ -2733,9 +2872,51 @@ async function handleRefresh(): Promise<void> {
 function clearAuth(): void {
   token.value = '';
   refreshToken.value = '';
+  role.value = '';
+  apiKeyInput.value = '';
+  tenantInput.value = '';
   costSummary.value = null;
-  ElMessage.success('鉴权状态已清空');
   persistState();
+}
+
+/** 退出登录：清干净全部凭据回到登录页（门闩由 canUseRemoteSync 驱动）。 */
+function logout(): void {
+  clearAuth();
+  ElMessage.success('已退出登录');
+}
+
+/** 密码登录 / 注册共用：成功即拿到 JWT 并进入控制台。 */
+async function handlePasswordAuth(): Promise<void> {
+  if (!authUsername.value.trim() || !authPassword.value) {
+    ElMessage.warning('请输入用户名和密码');
+    return;
+  }
+  authLoading.value = true;
+  try {
+    const credentials = {
+      username: authUsername.value.trim(),
+      password: authPassword.value,
+    };
+    const auth =
+      authMode.value === 'login'
+        ? await loginWithPassword(credentials.username, credentials.password)
+        : await registerUser(credentials.username, credentials.password);
+    token.value = auth.token ?? '';
+    refreshToken.value = auth.refreshToken ?? '';
+    role.value = auth.role ?? 'USER';
+    if (auth.tenantId) {
+      tenantInput.value = auth.tenantId;
+    }
+    authPassword.value = '';
+    ElMessage.success(authMode.value === 'login' ? '登录成功' : '注册成功，已自动登录');
+    persistState();
+    await loadSessionsFromCloud();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '登录失败';
+    ElMessage.error(message);
+  } finally {
+    authLoading.value = false;
+  }
 }
 
 function sanitizeMessageStates(): void {
@@ -2954,7 +3135,7 @@ watch(
   { deep: true },
 );
 
-watch([apiKeyInput, tenantInput, token, refreshToken], () => {
+watch([apiKeyInput, tenantInput, token, refreshToken, role], () => {
   persistState();
   if (canUseRemoteSync.value) {
     void refreshCostSummary();
@@ -3907,6 +4088,71 @@ h2 {
   align-items: center;
 }
 
+.kb-auth-alert {
+  margin: 8px 0;
+}
+
+.pdfchat-page .kb-auth-alert {
+  margin: 10px 0;
+}
+
+/* ---------- 登录/注册门闩 ---------- */
+
+.auth-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 26px 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.auth-card .eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-accent);
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--ui-text);
+}
+
+.auth-submit {
+  width: 100%;
+}
+
+.admin-key-login summary {
+  font-size: 13px;
+  color: var(--ui-muted);
+  cursor: pointer;
+}
+
+.admin-key-login {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-key-login[open] {
+  padding-top: 10px;
+  border-top: 1px dashed var(--ui-border);
+}
+
 .pdfchat-page {
   flex: 1;
   min-height: 0;
@@ -4115,6 +4361,62 @@ h2 {
   min-height: 0;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.eval-expand {
+  display: grid;
+  gap: 8px;
+  padding: 6px 14px 14px 44px;
+}
+
+.eval-expand-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: color-mix(in oklab, currentColor 70%, transparent);
+}
+
+.eval-expand-scores span {
+  padding: 2px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ui-card) 70%, transparent);
+}
+
+.eval-expand-label {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.eval-expand-answer {
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ui-card) 60%, transparent);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.eval-expand-citations {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.8;
+  opacity: 0.8;
+  word-break: break-all;
+}
+
+.eval-expand-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-color-danger, #f56c6c);
 }
 
 .composer-shell {

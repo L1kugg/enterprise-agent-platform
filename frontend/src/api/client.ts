@@ -114,6 +114,35 @@ export async function refreshJwt(refreshToken: string): Promise<AuthTokenRespons
   return payload;
 }
 
+/** 注册 / 密码登录共用：POST JSON 凭据，成功即返回会话。 */
+async function postAuthCredentials(
+  path: string,
+  username: string,
+  password: string,
+): Promise<AuthTokenResponse> {
+  const response = await fetch(resolveApi(path), {
+    credentials: 'include',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, password }),
+  });
+  const payload = await parseJsonSafely<AuthTokenResponse>(response);
+  if (!response.ok || !payload || payload.ok !== 1) {
+    throw formatHttpError(response.status, payload?.msg ?? 'auth failed');
+  }
+  return payload;
+}
+
+export function registerUser(username: string, password: string): Promise<AuthTokenResponse> {
+  return postAuthCredentials('/auth/register', username, password);
+}
+
+export function loginWithPassword(username: string, password: string): Promise<AuthTokenResponse> {
+  return postAuthCredentials('/auth/login', username, password);
+}
+
 export async function reactChat(
   request: ReactChatRequest,
   auth?: AuthContext,

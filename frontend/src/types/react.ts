@@ -4,6 +4,8 @@ export interface AuthTokenResponse {
   token?: string;
   refreshToken?: string;
   tenantId?: string;
+  /** 首个角色（ADMIN / USER），用于显隐管理员 UI（如删除文档按钮）。 */
+  role?: string;
   expiresInSeconds?: number;
   refreshWillExpireSoon?: boolean;
 }
