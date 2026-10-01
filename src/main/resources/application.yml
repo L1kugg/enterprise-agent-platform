@@ -116,6 +116,13 @@ app:
       dlq-exchange: ${APP_INGESTION_RABBIT_DLX:ingestion.dlx}
       dlq-routing-key: ${APP_INGESTION_RABBIT_DLQ_ROUTING_KEY:ingestion.jobs.dlq}
       dlq-queue: ${APP_INGESTION_RABBIT_DLQ_QUEUE:ingestion.jobs.dlq.queue}
+  graph:
+    extraction-enabled: ${APP_GRAPH_EXTRACTION_ENABLED:true}
+    profile: ${APP_GRAPH_PROFILE:economy}
+    max-entities: ${APP_GRAPH_MAX_ENTITIES:15}
+    max-relations: ${APP_GRAPH_MAX_RELATIONS:20}
+    max-facts: ${APP_GRAPH_MAX_FACTS:15}
+    max-input-chars: ${APP_GRAPH_MAX_INPUT_CHARS:6000}
   audit:
     retention-days: ${APP_AUDIT_RETENTION_DAYS:90}
   model-router:

@@ -36,6 +36,15 @@ public class GraphService {
     }
 
     /**
+     * 按多候选关键词批量 OR 检索实体（中文滑窗候选），关键词逐一转义。
+     */
+    public List<KgEntityRecord> searchEntitiesByKeywords(String tenantId, List<String> keywords, int limit) {
+        List<String> escaped = escapeKeywords(keywords);
+        if (escaped.isEmpty()) return List.of();
+        return entityMapper.searchByKeywords(tenantId, escaped, Math.max(1, limit));
+    }
+
+    /**
      * 获取实体的一跳邻居，附带关系信息。
      */
     public List<GraphNeighbor> getNeighbors(String tenantId, String entityId) {
@@ -66,6 +75,24 @@ public class GraphService {
     public List<KgFactRecord> searchFacts(String tenantId, String keyword, int limit) {
         if (!StringUtils.hasText(keyword)) return List.of();
         return factMapper.searchByKeyword(tenantId, SqlLikeUtils.escapeForLike(keyword.trim()), Math.max(1, limit));
+    }
+
+    /**
+     * 按多候选关键词批量 OR 检索事实（中文滑窗候选），关键词逐一转义。
+     */
+    public List<KgFactRecord> searchFactsByKeywords(String tenantId, List<String> keywords, int limit) {
+        List<String> escaped = escapeKeywords(keywords);
+        if (escaped.isEmpty()) return List.of();
+        return factMapper.searchByKeywords(tenantId, escaped, Math.max(1, limit));
+    }
+
+    /** 关键词列表清洗：去空、trim、LIKE 通配符转义。 */
+    private List<String> escapeKeywords(List<String> keywords) {
+        if (keywords == null || keywords.isEmpty()) return List.of();
+        return keywords.stream()
+                .filter(StringUtils::hasText)
+                .map(keyword -> SqlLikeUtils.escapeForLike(keyword.trim()))
+                .toList();
     }
 
     /**

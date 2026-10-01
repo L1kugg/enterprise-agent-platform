@@ -1,6 +1,7 @@
 package com.enterprise.iqk.graph;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -10,6 +11,11 @@ import java.util.List;
 /** kg_relation 表 Mapper：按实体/端点/类型查询关系边，均强制租户过滤。 */
 @Mapper
 public interface KgRelationMapper extends BaseMapper<KgRelationRecord> {
+
+    @Delete("DELETE FROM kg_relation WHERE tenant_id = #{tenantId} AND evidence_id = #{evidenceId}")
+    /** 按证据来源删除关系边（evidence_id 约定存 chatId），先删边再删点。 */
+    int deleteByEvidence(@Param("tenantId") String tenantId,
+                         @Param("evidenceId") String evidenceId);
 
     @Select("""
             SELECT r.* FROM kg_relation r

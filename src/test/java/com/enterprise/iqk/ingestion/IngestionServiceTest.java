@@ -45,7 +45,8 @@ class IngestionServiceTest {
                 new RagProperties(),
                 new SimpleMeterRegistry(),
                 queue,
-                scanner
+                scanner,
+                org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class)
         );
     }
 

@@ -5,6 +5,7 @@ import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.config.properties.VectorStoreProperties;
 import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.enums.IngestionJobStatus;
+import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
 import com.enterprise.iqk.security.FileSafetyScanner;
@@ -65,6 +66,7 @@ public class IngestionService {
     private final MeterRegistry meterRegistry;
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
+    private final GraphExtractionService graphExtractionService;
     // 在整个 worker 线程池范围内串行化 SimpleVectorStore 快照写入，
     // 避免并发任务交错写入同一个快照文件。
     private final Object snapshotLock = new Object();
@@ -156,6 +158,15 @@ public class IngestionService {
                 .and(builder.eq("tenant_id", normalizedTenantId), builder.eq("chat_id", chatId))
                 .build();
         vectorStore.delete(scope);
+        // 图谱数据按同一 chatId 作用域联动清理；失败只留孤儿边不中止文档删除
+        // （读路径 getNeighbors 对悬空边已容忍：实体查不到就跳过）。
+        try {
+            int kgRows = graphExtractionService.deleteByChat(normalizedTenantId, chatId);
+            log.info("kg cleanup: tenant={}, chatId={}, rows={}", normalizedTenantId, chatId, kgRows);
+        } catch (Exception kgEx) {
+            log.warn("kg cleanup 失败（不影响文档删除）: tenant={}, chatId={}, reason={}",
+                    normalizedTenantId, chatId, kgEx.toString());
+        }
         Set<String> removedFiles = new LinkedHashSet<>();
         for (IngestionJob job : jobs) {
             File source = new File(job.getFilePath());
@@ -219,7 +230,7 @@ public class IngestionService {
         Timer.Sample sample = Timer.start(meterRegistry);
         String tenantTag = TenantContext.normalize(running.getTenantId());
         try {
-            processPdfJob(running);
+            List<Document> chunks = processPdfJob(running);
             ingestionJobMapper.updateTerminalState(
                     running.getJobId(),
                     IngestionJobStatus.SUCCEEDED,
@@ -228,6 +239,15 @@ public class IngestionService {
                     null,
                     null
             );
+            // SUCCEEDED 先落库再异步抽图谱：JVM 此刻挂掉最多丢一次图谱，
+            // 可用回填端点补，绝不把图谱抽取耦合进入库重试。
+            try {
+                graphExtractionService.submitAsync(tenantTag, running.getChatId(), running.getJobId(),
+                        chunks.stream().map(Document::getText).filter(StringUtils::hasText).toList());
+            } catch (Exception kgEx) {
+                log.warn("KG 抽取提交失败（不影响入库）: jobId={}, reason={}",
+                        running.getJobId(), kgEx.toString());
+            }
             sample.stop(Timer.builder("ingestion.jobs.duration")
                     .tag("status", "succeeded")
                     .tag("tenant", tenantTag)
@@ -304,8 +324,16 @@ public class IngestionService {
         return count;
     }
 
-    /** 解析 PDF 为单页文档 → token 分块 → 写入向量库 → 视后端情况落快照。 */
-    private void processPdfJob(IngestionJob job) {
+    /** 解析 PDF 为单页文档 → token 分块 → 写入向量库 → 视后端情况落快照；返回切片供图谱抽取复用。 */
+    private List<Document> processPdfJob(IngestionJob job) {
+        List<Document> chunks = parseAndSplit(job);
+        vectorStore.add(chunks);
+        persistSimpleVectorStoreIfNeeded();
+        return chunks;
+    }
+
+    /** 解析 PDF 为单页文档并按配置切块（不写向量库）；包内可见供图谱回填服务复用。 */
+    List<Document> parseAndSplit(IngestionJob job) {
         File source = new File(job.getFilePath());
         if (!source.exists()) {
             throw new IllegalStateException("PDF file missing: " + job.getFilePath());
@@ -318,9 +346,7 @@ public class IngestionService {
                         .build()
         );
         List<Document> pages = reader.read();
-        List<Document> chunks = splitDocuments(pages, job);
-        vectorStore.add(chunks);
-        persistSimpleVectorStoreIfNeeded();
+        return splitDocuments(pages, job);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.vo.IngestionJobVO;
 import com.enterprise.iqk.domain.vo.IngestionSubmitVO;
 import com.enterprise.iqk.config.properties.IngestionProperties;
+import com.enterprise.iqk.ingestion.DocumentGraphBackfillService;
 import com.enterprise.iqk.ingestion.IngestionProcessResult;
 import com.enterprise.iqk.ingestion.IngestionService;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +41,7 @@ import java.util.Map;
 public class IngestionController {
 
     private final IngestionService ingestionService;
+    private final DocumentGraphBackfillService documentGraphBackfillService;
     private final ChatHistoryRepository chatHistoryRepository;
     private final ObjectProvider<Tracer> tracerProvider;
     private final IngestionProperties ingestionProperties;
@@ -96,6 +99,25 @@ public class IngestionController {
                 "ok", 1,
                 "msg", removedFiles.isEmpty() ? "no document deleted" : "deleted: " + String.join(", ", removedFiles)
         );
+    }
+
+    @PostMapping("/documents/{chatId}/graph/build")
+    /** 存量文档补图谱：同步重解析磁盘 PDF 并抽取实体/关系/事实（任意已认证用户，仅限本租户文档）。 */
+    public Map<String, Object> buildDocumentGraph(@PathVariable String chatId) {
+        var rebuilt = documentGraphBackfillService.rebuildForChat(currentTenantId(), chatId);
+        if (rebuilt.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "no succeeded document to rebuild for chat: " + chatId);
+        }
+        var result = rebuilt.get();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("ok", 1);
+        body.put("chatId", chatId);
+        body.put("entities", result.entityCount());
+        body.put("relations", result.relationCount());
+        body.put("facts", result.factCount());
+        body.put("skipped", result.skipReason());
+        return body;
     }
 
     @PostMapping("/jobs/process")
