@@ -43,3 +43,26 @@ policy conclusions without retrieval evidence.
 The tenant-acme policy must not be returned to another tenant. Cross-tenant
 requests should return an authorization failure, an empty retrieval result, or an
 auditable rejection depending on the route and credential used.
+  1. 适用范围
+
+  本政策适用于现场巡检、仓库装卸、户外维护，以及任何员工可能在高温环境下持续作业超过 30 分钟的工作模式。
+
+  2. 风险分级
+
+  高温暴露风险必须依据以下因素进行分级：温度、暴露时长、劳动强度、通风条件、饮水供应情况以及防护装备。高风险岗位包括：户外巡检、仓库装卸、配送分拣，以及无降温条件的维护作业。
+
+  3. 管控要求
+
+  各团队必须：安排饮水休息；在高温高峰时段轮换作业人员；提供阴凉或有降温的休息恢复区；通过事故上报流程记录异常症状。主管必须在班前审核高风险作业计划。
+
+  4. 应急响应
+
+  如果工人出现头晕、意识模糊、晕厥、异常出汗或疑似热射病（中暑）症状，主管必须：立即停止作业、将工人转移至阴凉区域、实施急救，并按照运营手册逐级上报。
+
+  5. KnowledgeOps RAG 验证说明
+
+  一个合格的 RAG 回答必须引用来源文档及命中的内容切片。如果问题无法从已入库的政策内容中找到答案，助手必须明确说明“当前知识库没有匹配内容”，并请操作员上传或选择正确的文档。助手不得在没有检索依据的情况下编造政策结论。
+
+  6. 租户隔离测试
+
+  tenant-acme 的政策内容不得返回给其他租户。跨租户请求应返回鉴权失败、空检索结果，或可审计的拒绝响应（具体取决于所用路由和凭据）。
