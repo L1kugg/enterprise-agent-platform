@@ -252,3 +252,55 @@ export interface IngestionSubmitResponse {
   msg: string;
   job?: IngestionJob;
 }
+
+/** 管理员跨租户文档总览的单条文档（= 同一 chatId 的最新入库任务）。 */
+export interface AdminDocumentSummary {
+  tenantId: string;
+  chatId: string;
+  sourceName: string;
+  status: IngestionJobStatus;
+  attemptCount?: number;
+  errorMessage?: string;
+  fileSize?: number | null;
+  createdAt?: string;
+  finishedAt?: string;
+}
+
+/** Agent 引擎：standard = 主聊天 ReAct；workflow = 工作流版 ReAct（换接口前缀）。 */
+export type AgentEngine = 'standard' | 'workflow';
+
+/** 工作流 agent 单步留痕（对应后端 WorkflowStepVO）。 */
+export interface WorkflowStep {
+  stepOrder: number;
+  agentName?: string;
+  status?: string;
+  thought?: string;
+  action?: string;
+  actionInput?: Record<string, unknown>;
+  observation?: unknown;
+  latencyMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  errorMessage?: string;
+}
+
+/** 工作流任务（对应后端 WorkflowTaskVO；列表接口不带 events）。 */
+export interface WorkflowTask {
+  taskId: string;
+  type: string;
+  status: string;
+  userInput?: string;
+  finalOutput?: string;
+  modelProfile?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  steps?: WorkflowStep[];
+}
+
+/** 深度研究任务创建/查询结果（报告为四节结构中文 Markdown）。 */
+export interface DeepResearchResult {
+  taskId: string;
+  topic: string;
+  report?: string;
+  status: string;
+}

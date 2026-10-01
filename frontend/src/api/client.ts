@@ -1,10 +1,13 @@
 import type {
+  AdminDocumentSummary,
+  AgentEngine,
   AuthContext,
   AuthTokenResponse,
   BranchCompareRequest,
   BranchCompareResult,
   BranchMergeRequest,
   BranchMergeResult,
+  DeepResearchResult,
   EvalComparison,
   EvalDataset,
   EvalDatasetCreate,
@@ -19,6 +22,7 @@ import type {
   SessionState,
   TenantBudgetUpdate,
   TenantCostSummary,
+  WorkflowTask,
 } from '../types/react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
@@ -143,12 +147,19 @@ export function loginWithPassword(username: string, password: string): Promise<A
   return postAuthCredentials('/auth/login', username, password);
 }
 
+/** Agent 聊天接口前缀：workflow 引擎换工作流版前缀（同一对请求/响应结构）。 */
+function reactChatEndpoint(engine: AgentEngine | undefined, stream: boolean): string {
+  const base = engine === 'workflow' ? '/ai/workflow/react/chat' : '/ai/react/chat';
+  return stream ? `${base}/stream` : base;
+}
+
 export async function reactChat(
   request: ReactChatRequest,
   auth?: AuthContext,
   signal?: AbortSignal,
+  engine?: AgentEngine,
 ): Promise<ReactChatResponse> {
-  const response = await fetch(resolveApi('/ai/react/chat'), {
+  const response = await fetch(resolveApi(reactChatEndpoint(engine, false)), {
     credentials: 'include',
     method: 'POST',
     headers: {
@@ -252,8 +263,9 @@ export async function streamReactChat(
   auth: AuthContext | undefined,
   onEvent: StreamHandler,
   signal?: AbortSignal,
+  engine?: AgentEngine,
 ): Promise<void> {
-  const response = await fetch(resolveApi('/ai/react/chat/stream'), {
+  const response = await fetch(resolveApi(reactChatEndpoint(engine, true)), {
     credentials: 'include',
     method: 'POST',
     headers: {
@@ -308,7 +320,7 @@ export async function streamReactChat(
   }
 }
 
-interface PagedResult<T> {
+export interface PagedResult<T> {
   items: T[];
   total: number;
   page: number;
@@ -668,6 +680,53 @@ export async function deleteIngestionDocument(chatId: string, auth?: AuthContext
   return payload.msg;
 }
 
+/** 管理员跨租户文档总览：分页 + 搜索（租户/批次/文件名）。 */
+export async function listAdminDocuments(
+  auth: AuthContext | undefined,
+  params?: { page?: number; pageSize?: number; search?: string },
+): Promise<PagedResult<AdminDocumentSummary>> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/admin/documents', {
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 20,
+        search: params?.search ?? '',
+      }),
+    ),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<PagedResult<AdminDocumentSummary>>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list admin documents failed');
+  }
+  return payload;
+}
+
+/** 管理员跨租户删除文档：tenantId 来自总览列表数据回传。 */
+export async function deleteAdminDocument(
+  tenantId: string,
+  chatId: string,
+  auth?: AuthContext,
+): Promise<string> {
+  const response = await fetch(
+    resolveApi(`/admin/documents/${encodeURIComponent(tenantId)}/${encodeURIComponent(chatId)}`),
+    {
+      credentials: 'include',
+      method: 'DELETE',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<BasicResult>(response);
+  if (!response.ok || !payload || payload.ok !== 1) {
+    throw formatHttpError(response.status, payload?.msg ?? 'delete document failed');
+  }
+  return payload.msg;
+}
+
 /** 知识库问答：后端同步计算答案，返回纯文本（含引用脚注）。 */
 export async function pdfChat(
   prompt: string,
@@ -695,4 +754,62 @@ export async function pdfChat(
     throw formatHttpError(response.status, text || 'pdf chat failed');
   }
   return text;
+}
+
+/** 工作流任务列表（含深度研究任务，按 type 过滤；后端返回裸数组，元素带 steps）。 */
+export async function listWorkflowTasks(
+  auth?: AuthContext,
+  page = 1,
+  pageSize = 20,
+): Promise<WorkflowTask[]> {
+  const response = await fetch(resolveApi(withQuery('/ai/workflow/tasks', { page, pageSize })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<WorkflowTask[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list workflow tasks failed');
+  }
+  return payload;
+}
+
+/** 发起深度研究：后端同步执行（约 1-3 分钟），完成即返回报告。 */
+export async function createResearchTask(
+  topic: string,
+  modelProfile: string | undefined,
+  auth?: AuthContext,
+): Promise<DeepResearchResult> {
+  const response = await fetch(resolveApi('/ai/research/tasks'), {
+    credentials: 'include',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
+    },
+    body: JSON.stringify({ topic, modelProfile }),
+  });
+  // 成功时返回裸 DeepResearchResult（无 ok/msg 包装），错误响应体里才有 msg
+  const payload = await parseJsonSafely<DeepResearchResult & { msg?: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? 'create research task failed');
+  }
+  return payload;
+}
+
+/** 取历史研究报告正文（创建响应里已带 report，此接口用于回看旧任务）。 */
+export async function getResearchReport(taskId: string, auth?: AuthContext): Promise<string> {
+  const response = await fetch(
+    resolveApi(`/ai/research/tasks/${encodeURIComponent(taskId)}/report`),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<{ taskId: string; report: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'load research report failed');
+  }
+  return payload.report;
 }

@@ -79,6 +79,21 @@
         >
           文档问答
         </button>
+        <button
+          type="button"
+          :class="{ active: activeView === 'research' }"
+          @click="activateView('research')"
+        >
+          深度研究
+        </button>
+        <button
+          v-if="isAdmin"
+          type="button"
+          :class="{ active: activeView === 'admin' }"
+          @click="activateView('admin')"
+        >
+          文档总览
+        </button>
       </div>
 
       <section class="session-tools">
@@ -236,6 +251,19 @@
                 <el-option label="cost_first（固定最低档）" value="cost_first" />
               </el-select>
             </el-form-item>
+            <el-form-item label="Agent 引擎（主聊天）">
+              <el-radio-group v-model="agentEngine">
+                <el-radio-button value="standard">标准 ReAct</el-radio-button>
+                <el-radio-button value="workflow">工作流引擎</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <p class="engine-hint">
+              {{
+                agentEngine === 'workflow'
+                  ? '工作流引擎：每一步全留痕可回放、轨迹逐轮实时推送；但不读写会话记忆。'
+                  : '标准 ReAct：主聊天默认引擎，带会话记忆。'
+              }}
+            </p>
             <el-form-item label="响应模式">
               <el-switch v-model="streaming" inline-prompt active-text="SSE" inactive-text="JSON" />
             </el-form-item>
@@ -260,7 +288,8 @@
           <p class="workspace-kicker">Active Session</p>
           <h2>{{ activeSession?.title || '新会话' }}</h2>
           <p class="workspace-sub">
-            {{ modelProfile }} · {{ streaming ? 'SSE 流式' : 'JSON 单次' }}
+            {{ modelProfile }} · {{ agentEngine === 'workflow' ? '工作流引擎' : '标准 ReAct' }} ·
+            {{ streaming ? 'SSE 流式' : 'JSON 单次' }}
           </p>
         </div>
         <div v-else-if="activeView === 'evaluation'">
@@ -275,10 +304,20 @@
           <h2>知识库</h2>
           <p class="workspace-sub">上传 PDF → 自动切分入库 → 参与全库检索</p>
         </div>
-        <div v-else>
+        <div v-else-if="activeView === 'admin'">
+          <p class="workspace-kicker">Admin Documents</p>
+          <h2>文档总览</h2>
+          <p class="workspace-sub">跨租户查看所有用户上传的文档</p>
+        </div>
+        <div v-else-if="activeView === 'pdfchat'">
           <p class="workspace-kicker">Doc Q&amp;A</p>
           <h2>文档问答</h2>
           <p class="workspace-sub">{{ pdfScopeLabel }} · {{ modelProfile }}</p>
+        </div>
+        <div v-else-if="activeView === 'research'">
+          <p class="workspace-kicker">Deep Research</p>
+          <h2>深度研究</h2>
+          <p class="workspace-sub">自动规划 → 检索 → 交叉验证 → 撰写报告，步骤全留痕</p>
         </div>
         <div v-if="activeView === 'chat'" class="head-actions">
           <el-select v-model="activeWorkspaceId" size="small" class="workspace-select">
@@ -307,7 +346,7 @@
           >
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
-        <div v-else class="head-actions">
+        <div v-else-if="activeView === 'evaluation'" class="head-actions">
           <el-button size="small" :loading="evalLoading" @click="loadEvalDatasets">刷新</el-button>
           <el-button
             size="small"
@@ -682,6 +721,67 @@
         </section>
       </section>
 
+      <section v-else-if="isAdmin && activeView === 'admin'" class="admin-docs-page">
+        <section v-loading="adminDocsLoading" class="eval-main-panel admin-docs-main">
+          <div class="knowledge-list-head">
+            <p class="section-label">文档总览（跨租户）</p>
+            <div class="admin-docs-toolbar">
+              <el-input
+                v-model="adminDocsSearch"
+                size="small"
+                clearable
+                placeholder="搜索租户 / 批次 / 文件名"
+                @keyup.enter="handleAdminSearch"
+                @clear="handleAdminSearch"
+              />
+              <el-button size="small" @click="handleAdminSearch">搜索</el-button>
+              <el-button size="small" @click="loadAdminDocuments()">刷新</el-button>
+            </div>
+          </div>
+          <el-alert
+            v-if="adminNeedsAuth"
+            class="kb-auth-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="需要 ADMIN 身份"
+            description="请使用管理员账号登录后查看文档总览。"
+          />
+          <el-table :data="adminDocs" height="100%" empty-text="还没有任何入库文档">
+            <el-table-column prop="tenantId" label="租户" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="sourceName" label="文件名" min-width="180" show-overflow-tooltip />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="尝试" width="70">
+              <template #default="{ row }">{{ row.attemptCount ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="大小" width="90">
+              <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="150">
+              <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column prop="errorMessage" label="错误" min-width="140" show-overflow-tooltip />
+            <el-table-column label="操作" width="90" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" link @click="removeAdminDocument(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            v-model:current-page="adminDocsPage"
+            :page-size="adminDocsPageSize"
+            :total="adminDocsTotal"
+            layout="total, prev, pager, next"
+            class="admin-docs-pagination"
+            @current-change="handleAdminPageChange"
+          />
+        </section>
+      </section>
+
       <section v-else-if="activeView === 'pdfchat'" class="pdfchat-page">
         <aside class="eval-side-panel">
           <div class="eval-panel-head">
@@ -789,6 +889,112 @@
               >发送</el-button
             >
           </div>
+        </section>
+      </section>
+
+      <section v-else-if="activeView === 'research'" class="research-page">
+        <aside class="eval-side-panel">
+          <div class="eval-panel-head">
+            <div>
+              <p class="section-label">Deep Research</p>
+              <strong>深度研究</strong>
+            </div>
+          </div>
+
+          <p class="knowledge-tip">
+            输入一个研究题目，系统会自动规划 → 检索知识库 → 交叉验证 → 写出一份带步骤留痕的研究报告（约
+            1-3 分钟）。
+          </p>
+
+          <el-input
+            v-model="researchTopic"
+            type="textarea"
+            :rows="4"
+            resize="none"
+            maxlength="500"
+            show-word-limit
+            placeholder="研究题目，例如：Java 面试中 HashMap 的高频考点全景"
+          />
+          <el-button
+            type="primary"
+            :loading="researchRunning"
+            :disabled="!researchTopic.trim()"
+            @click="startResearch"
+            >{{ researchRunning ? '研究进行中…' : '开始研究' }}</el-button
+          >
+          <p v-if="researchRunning" class="research-status-line">
+            <span class="status-dot">进行中</span> {{ researchStatusText || '任务排队中' }}
+          </p>
+
+          <el-alert
+            v-if="researchNeedsAuth"
+            class="kb-auth-alert"
+            type="info"
+            show-icon
+            :closable="false"
+            title="登录后才能发起研究和查看历史"
+            description="请先登录；登录过期时请退出重新登录，再回来点「刷新」。"
+          />
+
+          <div class="research-history-head">
+            <p class="section-label">研究历史</p>
+            <el-button size="small" @click="loadResearchTasks()">刷新</el-button>
+          </div>
+          <div v-loading="researchLoading" class="eval-dataset-list pdf-scope-list">
+            <button
+              v-for="task in researchTasks"
+              :key="task.taskId"
+              type="button"
+              :class="{ active: task.taskId === researchActiveTaskId }"
+              @click="openResearchTask(task)"
+            >
+              <span>{{ task.userInput || shortId(task.taskId) }}</span>
+              <small
+                >{{ researchStatusLabel(task.status) }} ·
+                {{ formatJobTime(task.createdAt) }}</small
+              >
+            </button>
+            <div v-if="!researchTasks.length" class="session-empty">还没有研究记录</div>
+          </div>
+        </aside>
+
+        <section class="eval-main-panel research-main">
+          <div class="knowledge-list-head">
+            <p class="section-label">研究报告</p>
+            <el-tag v-if="researchStatusText" size="small" effect="plain">{{
+              researchStatusText
+            }}</el-tag>
+          </div>
+
+          <div v-if="!researchReport && !researchRunning" class="pdfchat-empty">
+            <h3>还没有报告</h3>
+            <p>在左侧输入研究题目并点「开始研究」，报告会显示在这里。</p>
+          </div>
+
+          <div v-if="researchRunning && !researchReport" class="research-progress">
+            <p class="research-progress-main">{{ researchStatusText || '任务排队中' }}…</p>
+            <p class="research-progress-sub">规划 → 检索 → 召回 → 撰写，全程约 1-3 分钟，别关页面</p>
+          </div>
+
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div
+            v-if="researchReport"
+            class="markdown research-report"
+            v-html="renderMarkdown(formatResearchReport(researchReport))"
+          ></div>
+
+          <el-collapse v-if="researchSteps.length" class="research-steps">
+            <el-collapse-item :title="`研究过程（${researchSteps.length} 步）`" name="steps">
+              <div v-for="(step, idx) in researchSteps" :key="idx" class="research-step">
+                <p class="research-step-head">
+                  <strong>#{{ idx + 1 }} {{ step.agentName || 'agent' }}</strong>
+                  <small v-if="step.latencyMs">{{ step.latencyMs }}ms</small>
+                </p>
+                <p v-if="step.thought" class="research-step-line">{{ step.thought }}</p>
+                <p v-if="step.action" class="research-step-line dim">动作：{{ step.action }}</p>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </section>
       </section>
 
@@ -931,13 +1137,18 @@ import type { Ref } from 'vue';
 import {
   compareSessionBranches,
   createEvalDataset,
+  createResearchTask,
+  deleteAdminDocument,
   deleteIngestionDocument,
   exchangeApiKey,
   exportEvalRunReport,
   getEvalComparison,
+  getResearchReport,
   getTenantCostSummary,
+  listAdminDocuments,
   listEvalDatasets,
   listRecentIngestionJobs,
+  listWorkflowTasks,
   markEvalRunBaseline,
   listSessionStates,
   loginWithPassword,
@@ -955,6 +1166,8 @@ import {
   uploadIngestionPdf,
 } from './api/client';
 import type {
+  AdminDocumentSummary,
+  AgentEngine,
   EvalCaseCreate,
   EvalComparison,
   EvalDataset,
@@ -968,6 +1181,8 @@ import type {
   ReactTraceStep,
   SessionState,
   TenantCostSummary,
+  WorkflowStep,
+  WorkflowTask,
 } from './types/react';
 
 interface ChatMessage {
@@ -1016,7 +1231,7 @@ interface MessageMetric {
 }
 
 type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
-type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'pdfchat';
+type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'pdfchat' | 'admin' | 'research';
 
 interface EvalMetricCard {
   key: keyof EvalMetricSummary;
@@ -1104,6 +1319,34 @@ function fromBase64(value: string): string {
   const binary = atob(value);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+// 剪贴板兜底：navigator.clipboard 只在 HTTPS（或 localhost）下存在，
+// 线上是 HTTP 裸 IP 访问，该接口直接是 undefined；用隐藏文本框 +
+// execCommand 的老办法不受这个限制，两种环境都能复制成功
+async function writeClipboardText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // 权限被拒等场景，落到下面的老办法
+    }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand('copy')) {
+      throw new Error('copy command failed');
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 const renderer = new marked.Renderer();
@@ -1337,7 +1580,7 @@ const bootstrap = Object.keys(cached).length > 0 ? cached : legacy;
 
 const darkMode = ref(Boolean(bootstrap.darkMode));
 const activeView = ref<ConsoleView>(
-  ['evaluation', 'knowledge', 'pdfchat'].includes(bootstrap.activeView as string)
+  ['evaluation', 'knowledge', 'pdfchat', 'admin', 'research'].includes(bootstrap.activeView as string)
     ? (bootstrap.activeView as ConsoleView)
     : 'chat',
 );
@@ -1426,6 +1669,27 @@ const pdfUploadFiles = ref<UploadUserFile[]>([]);
 // 未登录 / 登录过期时不弹报错，改在页面里给一句提示
 const knowledgeNeedsAuth = ref(false);
 const pdfNeedsAuth = ref(false);
+// 管理员文档总览（跨租户）：列表数据 + 分页/搜索 + 未登录提示
+const adminDocs = ref<AdminDocumentSummary[]>([]);
+const adminDocsLoading = ref(false);
+const adminDocsTotal = ref(0);
+const adminDocsPage = ref(1);
+const adminDocsPageSize = ref(20);
+const adminDocsSearch = ref('');
+const adminNeedsAuth = ref(false);
+// Agent 引擎：standard = 主聊天标准 ReAct；workflow = 工作流版（步骤全留痕可回放，不读写会话记忆）
+const agentEngine = ref<AgentEngine>(bootstrap.agentEngine === 'workflow' ? 'workflow' : 'standard');
+
+// ---------- 深度研究页状态 ----------
+const researchTopic = ref('');
+const researchRunning = ref(false);
+const researchStatusText = ref('');
+const researchReport = ref('');
+const researchSteps = ref<WorkflowStep[]>([]);
+const researchTasks = ref<WorkflowTask[]>([]);
+const researchLoading = ref(false);
+const researchNeedsAuth = ref(false);
+const researchActiveTaskId = ref('');
 
 function isAuthError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith('HTTP 401');
@@ -1706,6 +1970,7 @@ function persistState(): void {
       token: token.value,
       refreshToken: refreshToken.value,
       role: role.value,
+      agentEngine: agentEngine.value,
       evalSelectedDatasetId: evalSelectedDatasetId.value,
       activeSessionId: activeSessionId.value,
       sessionSearch: sessionSearch.value,
@@ -1735,6 +2000,12 @@ function activateView(view: ConsoleView): void {
   }
   if (view === 'pdfchat' && !pdfLoading.value) {
     void loadPdfDocs();
+  }
+  if (view === 'admin' && isAdmin.value) {
+    void loadAdminDocuments();
+  }
+  if (view === 'research' && !researchLoading.value) {
+    void loadResearchTasks();
   }
 }
 
@@ -1847,6 +2118,93 @@ async function removeKnowledgeJob(row: IngestionJob): Promise<void> {
     const msg = await deleteIngestionDocument(row.chatId, authContext());
     ElMessage.success(msg || '已删除');
     await loadKnowledgeJobs(true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '删除失败';
+    ElMessage.error(message);
+  }
+}
+
+// ---------- 管理员文档总览（跨租户） ----------
+
+async function loadAdminDocuments(silent = false): Promise<void> {
+  if (!isAdmin.value) {
+    return;
+  }
+  if (!token.value && !apiKeyInput.value) {
+    // 压根没登录过，别去打接口，页面里提示即可
+    adminNeedsAuth.value = true;
+    adminDocs.value = [];
+    return;
+  }
+  if (!silent) {
+    adminDocsLoading.value = true;
+  }
+  try {
+    const result = await listAdminDocuments(authContext(), {
+      page: adminDocsPage.value,
+      pageSize: adminDocsPageSize.value,
+      search: adminDocsSearch.value.trim() || undefined,
+    });
+    adminDocs.value = result.items;
+    adminDocsTotal.value = result.total;
+    adminNeedsAuth.value = false;
+  } catch (error) {
+    if (isAuthError(error)) {
+      // 登录过期（JWT 两小时失效），页面里提示，不弹报错
+      adminNeedsAuth.value = true;
+      adminDocs.value = [];
+    } else if (!silent) {
+      const message = error instanceof Error ? error.message : '文档总览加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      adminDocsLoading.value = false;
+    }
+  }
+}
+
+function handleAdminSearch(): void {
+  adminDocsPage.value = 1;
+  void loadAdminDocuments();
+}
+
+function handleAdminPageChange(page: number): void {
+  adminDocsPage.value = page;
+  void loadAdminDocuments();
+}
+
+function formatFileSize(size: number | null | undefined): string {
+  if (size === null || size === undefined) {
+    return '-';
+  }
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function removeAdminDocument(row: AdminDocumentSummary): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除租户 ${row.tenantId} 的「${row.sourceName}」？将同时清掉它的向量切片和原文件，不可恢复。`,
+      '删除文档',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    );
+  } catch {
+    return; // 用户点了取消
+  }
+  try {
+    const msg = await deleteAdminDocument(row.tenantId, row.chatId, authContext());
+    ElMessage.success(msg || '已删除');
+    // 当前页删得只剩这一条且不是第一页时回退一页，避免停在空页上
+    if (adminDocs.value.length === 1 && adminDocsPage.value > 1) {
+      adminDocsPage.value -= 1;
+    }
+    await loadAdminDocuments(true);
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除失败';
     ElMessage.error(message);
@@ -1998,6 +2356,192 @@ async function sendPdfQuestion(): Promise<void> {
   } finally {
     pdfAnswering.value = false;
     void nextTick(scrollPdfToBottom);
+  }
+}
+
+// ---------- 深度研究 ----------
+
+// 工作流任务状态 → 中文进度文案
+function researchStatusLabel(status: string | undefined): string {
+  switch (status) {
+    case 'CREATED':
+      return '已创建';
+    case 'PLANNING':
+      return '正在规划';
+    case 'SEARCHING':
+      return '正在检索';
+    case 'RETRIEVING':
+      return '正在召回';
+    case 'WRITING':
+      return '正在撰写';
+    case 'DONE':
+      return '已完成';
+    case 'FAILED':
+      return '失败';
+    default:
+      return status || '-';
+  }
+}
+
+async function loadResearchTasks(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    researchNeedsAuth.value = true;
+    researchTasks.value = [];
+    return;
+  }
+  if (!silent) {
+    researchLoading.value = true;
+  }
+  try {
+    const tasks = await listWorkflowTasks(authContext(), 1, 50);
+    researchTasks.value = tasks.filter((task) => task.type === 'DEEP_RESEARCH');
+    researchNeedsAuth.value = false;
+  } catch (error) {
+    if (isAuthError(error)) {
+      // 登录过期（JWT 两小时失效），页面里提示，不弹报错
+      researchNeedsAuth.value = true;
+      researchTasks.value = [];
+    } else if (!silent) {
+      const message = error instanceof Error ? error.message : '研究任务加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      researchLoading.value = false;
+    }
+  }
+}
+
+// 研究进行中时每 3 秒盯一次任务列表，把中间状态刷成进度文案
+let researchPollTimer: number | null = null;
+
+function stopResearchPolling(): void {
+  if (researchPollTimer !== null) {
+    window.clearInterval(researchPollTimer);
+    researchPollTimer = null;
+  }
+}
+
+function startResearchPolling(): void {
+  stopResearchPolling();
+  researchPollTimer = window.setInterval(() => {
+    void (async () => {
+      try {
+        const tasks = await listWorkflowTasks(authContext(), 1, 20);
+        const running = tasks.find(
+          (task) => task.type === 'DEEP_RESEARCH' && task.status !== 'DONE' && task.status !== 'FAILED',
+        );
+        if (running) {
+          researchStatusText.value = researchStatusLabel(running.status);
+          researchActiveTaskId.value = running.taskId;
+        }
+      } catch {
+        // 轮询失败不打断主流程，等下一轮
+      }
+    })();
+  }, 3000);
+}
+
+async function startResearch(): Promise<void> {
+  const topic = researchTopic.value.trim();
+  if (!topic || researchRunning.value) {
+    return;
+  }
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning('请先登录后再发起研究');
+    return;
+  }
+  researchRunning.value = true;
+  researchStatusText.value = '任务排队中';
+  researchReport.value = '';
+  researchSteps.value = [];
+  researchActiveTaskId.value = '';
+  // 创建接口是同步阻塞的（研究做完才返回报告），轮询器同时把
+  // 规划→检索→召回→撰写 的中间状态刷到界面上
+  startResearchPolling();
+  try {
+    const result = await createResearchTask(topic, modelProfile.value, authContext());
+    stopResearchPolling();
+    researchStatusText.value = researchStatusLabel(result.status);
+    researchReport.value = result.report ?? '';
+    researchTopic.value = '';
+    if (result.taskId) {
+      researchActiveTaskId.value = result.taskId;
+      // 列表里带 steps，刷新一次拿最新历史 + 步骤留痕
+      const fresh = await listWorkflowTasks(authContext(), 1, 50);
+      researchTasks.value = fresh.filter((task) => task.type === 'DEEP_RESEARCH');
+      researchSteps.value = fresh.find((task) => task.taskId === result.taskId)?.steps ?? [];
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '研究任务失败';
+    researchStatusText.value = '失败';
+    ElMessage.error(message);
+  } finally {
+    stopResearchPolling();
+    researchRunning.value = false;
+  }
+}
+
+// 模型偶尔会直接吐 JSON 字符串当报告（economy 档实测如此），也可能是正经 Markdown；
+// 检测到 JSON 就转成分节可读文本，其余原样交给渲染器
+function formatResearchReport(raw: string): string {
+  const text = (raw ?? '').trim();
+  if (!text.startsWith('{') && !text.startsWith('[')) {
+    return text;
+  }
+  try {
+    return researchJsonToMarkdown(JSON.parse(text) as unknown);
+  } catch {
+    return text;
+  }
+}
+
+function researchJsonToMarkdown(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => `- ${researchInlineValue(item)}`).join('\n');
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, val]) => {
+        if (Array.isArray(val)) {
+          return `### ${key}\n${val.map((item) => `- ${researchInlineValue(item)}`).join('\n')}`;
+        }
+        return `### ${key}\n${researchInlineValue(val)}`;
+      })
+      .join('\n\n');
+  }
+  return String(value ?? '');
+}
+
+function researchInlineValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+async function openResearchTask(task: WorkflowTask): Promise<void> {
+  if (researchRunning.value) {
+    return;
+  }
+  researchActiveTaskId.value = task.taskId;
+  researchStatusText.value = researchStatusLabel(task.status);
+  researchSteps.value = task.steps ?? [];
+  if (task.finalOutput) {
+    researchReport.value = task.finalOutput;
+    return;
+  }
+  try {
+    researchReport.value = await getResearchReport(task.taskId, authContext());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '报告加载失败';
+    ElMessage.error(message);
   }
 }
 
@@ -2704,7 +3248,7 @@ async function handleMarkdownClick(event: MouseEvent): Promise<void> {
 
   try {
     const raw = fromBase64(payload);
-    await navigator.clipboard.writeText(raw);
+    await writeClipboardText(raw);
     ElMessage.success('代码已复制');
   } catch {
     ElMessage.error('代码复制失败');
@@ -2713,7 +3257,7 @@ async function handleMarkdownClick(event: MouseEvent): Promise<void> {
 
 async function copyMessage(content: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(content);
+    await writeClipboardText(content);
     ElMessage.success('已复制');
   } catch {
     ElMessage.error('复制失败');
@@ -2876,6 +3420,8 @@ function clearAuth(): void {
   apiKeyInput.value = '';
   tenantInput.value = '';
   costSummary.value = null;
+  // 退出时离开管理员视图，避免下一个普通用户登录后残留无权限的页面
+  activeView.value = 'chat';
   persistState();
 }
 
@@ -3018,6 +3564,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
           }
         },
         controller.signal,
+        agentEngine.value,
       );
 
       if (streamError) {
@@ -3032,6 +3579,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
         },
         authContext(),
         controller.signal,
+        agentEngine.value,
       );
       traceSteps.value = result.trace ?? [];
       messages.value[assistantIndex].content = result.answer || '模型没有返回内容';
@@ -3121,10 +3669,13 @@ watch(
   { immediate: true },
 );
 
-watch([modelProfile, streaming, workspaceFilter, showArchivedSessions, sessionSearch], () => {
-  syncCurrentSessionBranch();
-  persistState();
-});
+watch(
+  [modelProfile, streaming, workspaceFilter, showArchivedSessions, sessionSearch, agentEngine],
+  () => {
+    syncCurrentSessionBranch();
+    persistState();
+  },
+);
 
 watch(
   [messages, traceSteps],
@@ -3199,12 +3750,17 @@ onMounted(() => {
     void loadPdfDocs();
   }
 
+  if (activeView.value === 'research') {
+    void loadResearchTasks();
+  }
+
   void scrollToBottom(true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewport);
   stopKnowledgePolling();
+  stopResearchPolling();
 
   if (resizeObserver) {
     messageRowElements.forEach((element) => {
@@ -3223,9 +3779,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
+  /* 定高框架：页面本体永远等于一屏。此前用 min-height，侧栏内容一长
+     （会话列表+分支树+鉴权表单）就把整页撑高，聊天区滚到底再往下滚，
+     整页跟着滚、输入框下方露出大片空白。 */
+  height: 100vh;
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   color: var(--ui-text);
 }
 
@@ -3234,9 +3795,19 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  /* 行高锁死后侧栏允许收缩：内容超出在自己内部滚动，不再撑高整页 */
+  min-height: 0;
+  overflow-y: auto;
   border-right: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-card) 88%, transparent);
   backdrop-filter: blur(12px);
+}
+
+/* flex 纵向布局默认"先压缩孩子、再出滚动条"：不锁 flex-shrink，
+   底部的鉴权与模型面板会被压扁（它自带 overflow:hidden，压掉的部分直接看不见）。
+   子元素一律保持自然高度，超高才轮到侧栏整体滚动。 */
+.sidebar > * {
+  flex-shrink: 0;
 }
 
 .brand-block {
@@ -3532,7 +4103,11 @@ h1 {
 }
 
 .workspace {
-  min-height: 100vh;
+  /* 固定一屏高、内部滚动：所有页面（flex:1 + min-height:0 链、height:100% 表格、
+     sticky 输入框）都按"定高框架"设计，此前 min-height 让高度链断裂，
+     内容一长就把输入框/分页条顶出屏幕外 */
+  height: 100vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -4049,6 +4624,144 @@ h2 {
   padding: 14px;
 }
 
+.admin-docs-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* 同 .pdfchat-page：行高锁死，表格区内部滚动 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+/* 同 .pdfchat-main：压过文件后部的 .eval-main-panel 行高覆盖 */
+.eval-main-panel.admin-docs-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+}
+
+.admin-docs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-docs-toolbar .el-input {
+  width: 220px;
+}
+
+.admin-docs-pagination {
+  justify-self: end;
+}
+
+/* ---------- 深度研究 ---------- */
+
+.research-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  /* 同 .pdfchat-page：行高锁死，报告区内部滚动，不被内容顶出去 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+/* 同 .eval-main-panel.pdfchat-main：提高优先级压过文件后部的 .eval-main-panel 行高覆盖。
+   模板里的子块都是 v-if 互斥的，同时最多 头部/正文/步骤 三段，正好落三行 */
+.eval-main-panel.research-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+}
+
+.research-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.research-status-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-accent);
+}
+
+.research-progress {
+  align-self: center;
+  justify-self: center;
+  text-align: center;
+  padding: 32px 12px;
+}
+
+.research-progress-main {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.research-progress-sub {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.research-report {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.research-steps {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.research-step {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--ui-border);
+}
+
+.research-step:last-child {
+  border-bottom: none;
+}
+
+.research-step-head {
+  margin: 0 0 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.research-step-head small {
+  color: var(--ui-muted);
+}
+
+.research-step-line {
+  margin: 2px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ui-text);
+  word-break: break-word;
+}
+
+.research-step-line.dim {
+  color: var(--ui-muted);
+}
+
+.engine-hint {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-muted);
+}
+
 .knowledge-uploader {
   width: 100%;
 }
@@ -4158,6 +4871,8 @@ h2 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  /* 行高锁死在可用视口内：否则行随内容长高，整页滚动、输入框被顶出屏幕 */
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
 }
@@ -4169,7 +4884,9 @@ h2 {
   overflow-y: auto;
 }
 
-.pdfchat-main {
+/* 两个选择器提高优先级：文件后部的 .eval-main-panel（auto auto 1fr）会覆盖
+   同权重的单类规则，导致消息区无限长高、输入框被顶出屏幕外 */
+.eval-main-panel.pdfchat-main {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
