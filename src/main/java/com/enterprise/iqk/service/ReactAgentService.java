@@ -269,35 +269,36 @@ public class ReactAgentService {
                                   ModelRouter.ModelRouteDecision routeDecision,
                                   String tenantId,
                                   MemoryService.MemoryContextSnapshot memorySnapshot) {
+        // 提示词用中文驱动，模型的 thought/answer 才会用中文输出；JSON 键名与动作名保持英文（解析器依赖）。
         String planningPrompt = """
-                You are a ReAct planner for an education assistant.
-                You must choose exactly one action for the next step.
+                你是一个教育助手场景的 ReAct 规划器，负责为下一步选择且仅选择一个动作。
+                thought（思考）与 answer（回答）必须使用简体中文书写。
                 %n
-                Allowed actions:
+                可选动作（只能从列表中选）：
                 - query_school
                 - query_course
                 - add_course_reservation
                 - rag_search
                 - finish
                 %n
-                Return JSON only:
+                只返回 JSON，格式如下：
                 {
-                  "thought": "short reasoning",
-                  "action": "one action from list",
+                  "thought": "简短的中文推理",
+                  "action": "从上面列表中选一个动作",
                   "action_input": {"key":"value"},
-                  "answer": "only provide when action is finish"
+                  "answer": "仅当 action 为 finish 时提供，用中文作答"
                 }
                 %n
-                User question:
+                用户问题：
                 %s
                 %n
-                Known memories (user profile / prior turns / verified facts, use as background):
+                已知记忆（用户画像 / 历史对话 / 已确认事实，作为背景参考）：
                 %s
                 %n
-                Rolling context:
+                滚动上下文：
                 %s
                 %n
-                Existing trace:
+                已有轨迹：
                 %s%n""".formatted(
                 request.getPrompt(),
                 memoryBlock(memorySnapshot),
@@ -307,7 +308,7 @@ public class ReactAgentService {
 
         try {
             String raw = callModel(
-                    "You are strict JSON ReAct planner. Return valid JSON only.",
+                    "你是严格的 JSON ReAct 规划器，只输出合法 JSON，thought 与 answer 用简体中文。",
                     planningPrompt,
                     routeDecision,
                     tenantId,

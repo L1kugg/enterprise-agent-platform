@@ -32,7 +32,7 @@ public class ReactDecisionParser {
     public ReasonDecision parse(String rawModelOutput) {
         String json = extractJson(rawModelOutput);
         if (!StringUtils.hasText(json)) {
-            return finishWithAnswer("Model output is not JSON, fallback to finish.", rawModelOutput);
+            return finishWithAnswer("模型输出不是 JSON，直接结束作答。", rawModelOutput);
         }
         try {
             JsonNode node = objectMapper.readTree(json);
@@ -54,7 +54,7 @@ public class ReactDecisionParser {
                     false
             );
         } catch (JsonProcessingException ex) {
-            return finishWithAnswer("JSON parse failed, fallback to finish.", rawModelOutput);
+            return finishWithAnswer("JSON 解析失败，直接结束作答。", rawModelOutput);
         }
     }
 
@@ -63,7 +63,7 @@ public class ReactDecisionParser {
         String safePrompt = emptyIfBlank(prompt).toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(safePrompt)) {
             return decision(
-                    "Planner failed and prompt is empty. Fallback to safe finish.",
+                    "规划失败且问题为空，走安全兜底。",
                     "当前请求内容为空，请补充问题后重试。",
                     "fallback://input_validation",
                     "规则兜底：空问题时引导用户补充输入。"
@@ -71,7 +71,7 @@ public class ReactDecisionParser {
         }
         if (containsAny(safePrompt, "校区", "campus")) {
             return decision(
-                    "Planner unavailable; fallback to deterministic school-query answer.",
+                    "规划器不可用，走校区查询规则兜底。",
                     "已识别为校区查询请求：可以返回校区列表，并按城市或课程类型做进一步筛选。\n如需精确结果，请补充目标城市、课程方向或价格区间。",
                     "fallback://school_query_flow",
                     "校区查询流程：先列出校区，再按城市/课程类型筛选。"
@@ -79,7 +79,7 @@ public class ReactDecisionParser {
         }
         if (containsAny(safePrompt, "课程预约", "预约字段", "预约需要", "联系方式", "姓名", "校区")) {
             return decision(
-                    "Planner unavailable; fallback to deterministic reservation schema answer.",
+                    "规划器不可用，走课程预约字段规则兜底。",
                     "课程预约建议至少包含这些字段：课程、姓名、联系方式、校区。\n如果业务需要，还可以补充备注、预约时间和渠道来源。",
                     "fallback://course_reservation_schema",
                     "预约字段模板：课程、姓名、联系方式、校区、备注(可选)。"
@@ -87,7 +87,7 @@ public class ReactDecisionParser {
         }
         if (containsAny(safePrompt, "高温", "健康风险", "heat")) {
             return decision(
-                    "Planner unavailable; fallback to deterministic heat-risk answer.",
+                    "规划器不可用，走高温风险规则兜底。",
                     "高温健康风险通常包括中暑、脱水、慢病加重和户外暴露相关风险。\n建议重点关注补水、避开高温时段、室内降温与高风险人群预警。",
                     "fallback://heat_risk_guide",
                     "高温风险要点：中暑、脱水、慢病加重、暴露风险。"
@@ -95,7 +95,7 @@ public class ReactDecisionParser {
         }
         if (containsAny(safePrompt, "没有答案", "没有的内容", "知识库里没有", "上下文不足")) {
             return decision(
-                    "Planner unavailable; fallback to hallucination-safe answer.",
+                    "规划器不可用，走无上下文安全策略。",
                     "当知识库没有匹配上下文时，我会明确说明“当前没有匹配内容”，并给出下一步建议（如补充资料、调整检索关键词）。\n我不会虚构不存在的结论。",
                     "fallback://no_context_policy",
                     "无上下文策略：明确告知无匹配，不编造结论。"
@@ -103,7 +103,7 @@ public class ReactDecisionParser {
         }
         if (containsAny(safePrompt, "知识库", "引用", "来源", "pdf", "文档", "source")) {
             return new ReasonDecision(
-                    "Planner unavailable; fallback route to rag_search.",
+                    "规划器不可用，改走知识库检索。",
                     "rag_search",
                     Map.of("query", prompt),
                     "",
@@ -113,7 +113,7 @@ public class ReactDecisionParser {
             );
         }
         return decision(
-                "Planner unavailable; fallback to generic safe answer.",
+                "规划器不可用，走通用安全兜底。",
                 "当前规划器暂不可用，建议稍后重试或细化问题关键词。",
                 "fallback://planner_unavailable",
                 "系统兜底：规划器异常时返回可执行提示。"

@@ -257,10 +257,20 @@ public class WorkflowReactAgentService {
                                   List<ReactTraceStepVO> trace,
                                   ModelRouter.ModelRouteDecision routeDecision,
                                   String tenantId) {
-        String planningPrompt = "You are a ReAct planner for an education assistant.%nYou must choose exactly one action for the next step.%n%nAllowed actions:%n- query_school%n- query_course%n- add_course_reservation%n- rag_search%n- finish%n%nReturn JSON only:%n{%n  \"thought\": \"short reasoning\",%n  \"action\": \"one action from list\",%n  \"action_input\": {\"key\":\"value\"},%n  \"answer\": \"only provide when action is finish\"%n}%n%nUser question:%n%s%n%nRolling context:%n%s%n%nExisting trace:%n%s%n".formatted(request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
+        // 提示词用中文驱动，模型 thought/answer 才会用中文；JSON 键名与动作名保持英文，解析逻辑依赖它们。
+        String planningPrompt = """
+                你是一个教育助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
+                thought（思考）与 answer（回答）必须使用简体中文书写。
+                可选动作：query_school / query_course / add_course_reservation / rag_search / finish
+                只返回 JSON：{"thought": "简短的中文推理", "action": "动作名", "action_input": {"key":"value"}, "answer": "仅 finish 时提供，用中文作答"}
+                用户问题：
+                %s
+                滚动上下文：
+                %s
+                已有轨迹：%s""".formatted(request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
 
         try {
-            String raw = callModel("You are strict JSON ReAct planner. Return valid JSON only.",
+            String raw = callModel("你是严格的 JSON ReAct 规划器，只输出合法 JSON，thought 与 answer 用简体中文。",
                     planningPrompt, routeDecision, tenantId, "react_planner");
             return parseDecision(raw);
         } catch (RuntimeException ex) {
@@ -388,7 +398,7 @@ public class WorkflowReactAgentService {
     private ReasonDecision parseDecision(String raw) {
         String json = extractJson(raw);
         if (!StringUtils.hasText(json)) {
-            return new ReasonDecision("Fallback to finish.", "finish",
+            return new ReasonDecision("规划输出解析失败，直接结束作答。", "finish",
                     Collections.emptyMap(), emptyIfBlank(raw), List.of(), List.of());
         }
         try {

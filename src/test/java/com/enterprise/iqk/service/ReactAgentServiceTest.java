@@ -125,7 +125,7 @@ class ReactAgentServiceTest {
         ArgumentCaptor<String> plannerPrompt = ArgumentCaptor.forClass(String.class);
         verify(requestSpec).user(plannerPrompt.capture());
         assertThat(plannerPrompt.getValue())
-                .contains("Known memories")
+                .contains("已知记忆")
                 .contains("用户是 Java 后端开发者");
         // memoryUsed 上报实际注入的记忆
         assertThat(response.getMemoryUsed()).contains("long: 画像: 用户是 Java 后端开发者");
