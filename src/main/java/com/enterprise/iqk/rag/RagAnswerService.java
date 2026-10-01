@@ -30,9 +30,10 @@ import java.util.stream.Collectors;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
- * 简单版 RAG 问答链路：向量检索（租户过滤，会话软作用域）→ 本地词面重排 → 引用化生成。
+ * 简单版 RAG 问答链路：向量检索（租户过滤，会话软作用域，空结果放宽阈值重试一次）
+ * → 本地词面重排 → 引用化生成。
  * 既是用户可见 /ai/pdf/chat 的后端，也被 BuiltinToolRuntime 的 rag_search 动作复用；
- * 检索为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
+ * 兜底重试仍为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
  * chat_id 不做硬过滤（否则知识库按会话割裂），同会话命中文档由 ChatScope 有界加分。
  */
 @Service
@@ -64,14 +65,8 @@ public class RagAnswerService {
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
             String filterExpression = tenantFilter(normalizedTenantId, chatId, docScoped);
-            SearchRequest request = SearchRequest.builder()
-                    .query(prompt)
-                    .topK(ragProperties.getRetrieveTopK())
-                    .similarityThreshold(ragProperties.getSimilarityThreshold())
-                    .filterExpression(filterExpression)
-                    .build();
 
-            List<Document> retrieved = similaritySearchWithMetrics(request);
+            List<Document> retrieved = retrieveWithRelaxedFallback(prompt, filterExpression);
             if (retrieved == null || retrieved.isEmpty()) {
                 pipelineOutcome = "empty";
                 return RagResult.builder()
@@ -132,6 +127,29 @@ public class RagAnswerService {
                     .register(meterRegistry)
                     .increment();
         }
+    }
+
+    /**
+     * 相似度检索 + 空结果兜底：先按配置阈值检索；为空则放宽阈值按最近邻重试一次。
+     * 泛问（如"这份文档讲了什么"）与具体切片的向量相似度天然偏低，严格阈值下会被
+     * 全部刷掉导致"明明有文档却检索为空"；放宽后捞回的仍是过滤范围内的最相似切片。
+     */
+    List<Document> retrieveWithRelaxedFallback(String prompt, String filterExpression) {
+        List<Document> retrieved = similaritySearchWithMetrics(SearchRequest.builder()
+                .query(prompt)
+                .topK(ragProperties.getRetrieveTopK())
+                .similarityThreshold(ragProperties.getSimilarityThreshold())
+                .filterExpression(filterExpression)
+                .build());
+        if (retrieved != null && !retrieved.isEmpty()) {
+            return retrieved;
+        }
+        return similaritySearchWithMetrics(SearchRequest.builder()
+                .query(prompt)
+                .topK(ragProperties.getRetrieveTopK())
+                .similarityThreshold(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL)
+                .filterExpression(filterExpression)
+                .build());
     }
 
     /** 带指标包装的向量相似度检索，结果可能为空，由调用方判断走空话术分支。 */

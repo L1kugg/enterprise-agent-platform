@@ -27,7 +27,8 @@ import java.util.stream.Stream;
 /**
  * 混合检索核心服务：向量 / 关键词 / 图谱 / 网络四路并行召回，
  * 各路结果按来源权重加权（finalScore = retrievalScore × 权重），再按内容指纹去重、
- * 按 finalScore 降序取 topK。
+ * 取 topK。topK 截断按来源轮转配额：每轮各健康路出一条本路最高分，避免低权重路
+ * （如图谱 0.20）的证据被高权重路整体挤出、永远不可见。
  * 设计要点：各源均为阻塞 IO，跑在专用线程池上以免拖垮公共 ForkJoinPool；
  * 单路故障（异常/超时）降级返回空列表并计入按路指标（retrieval.source.requests），
  * 结果携带 degradedSources、整体 outcome 标注 degraded / degraded-empty，
@@ -163,7 +164,7 @@ public class HybridRetrievalService {
             // 按加权得分降序排序
             deduped.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
 
-            List<ScoredDocument> top = deduped.stream().limit(topK).toList();
+            List<ScoredDocument> top = selectTopAcrossSources(deduped, topK);
 
             outcome = resolveOutcome(top, degradedSources);
             if (!degradedSources.isEmpty()) {
@@ -194,6 +195,40 @@ public class HybridRetrievalService {
             d.setFinalScore(d.getRetrievalScore() * weight);
         }
         return docs;
+    }
+
+    /**
+     * topK 截断按来源轮转配额：把去重后的候选（已按 finalScore 降序）按来源分桶，
+     * 每轮各来源出一条本路最高分，直到取满 topK 或无候选；最终仍按 finalScore 降序返回。
+     * 若不做配额，低权重路（图谱 0.20）即使有高分证据也会被高权重路（向量 0.40）
+     * 整体挤出 topK，四路融合退化为"只有向量"。
+     */
+    private List<ScoredDocument> selectTopAcrossSources(List<ScoredDocument> sorted, int topK) {
+        if (sorted.size() <= topK) {
+            return sorted;
+        }
+        Map<String, List<ScoredDocument>> bySource = new LinkedHashMap<>();
+        for (ScoredDocument d : sorted) {
+            bySource.computeIfAbsent(d.getSourceType() != null ? d.getSourceType() : "unknown",
+                    key -> new ArrayList<>()).add(d);
+        }
+        List<ScoredDocument> selected = new ArrayList<>();
+        boolean progressed = true;
+        while (selected.size() < topK && progressed) {
+            progressed = false;
+            for (List<ScoredDocument> lane : bySource.values()) {
+                if (lane.isEmpty()) {
+                    continue;
+                }
+                selected.add(lane.remove(0));
+                progressed = true;
+                if (selected.size() == topK) {
+                    break;
+                }
+            }
+        }
+        selected.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
+        return selected;
     }
 
     /**

@@ -185,6 +185,44 @@ class HybridRetrievalServiceTest {
                 .tag("outcome", "degraded-empty").timer()).doesNotThrowAnyException();
     }
 
+    @Test
+    void topKCutReservesSlotsForLowerWeightSources() {
+        VectorRetriever vectorRetriever = mock(VectorRetriever.class);
+        KeywordRetriever keywordRetriever = mock(KeywordRetriever.class);
+        GraphRetriever graphRetriever = mock(GraphRetriever.class);
+        WebRetriever webRetriever = mock(WebRetriever.class);
+        HybridRetrievalService service = new HybridRetrievalService(
+                vectorRetriever,
+                keywordRetriever,
+                graphRetriever,
+                webRetriever,
+                new SimpleMeterRegistry(),
+                3000,
+                8
+        );
+
+        // 向量路 3 条高分证据（0.9*0.40=0.36），图谱路 1 条（0.85*0.20=0.17）：
+        // 全局 topK=2 会把图谱完全挤出；按来源轮转配额图谱必占一席
+        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+                .thenReturn(List.of(
+                        doc("vec-1", "vector", "vector chunk one", 0.9),
+                        doc("vec-2", "vector", "vector chunk two", 0.9),
+                        doc("vec-3", "vector", "vector chunk three", 0.9)));
+        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(2)))
+                .thenReturn(List.of());
+        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(2)))
+                .thenReturn(List.of(doc("graph-1", "graph", "graph entity evidence", 0.85)));
+        when(webRetriever.retrieve(eq("q"), eq(2))).thenReturn(List.of());
+
+        HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 2);
+
+        assertThat(result.documents()).extracting(ScoredDocument::getDocId)
+                .containsExactlyInAnyOrder("vec-1", "graph-1");
+        // 最终仍按 finalScore 降序
+        assertThat(result.documents().get(0).getFinalScore())
+                .isGreaterThanOrEqualTo(result.documents().get(1).getFinalScore());
+    }
+
     /** 模拟不可中断完成的慢检索：永久阻塞，仅线程中断能打破。 */
     private List<ScoredDocument> blockingRetrieval(CountDownLatch interrupted) {
         try {
