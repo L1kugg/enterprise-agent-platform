@@ -75,6 +75,7 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/cost/budget").hasAnyAuthority("PERM_COST_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ingestion/jobs/**", "/ingestion/jobs").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/ingestion/jobs/process").hasRole("ADMIN")
+                    .requestMatchers("/admin/**").hasRole("ADMIN")
                     .requestMatchers("/ingestion/**", "/ai/pdf/**").hasAnyAuthority("PERM_INGESTION_WRITE", "ROLE_ADMIN")
                     .anyRequest().authenticated()
             );
