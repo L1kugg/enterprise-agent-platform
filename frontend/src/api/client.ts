@@ -14,8 +14,10 @@ import type {
   EvalRun,
   EvalRunRequest,
   FeedbackRequest,
+  IngestionDocumentSummary,
   IngestionJob,
   IngestionSubmitResponse,
+  RetrievalPreviewResult,
   ReactChatRequest,
   ReactChatResponse,
   ReactStreamEvent,
@@ -693,6 +695,53 @@ export async function deleteIngestionDocument(chatId: string, auth?: AuthContext
     throw formatHttpError(response.status, payload?.msg ?? 'delete document failed');
   }
   return payload.msg;
+}
+
+/** 知识库文档清单：本租户内按 chat 分组的文档，分页 + 按文件名/批次搜索。 */
+export async function listIngestionDocuments(
+  auth?: AuthContext,
+  params?: { page?: number; pageSize?: number; search?: string },
+): Promise<PagedResult<IngestionDocumentSummary>> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ingestion/documents', {
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 20,
+        search: params?.search ?? '',
+      }),
+    ),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<PagedResult<IngestionDocumentSummary>>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list documents failed');
+  }
+  return payload;
+}
+
+/** 知识库试搜：只召回不出答案（不调 LLM），用于验证内容能否被检索到。 */
+export async function searchIngestionPreview(
+  query: string,
+  auth?: AuthContext,
+  topK = 6,
+): Promise<RetrievalPreviewResult> {
+  const response = await fetch(
+    resolveApi(withQuery('/ingestion/search', { q: query, topK })),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<RetrievalPreviewResult>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'search preview failed');
+  }
+  return payload;
 }
 
 /** 管理员跨租户文档总览：分页 + 搜索（租户/批次/文件名）。 */

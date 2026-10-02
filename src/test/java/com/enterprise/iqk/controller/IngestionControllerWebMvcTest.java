@@ -3,9 +3,13 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.enums.IngestionJobStatus;
+import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.DocumentGraphBackfillService;
 import com.enterprise.iqk.ingestion.IngestionService;
+import com.enterprise.iqk.retrieval.RetrievalPreviewItem;
+import com.enterprise.iqk.retrieval.RetrievalPreviewResult;
+import com.enterprise.iqk.retrieval.RetrievalPreviewService;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
@@ -19,11 +23,14 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +58,8 @@ class IngestionControllerWebMvcTest {
     private org.springframework.beans.factory.ObjectProvider<Tracer> tracerProvider;
     @MockBean
     private IngestionProperties ingestionProperties;
+    @MockBean
+    private RetrievalPreviewService retrievalPreviewService;
 
     @Test
     void shouldAcceptUploadJob() throws Exception {
@@ -96,5 +105,44 @@ class IngestionControllerWebMvcTest {
 
         mockMvc.perform(post("/ingestion/documents/chat-none/graph/build"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldListTenantDocuments() throws Exception {
+        when(ingestionService.listDocumentsByTenant(any(), any(), eq(1), eq(20)))
+                .thenReturn(new PagedResult<>(List.of(IngestionJob.builder()
+                        .jobId("job-1")
+                        .chatId("doc-1")
+                        .sourceName("a.md")
+                        .sourceType("MD")
+                        .status(IngestionJobStatus.SUCCEEDED)
+                        .chunkCount(3)
+                        .build()), 1, 1, 20));
+
+        mockMvc.perform(get("/ingestion/documents"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].sourceName").value("a.md"))
+                .andExpect(jsonPath("$.items[0].chunkCount").value(3));
+    }
+
+    @Test
+    void shouldPreviewSearchKnowledgeBase() throws Exception {
+        when(retrievalPreviewService.search(any(), eq("测试查询"), anyInt()))
+                .thenReturn(new RetrievalPreviewResult(
+                        List.of(new RetrievalPreviewItem("vector", "a.md", "chunk-0", 0.81, "命中片段")),
+                        List.of()));
+
+        mockMvc.perform(get("/ingestion/search").param("q", "测试查询"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].fileName").value("a.md"))
+                .andExpect(jsonPath("$.items[0].score").value(0.81))
+                .andExpect(jsonPath("$.degradedSources").isEmpty());
+    }
+
+    @Test
+    void shouldRejectBlankPreviewQuery() throws Exception {
+        mockMvc.perform(get("/ingestion/search").param("q", "   "))
+                .andExpect(status().isBadRequest());
     }
 }

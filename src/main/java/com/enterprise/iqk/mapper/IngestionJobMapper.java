@@ -124,6 +124,62 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
             """)
     int requeueRetry(@Param("jobId") String jobId, @Param("updatedAt") LocalDateTime updatedAt);
 
+    /** 入库成功后回写向量切片数（纯展示字段，失败不影响入库结果）。 */
+    @Update("""
+            UPDATE ingestion_job
+            SET chunk_count = #{chunkCount},
+                updated_at = #{updatedAt}
+            WHERE job_id = #{jobId}
+            """)
+    int updateChunkCount(@Param("jobId") String jobId,
+                         @Param("chunkCount") int chunkCount,
+                         @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** 知识库文档清单：当前租户内每个 chat_id 取最新一条任务代表一份文档，搜索作用于文件名/批次。 */
+    @Select("""
+            <script>
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND id IN (
+                  SELECT MAX(id) FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                  GROUP BY chat_id
+              )
+            <if test="search != null and search != ''">
+              AND (
+                chat_id LIKE CONCAT('%', #{search}, '%')
+                OR source_name LIKE CONCAT('%', #{search}, '%')
+              )
+            </if>
+            ORDER BY id DESC
+            LIMIT #{offset}, #{pageSize}
+            </script>
+            """)
+    List<IngestionJob> findLatestPerChatByTenant(@Param("tenantId") String tenantId,
+                                                 @Param("search") String search,
+                                                 @Param("offset") long offset,
+                                                 @Param("pageSize") int pageSize);
+
+    /** 与 findLatestPerChatByTenant 同过滤条件的总数。 */
+    @Select("""
+            <script>
+            SELECT COUNT(*) FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND id IN (
+                  SELECT MAX(id) FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                  GROUP BY chat_id
+              )
+            <if test="search != null and search != ''">
+              AND (
+                chat_id LIKE CONCAT('%', #{search}, '%')
+                OR source_name LIKE CONCAT('%', #{search}, '%')
+              )
+            </if>
+            </script>
+            """)
+    long countLatestPerChatByTenant(@Param("tenantId") String tenantId, @Param("search") String search);
+
     /** 管理员跨租户文档总览：每个 (tenant_id, chat_id) 取最新一条任务代表文档状态，搜索作用于展示行。 */
     @Select("""
             <script>

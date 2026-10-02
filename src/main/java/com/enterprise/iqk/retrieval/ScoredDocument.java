@@ -26,8 +26,10 @@ public class ScoredDocument {
     private String url;
     /** 原文 chunk 序号或图谱实体/事实 ID */
     private String chunkId;
-    /** 命中的正文内容 */
+    /** 命中的正文内容（getFormattedContent，带元数据前缀，供 LLM 上下文/引用展示用） */
     private String content;
+    /** 纯正文（无元数据前缀）；仅向量/关键词路有值，试搜摘要与去重指纹优先用它 */
+    private String rawText;
     private double retrievalScore; // 检索器给出的原始得分（0-1）
     private double finalScore;     // 融合 + 证据评审之后的得分（0-1）
     /** 检索器透传的原始元数据（可含得分、时间戳等） */

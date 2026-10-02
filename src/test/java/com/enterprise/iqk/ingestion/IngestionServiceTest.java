@@ -46,7 +46,8 @@ class IngestionServiceTest {
                 new SimpleMeterRegistry(),
                 queue,
                 scanner,
-                org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class)
+                org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class),
+                new SimpleVectorStoreSnapshotPersister(vectorStoreProperties)
         );
     }
 

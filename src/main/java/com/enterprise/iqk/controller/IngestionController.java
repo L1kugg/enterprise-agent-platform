@@ -1,8 +1,12 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.domain.IngestionJob;
+import com.enterprise.iqk.domain.vo.IngestionDocumentVO;
 import com.enterprise.iqk.domain.vo.IngestionJobVO;
 import com.enterprise.iqk.domain.vo.IngestionSubmitVO;
+import com.enterprise.iqk.domain.vo.PagedResult;
+import com.enterprise.iqk.retrieval.RetrievalPreviewResult;
+import com.enterprise.iqk.retrieval.RetrievalPreviewService;
 import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.ingestion.DocumentGraphBackfillService;
 import com.enterprise.iqk.ingestion.IngestionProcessResult;
@@ -27,6 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +53,7 @@ public class IngestionController {
     private final ChatHistoryRepository chatHistoryRepository;
     private final ObjectProvider<Tracer> tracerProvider;
     private final IngestionProperties ingestionProperties;
+    private final RetrievalPreviewService retrievalPreviewService;
 
     @PostMapping("/upload/{chatId}")
     /** 上传文档（PDF/DOC/DOCX/MD）创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。 */
@@ -90,9 +99,32 @@ public class IngestionController {
                 .toList();
     }
 
+    @GetMapping("/documents")
+    /** 知识库文档清单：本租户内按 chat 分组的文档（每份取最新任务），分页 + 按文件名/批次搜索。 */
+    public PagedResult<IngestionDocumentVO> listDocuments(
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
+            @RequestParam(value = "search", required = false) String search) {
+        PagedResult<IngestionJob> result = ingestionService.listDocumentsByTenant(
+                currentTenantId(), search, page, pageSize);
+        List<IngestionDocumentVO> items = result.getItems().stream().map(this::toDocumentVO).toList();
+        return new PagedResult<>(items, result.getTotal(), result.getPage(), result.getPageSize());
+    }
+
+    @GetMapping("/search")
+    /** 知识库试搜：只走向量/关键词/图谱三条本地检索路返回原始命中，不调 LLM、不出答案。 */
+    public RetrievalPreviewResult previewSearch(
+            @RequestParam("q") String query,
+            @RequestParam(value = "topK", defaultValue = "6") int topK) {
+        if (!StringUtils.hasText(query) || !StringUtils.hasText(query.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query q is required");
+        }
+        return retrievalPreviewService.search(currentTenantId(), query.trim(), topK);
+    }
+
     @DeleteMapping("/documents/{chatId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    /** ADMIN 删除一个入库批次（文档）：清向量切片 → 删原文件 → 删任务记录，任一失败即中止。 */
+    /** 删除一个入库批次（文档）：清向量切片 → 删原文件 → 删任务记录，任一失败即中止。
+     * 严格限定本租户（MDC 租户作用域），本租户内任何已认证用户可删自己上传的文档。 */
     public Map<String, Object> deleteDocument(@PathVariable String chatId) {
         List<String> removedFiles = ingestionService.deleteDocumentByChat(currentTenantId(), chatId);
         return Map.of(
@@ -143,6 +175,32 @@ public class IngestionController {
                 .msg(picked ? "processed" : "empty")
                 .job(null)
                 .build();
+    }
+
+    /** 领域对象转文档清单视图：附带切片数与磁盘文件大小（缺失为 null，不影响列表）。 */
+    private IngestionDocumentVO toDocumentVO(IngestionJob job) {
+        return IngestionDocumentVO.builder()
+                .chatId(job.getChatId())
+                .sourceName(job.getSourceName())
+                .sourceType(job.getSourceType())
+                .status(job.getStatus())
+                .chunkCount(job.getChunkCount())
+                .fileSize(resolveFileSize(job.getFilePath()))
+                .createdAt(job.getCreatedAt())
+                .finishedAt(job.getFinishedAt())
+                .build();
+    }
+
+    /** 磁盘 stat 最新任务的 file_path；文件缺失/路径非法时返回 null，不影响列表。 */
+    private static Long resolveFileSize(String filePath) {
+        if (!StringUtils.hasText(filePath)) {
+            return null;
+        }
+        try {
+            return Files.size(Path.of(filePath));
+        } catch (IOException | SecurityException | InvalidPathException ex) {
+            return null;
+        }
     }
 
     /** 领域对象转视图对象，附带当前队列后端标识。 */

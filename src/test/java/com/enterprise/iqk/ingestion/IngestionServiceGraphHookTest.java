@@ -40,7 +40,8 @@ class IngestionServiceGraphHookTest {
                 new SimpleMeterRegistry(),
                 mock(IngestionQueue.class),
                 mock(FileSafetyScanner.class),
-                graphExtractionService
+                graphExtractionService,
+                new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties())
         );
     }
 

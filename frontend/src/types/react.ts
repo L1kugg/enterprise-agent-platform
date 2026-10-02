@@ -275,6 +275,33 @@ export interface AdminDocumentSummary {
   finishedAt?: string;
 }
 
+/** 知识库「文档清单」的单条文档（本租户内同一 chatId 的最新入库任务）。 */
+export interface IngestionDocumentSummary {
+  chatId: string;
+  sourceName: string;
+  sourceType?: string;
+  status: IngestionJobStatus;
+  chunkCount?: number | null;
+  fileSize?: number | null;
+  createdAt?: string;
+  finishedAt?: string;
+}
+
+/** 知识库「试搜」单条命中（对应后端 RetrievalPreviewItem）。 */
+export interface RetrievalPreviewItem {
+  source: string;
+  fileName: string;
+  chunkId: string;
+  score: number;
+  snippet: string;
+}
+
+/** 知识库「试搜」结果（对应后端 RetrievalPreviewResult）。 */
+export interface RetrievalPreviewResult {
+  items: RetrievalPreviewItem[];
+  degradedSources: string[];
+}
+
 /** Agent 引擎：standard = 主聊天 ReAct；workflow = 工作流版 ReAct（换接口前缀）。 */
 export type AgentEngine = 'standard' | 'workflow';
 

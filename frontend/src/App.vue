@@ -188,11 +188,11 @@
                 >
               </div>
               <p class="session-meta-row">
-                {{ session.workspaceId }} · {{ formatTime(session.updatedAt) }} ·
-                {{ shortId(session.id) }}
+                {{ session.workspaceId }} · {{ formatTime(session.updatedAt) }}
               </p>
             </div>
             <div class="session-actions">
+              <button type="button" @click.stop="renameSession(session.id)">重命名</button>
               <button type="button" @click.stop="toggleSessionPin(session.id)">
                 {{ session.pinned ? '取消置顶' : '置顶' }}
               </button>
@@ -235,7 +235,7 @@
         </div>
         <div v-else-if="activeView === 'evaluation'">
           <p class="workspace-kicker">RAG Evaluation</p>
-          <h2>{{ selectedEvalDataset?.name || 'Evaluation Studio' }}</h2>
+          <h2>{{ selectedEvalDataset?.name || '评测工作台' }}</h2>
           <p class="workspace-sub">
             {{ evalCurrentRun?.runId || 'no run' }} · {{ evalCurrentRun?.status || 'idle' }}
           </p>
@@ -256,7 +256,9 @@
           <p class="workspace-sub">本租户 token 用量与每日费用趋势</p>
         </div>
         <div v-if="activeView === 'chat'" class="head-actions">
-          <!-- 工作区：选择已有，或直接输入新名字回车即创建并切换（filterable + allow-create） -->
+          <!-- 工作区：选择已有，或直接输入新名字回车即创建并切换（filterable + allow-create）。
+               这是工作区的新建/切换唯一入口，所以不在单工作区时隐藏，只加前缀说明 -->
+          <span class="stream-detail">工作区</span>
           <el-select
             v-model="activeWorkspaceId"
             size="small"
@@ -275,15 +277,14 @@
             />
           </el-select>
           <el-switch v-model="darkMode" inline-prompt active-text="Dark" inactive-text="Light" />
-          <el-tag :type="streamStatusTagType" effect="plain">{{ streamStatusLabel }}</el-tag>
+          <!-- 空闲状态是默认态，不占位置；只在有动态（思考/输出/失败等）时亮出来 -->
+          <el-tag v-if="streamPhase !== 'idle'" :type="streamStatusTagType" effect="plain">{{
+            streamStatusLabel
+          }}</el-tag>
           <span class="stream-detail">{{ streamStatusDetail }}</span>
-          <span v-if="costSummary" class="stream-detail"
-            >成本: 本月 ${{ costSummary.monthCostUsd.toFixed(4) }} / 预算 ${{
-              costSummary.monthlyBudgetUsd.toFixed(4)
-            }}</span
-          >
-          <el-button size="small" @click="branchDrawerVisible = true">
-            分支{{ activeSession?.branches.length ? ` (${activeSession.branches.length})` : '' }}
+          <!-- 只有 1 条分支时没有可切换/对比的内容，不显示入口 -->
+          <el-button v-if="(activeSession?.branches.length ?? 0) > 1" size="small" @click="branchDrawerVisible = true">
+            分支 ({{ activeSession?.branches.length }})
           </el-button>
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
@@ -328,7 +329,18 @@
           <template v-else>
             <div v-if="isEmptyConversation" class="welcome-block">
               <h3>开始一个新问题</h3>
-              <p>支持消息编辑后重发分支、流式轨迹、长会话虚拟渲染。</p>
+              <p>上传文档或直接提问，回答会标注出处；编辑已发送的消息可以重新生成回答。</p>
+              <div class="welcome-suggestions">
+                <button
+                  v-for="question in welcomeSuggestions"
+                  :key="question"
+                  type="button"
+                  class="welcome-chip"
+                  @click="applySuggestion(question)"
+                >
+                  {{ question }}
+                </button>
+              </div>
             </div>
 
             <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
@@ -487,7 +499,7 @@
                           :disabled="!editingMessageDraft.trim() || sending"
                           @click="submitEditAndResend(entry.index, entry.item.id)"
                         >
-                          编辑后重发分支
+                          编辑后重发
                         </el-button>
                       </div>
                     </div>
@@ -496,13 +508,17 @@
                 </div>
 
                 <div class="message-actions">
-                  <button type="button" @click="copyMessage(entry.item.content)">复制</button>
+                  <button type="button" @click="copyMessage(entry.item.content)">
+                    <el-icon :size="12"><CopyDocument /></el-icon>
+                    复制
+                  </button>
                   <button
                     v-if="entry.item.role === 'assistant'"
                     type="button"
                     @click="regenerateFrom(entry.index)"
                   >
-                    重试分支
+                    <el-icon :size="12"><RefreshRight /></el-icon>
+                    重新生成
                   </button>
                   <button
                     v-if="entry.item.role === 'assistant'"
@@ -513,7 +529,8 @@
                     "
                     @click="rateAnswer(entry.index, entry.item, 5)"
                   >
-                    👍有帮助
+                    <el-icon :size="12"><CircleCheck /></el-icon>
+                    有帮助
                   </button>
                   <button
                     v-if="entry.item.role === 'assistant'"
@@ -524,13 +541,15 @@
                     "
                     @click="rateAnswer(entry.index, entry.item, 1)"
                   >
-                    👎待改进
+                    <el-icon :size="12"><CircleClose /></el-icon>
+                    待改进
                   </button>
                   <button
                     v-if="entry.item.role === 'user'"
                     type="button"
                     @click="startEditMessage(entry.item)"
                   >
+                    <el-icon :size="12"><Edit /></el-icon>
                     编辑后重发
                   </button>
                 </div>
@@ -561,6 +580,7 @@
               </button>
             </div>
             <el-input
+              ref="composerInputRef"
               v-model="prompt"
               class="composer-input"
               type="textarea"
@@ -650,41 +670,133 @@
           <p class="knowledge-tip">入库是异步的：提交后等状态变成 SUCCEEDED 才能被检索到；失败会自动重试。</p>
         </aside>
 
-        <section v-loading="knowledgeLoading" class="eval-main-panel">
-          <div class="knowledge-list-head">
-            <p class="section-label">入库任务（最近 20 条）</p>
-            <el-button size="small" @click="loadKnowledgeJobs()">刷新</el-button>
-          </div>
+        <section v-loading="knowledgeLoading" class="eval-main-panel kb-main-panel">
           <el-alert
             v-if="knowledgeNeedsAuth"
             class="kb-auth-alert"
             type="info"
             show-icon
             :closable="false"
-            title="登录后才能看到入库任务"
+            title="登录后才能看到知识库内容"
             description="请先登录（右上角退出后可重新登录）；如果登录已过期，重新登录后回来点「刷新」即可。"
           />
-          <el-table :data="knowledgeJobs" height="100%" empty-text="还没有入库记录，先上传一个 PDF">
-            <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
-            <el-table-column label="状态" width="110">
-              <template #default="{ row }">
-                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="重试" width="80">
-              <template #default="{ row }">{{ row.attemptCount ?? 0 }}/{{ row.maxRetries ?? 0 }}</template>
-            </el-table-column>
-            <el-table-column label="上传时间" width="120">
-              <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
-            </el-table-column>
-            <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="errorMessage" label="错误" min-width="160" show-overflow-tooltip />
-            <el-table-column v-if="isAdmin" label="操作" width="90">
-              <template #default="{ row }">
-                <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <el-tabs v-model="knowledgeTab" class="kb-tabs">
+            <el-tab-pane label="文档清单" name="documents" class="kb-pane">
+              <div class="kb-toolbar">
+                <el-input
+                  v-model="knowledgeDocsSearch"
+                  class="kb-search-input"
+                  size="small"
+                  placeholder="按文件名或批次搜索"
+                  clearable
+                  @keyup.enter="searchKnowledgeDocuments"
+                  @clear="searchKnowledgeDocuments"
+                />
+                <el-button size="small" @click="searchKnowledgeDocuments">搜索</el-button>
+                <el-button size="small" @click="loadKnowledgeDocuments()">刷新</el-button>
+              </div>
+              <div class="kb-table-wrap">
+                <el-table :data="knowledgeDocuments" height="100%" empty-text="还没有入库文档，先上传一个">
+                  <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
+                  <el-table-column label="类型" width="80">
+                    <template #default="{ row }">{{ row.sourceType || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="切片数" width="80">
+                    <template #default="{ row }">{{ row.chunkCount ?? '—' }}</template>
+                  </el-table-column>
+                  <el-table-column label="大小" width="100">
+                    <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+                  </el-table-column>
+                  <el-table-column label="入库时间" width="130">
+                    <template #default="{ row }">{{ formatJobTime(row.finishedAt ?? row.createdAt) }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="80">
+                    <template #default="{ row }">
+                      <el-button size="small" type="danger" link @click="removeKnowledgeDocument(row)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <el-pagination
+                v-model:current-page="knowledgeDocsPage"
+                :page-size="knowledgeDocsPageSize"
+                :total="knowledgeDocsTotal"
+                layout="total, prev, pager, next"
+                small
+                background
+                @current-change="loadKnowledgeDocuments(true)"
+              />
+            </el-tab-pane>
+            <el-tab-pane label="入库任务" name="jobs" class="kb-pane">
+              <div class="knowledge-list-head">
+                <p class="section-label">最近 20 条任务</p>
+                <el-button size="small" @click="loadKnowledgeJobs()">刷新</el-button>
+              </div>
+              <div class="kb-table-wrap">
+                <el-table :data="knowledgeJobs" height="100%" empty-text="还没有入库记录，先上传一个文档">
+                  <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
+                  <el-table-column label="状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="重试" width="80">
+                    <template #default="{ row }">{{ row.attemptCount ?? 0 }}/{{ row.maxRetries ?? 0 }}</template>
+                  </el-table-column>
+                  <el-table-column label="上传时间" width="120">
+                    <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
+                  </el-table-column>
+                  <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
+                  <el-table-column prop="errorMessage" label="错误" min-width="160" show-overflow-tooltip />
+                  <el-table-column v-if="isAdmin" label="操作" width="90">
+                    <template #default="{ row }">
+                      <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label="试搜" name="search" class="kb-pane">
+              <div class="kb-toolbar">
+                <el-input
+                  v-model="previewQuery"
+                  class="kb-search-input"
+                  placeholder="输入一句话，看看知识库能搜到什么"
+                  clearable
+                  @keyup.enter="runPreviewSearch"
+                />
+                <el-button type="primary" :loading="previewLoading" @click="runPreviewSearch">试搜</el-button>
+              </div>
+              <el-alert
+                v-if="previewResult?.degradedSources.length"
+                type="warning"
+                show-icon
+                :closable="false"
+                :title="`部分检索通道暂不可用：${previewResult.degradedSources.join('、')}，结果可能不全`"
+              />
+              <div class="kb-preview-results">
+                <p v-if="!previewResult" class="kb-preview-hint">
+                  用来确认文档内容是否已经能被检索到：只查本租户知识库，不联网也不调用大模型。
+                </p>
+                <p v-else-if="previewResult.items.length === 0" class="kb-preview-hint">
+                  没搜到相关内容：换个说法试试，或到「文档清单」确认文档已入库完成。
+                </p>
+                <div v-for="item in previewResult?.items ?? []" :key="item.chunkId" class="kb-preview-item">
+                  <div class="kb-preview-meta">
+                    <el-tag size="small" effect="plain">{{ previewSourceLabel(item.source) }}</el-tag>
+                    <span class="kb-preview-file">{{ item.fileName }}</span>
+                    <span class="kb-preview-score">相关度 {{ item.score }}</span>
+                  </div>
+                  <p class="kb-preview-snippet">{{ item.snippet }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </section>
       </section>
 
@@ -939,7 +1051,7 @@
             <div v-for="metric in evalMetricCards" :key="metric.key" class="eval-metric-card">
               <span>{{ metric.label }}</span>
               <strong>{{ metric.current }}</strong>
-              <small :class="metric.deltaClass">{{ metric.delta }}</small>
+              <small v-if="metric.delta" :class="metric.deltaClass">{{ metric.delta }}</small>
             </div>
           </div>
 
@@ -1126,12 +1238,17 @@ import {
   CaretLeft,
   CaretRight,
   ChatDotRound,
+  CircleCheck,
+  CircleClose,
   Compass,
+  CopyDocument,
   DataAnalysis,
   Download,
+  Edit,
   FolderOpened,
   Notebook,
   Paperclip,
+  RefreshRight,
   Setting,
   TrendCharts,
   Upload,
@@ -1152,6 +1269,7 @@ import {
   getTenantCostTrend,
   listAdminDocuments,
   listEvalDatasets,
+  listIngestionDocuments,
   listRecentIngestionJobs,
   listWorkflowTasks,
   markEvalRunBaseline,
@@ -1162,6 +1280,7 @@ import {
   refreshJwt,
   registerUser,
   saveSessionState,
+  searchIngestionPreview,
   setSessionArchived,
   setSessionPinned,
   streamReactChat,
@@ -1177,12 +1296,14 @@ import type {
   EvalDataset,
   EvalMetricSummary,
   EvalRun,
+  IngestionDocumentSummary,
   IngestionJob,
   IngestionJobStatus,
   ReactChatResponse,
   ReactErrorEvent,
   ReactTokenEvent,
   ReactTraceStep,
+  RetrievalPreviewResult,
   SessionState,
   TenantCostSummary,
   TenantCostTrendPoint,
@@ -1247,8 +1368,7 @@ interface EvalMetricCard {
 
 const STORAGE_KEY = 'knowledgeops-agent-react-console-v2';
 const LEGACY_STORAGE_KEY = 'knowledgeops-agent-react-console';
-const DEFAULT_SYSTEM_MESSAGE =
-  '欢迎使用 ReAct 控制台。你可以先输入 API Key 获取 JWT，然后发起带轨迹的问答。';
+const DEFAULT_SYSTEM_MESSAGE = '你好，我是你的知识库助手。上传文档后直接提问，回答会标注内容出处。';
 const DEFAULT_WORKSPACE = 'default';
 const ESTIMATED_ROW_HEIGHT = 156;
 const OVERSCAN_COUNT = 8;
@@ -1649,6 +1769,18 @@ const sending = ref(false);
 const isStreamingResponse = ref(false);
 const hydrating = ref(true);
 const prompt = ref('');
+// 首屏示例问题：点击即填入输入框并聚焦，降低新用户上手成本
+const composerInputRef = ref<{ focus: () => void } | null>(null);
+const welcomeSuggestions = [
+  '知识库里有哪些文档？',
+  '帮我总结一下知识库的内容',
+  '怎样上传自己的文档？',
+];
+
+function applySuggestion(question: string): void {
+  prompt.value = question;
+  composerInputRef.value?.focus();
+}
 const messageContainer = ref<HTMLElement | null>(null);
 const currentAbortController = ref<AbortController | null>(null);
 const editingMessageId = ref<string | null>(null);
@@ -1675,6 +1807,17 @@ const knowledgeUploading = ref(false);
 const knowledgeUploadFiles = ref<UploadUserFile[]>([]);
 // 未登录 / 登录过期时不弹报错，改在页面里给一句提示
 const knowledgeNeedsAuth = ref(false);
+// 知识库文档清单（本租户按文档分组，= 每个 chatId 的最新入库任务）+ 分页/搜索
+const knowledgeTab = ref<'documents' | 'jobs' | 'search'>('documents');
+const knowledgeDocuments = ref<IngestionDocumentSummary[]>([]);
+const knowledgeDocsTotal = ref(0);
+const knowledgeDocsPage = ref(1);
+const knowledgeDocsPageSize = ref(20);
+const knowledgeDocsSearch = ref('');
+// 试搜（检索预览）：只召回不出答案，验证内容能否被检索到
+const previewQuery = ref('');
+const previewLoading = ref(false);
+const previewResult = ref<RetrievalPreviewResult | null>(null);
 // 管理员文档总览（跨租户）：列表数据 + 分页/搜索 + 未登录提示
 const adminDocs = ref<AdminDocumentSummary[]>([]);
 const adminDocsLoading = ref(false);
@@ -2167,6 +2310,7 @@ function activateView(view: ConsoleView): void {
   }
   if (view === 'knowledge' && !knowledgeLoading.value) {
     void loadKnowledgeJobs();
+    void loadKnowledgeDocuments();
   }
   if (view === 'admin' && isAdmin.value) {
     void loadAdminDocuments();
@@ -2234,6 +2378,102 @@ async function loadKnowledgeJobs(silent = false): Promise<void> {
   }
 }
 
+// ---------- 知识库文档清单（本租户） + 试搜 ----------
+
+async function loadKnowledgeDocuments(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    knowledgeNeedsAuth.value = true;
+    knowledgeDocuments.value = [];
+    return;
+  }
+  if (!silent) {
+    knowledgeLoading.value = true;
+  }
+  try {
+    const page = await listIngestionDocuments(authContext(), {
+      page: knowledgeDocsPage.value,
+      pageSize: knowledgeDocsPageSize.value,
+      search: knowledgeDocsSearch.value.trim() || undefined,
+    });
+    knowledgeDocuments.value = page.items;
+    knowledgeDocsTotal.value = page.total;
+    knowledgeNeedsAuth.value = false;
+  } catch (error) {
+    if (isAuthError(error)) {
+      knowledgeNeedsAuth.value = true;
+      knowledgeDocuments.value = [];
+    } else if (!silent) {
+      const message = error instanceof Error ? error.message : '文档清单加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      knowledgeLoading.value = false;
+    }
+  }
+}
+
+/** 搜索条件变了要回到第一页，避免停在过滤后的空页上。 */
+function searchKnowledgeDocuments(): void {
+  knowledgeDocsPage.value = 1;
+  void loadKnowledgeDocuments();
+}
+
+async function removeKnowledgeDocument(row: IngestionDocumentSummary): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${row.sourceName}」？将同时清掉它的向量切片和原文件，不可恢复。`,
+      '删除文档',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    );
+  } catch {
+    return; // 用户点了取消
+  }
+  try {
+    const msg = await deleteIngestionDocument(row.chatId, authContext());
+    ElMessage.success(msg || '已删除');
+    // 删到本页只剩一条时回退一页，避免停在空页上
+    if (knowledgeDocuments.value.length === 1 && knowledgeDocsPage.value > 1) {
+      knowledgeDocsPage.value -= 1;
+    }
+    await Promise.all([loadKnowledgeDocuments(true), loadKnowledgeJobs(true)]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '删除失败';
+    ElMessage.error(message);
+  }
+}
+
+async function runPreviewSearch(): Promise<void> {
+  const query = previewQuery.value.trim();
+  if (!query) {
+    ElMessage.warning('先输入要试搜的内容');
+    return;
+  }
+  previewLoading.value = true;
+  try {
+    previewResult.value = await searchIngestionPreview(query, authContext(), 6);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '试搜失败';
+    ElMessage.error(message);
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
+/** 检索通道名翻译成用户能看懂的词。 */
+function previewSourceLabel(source: string): string {
+  if (source === 'vector') {
+    return '语义检索';
+  }
+  if (source === 'keyword') {
+    return '关键词';
+  }
+  if (source === 'graph') {
+    return '知识图谱';
+  }
+  return source;
+}
+
 // 上传批次的 chatId：doc-年月日-时分秒，知识库页和输入框上传共用
 function mintIngestionChatId(): string {
   const stamp = new Date();
@@ -2271,6 +2511,7 @@ function submitKnowledgeUpload(): Promise<void> {
   return submitIngestionUpload(knowledgeUploadFiles, knowledgeUploading, {
     afterUpload: () => {
       void loadKnowledgeJobs(true);
+      void loadKnowledgeDocuments(true);
       startKnowledgePolling();
     },
   });
@@ -2400,6 +2641,7 @@ function startKnowledgePolling(): void {
     }
     if (activeView.value === 'knowledge') {
       void loadKnowledgeJobs(true);
+      void loadKnowledgeDocuments(true);
     }
   }, 3000);
 }
@@ -2738,7 +2980,7 @@ function metricCard(
   const baselineValue = baseline?.[key];
   const hasCurrent = typeof currentValue === 'number';
   const hasBaseline = typeof baselineValue === 'number';
-  let delta = 'baseline -';
+  let delta = '';
   let deltaClass = 'neutral';
   if (hasCurrent && hasBaseline) {
     const diff = currentValue - baselineValue;
@@ -3058,7 +3300,10 @@ function syncCurrentSessionBranch(): void {
   const firstUser = branch.messages.find((item) => item.role === 'user');
   if (firstUser?.content?.trim()) {
     branch.title = deriveTitle(firstUser.content);
-    session.title = deriveTitle(firstUser.content);
+    // 只在还是默认标题时自动起名：用户手动重命名过就不覆盖
+    if (session.title === '新会话') {
+      session.title = deriveTitle(firstUser.content);
+    }
   }
 
   session.updatedAt = Date.now();
@@ -3143,6 +3388,41 @@ async function toggleSessionPin(sessionId: string): Promise<void> {
       await setSessionPinned(sessionId, session.pinned, authContext());
     } catch (error) {
       const message = error instanceof Error ? error.message : '会话置顶同步失败';
+      ElMessage.error(message);
+    }
+  }
+}
+
+/** 重命名会话：先改本地，再尽力同步云端（整会话保存）。 */
+async function renameSession(sessionId: string): Promise<void> {
+  const session = getSession(sessionId);
+  if (!session) {
+    return;
+  }
+  let newName: string;
+  try {
+    const result = await ElMessageBox.prompt('给这个会话起个好认的名字', '重命名会话', {
+      inputValue: session.title,
+      inputPattern: /\S/,
+      inputErrorMessage: '名称不能为空',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    });
+    newName = result.value.trim();
+  } catch {
+    return; // 用户点了取消
+  }
+  if (!newName || newName === session.title) {
+    return;
+  }
+  session.title = newName;
+  session.updatedAt = Date.now();
+  persistState();
+  if (canUseRemoteSync.value) {
+    try {
+      await saveSessionState(session as unknown as SessionState, authContext());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '会话重命名同步失败';
       ElMessage.error(message);
     }
   }
@@ -3948,6 +4228,7 @@ onMounted(() => {
 
   if (activeView.value === 'knowledge') {
     void loadKnowledgeJobs();
+    void loadKnowledgeDocuments();
   }
 
   if (activeView.value === 'usage') {
@@ -4266,6 +4547,15 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  /* 悬浮/聚焦时才出现：默认藏起来，会话卡片不再一排常驻按钮 */
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.session-item:hover .session-actions,
+.session-item:focus-within .session-actions,
+.session-item.active .session-actions {
+  opacity: 1;
 }
 
 .session-actions button,
@@ -4508,7 +4798,35 @@ h2 {
   color: var(--ui-muted);
 }
 
+/* 首屏示例问题：样式与输入框工具按钮保持同一套胶囊语言 */
+.welcome-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.welcome-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
+  color: var(--ui-text);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+
+.welcome-chip:hover {
+  border-color: var(--ui-accent);
+}
+
 .message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   color: var(--ui-text);
@@ -5137,6 +5455,108 @@ h2 {
 
 .kb-auth-alert {
   margin: 8px 0;
+}
+
+/* ---------- 知识库页三标签（文档清单 / 入库任务 / 试搜） ---------- */
+
+/* 覆盖 .eval-main-panel 的三行网格：这里只有 alert(可选) + tabs，改用纵向 flex 撑满 */
+.kb-main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kb-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kb-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.kb-search-input {
+  max-width: 320px;
+}
+
+.kb-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.kb-pane .el-pagination {
+  justify-content: flex-end;
+}
+
+.kb-preview-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kb-preview-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ui-muted);
+}
+
+.kb-preview-item {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+}
+
+.kb-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-preview-file {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ui-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-preview-score {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.kb-preview-snippet {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ui-text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ---------- 登录/注册门闩 ---------- */

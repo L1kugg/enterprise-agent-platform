@@ -78,6 +78,7 @@ public class KeywordRetriever {
                             .title(metaStr(d, "file_name", "unknown"))
                             .chunkId("chunk-" + metaStr(d, "chunk_index", String.valueOf(i)))
                             .content(d.getFormattedContent())
+                            .rawText(d.getText())
                             .retrievalScore(score)
                             .metadata(d.getMetadata())
                             .build());

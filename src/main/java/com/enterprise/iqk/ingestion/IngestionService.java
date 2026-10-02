@@ -5,12 +5,14 @@ import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.config.properties.VectorStoreProperties;
 import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.enums.IngestionJobStatus;
+import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.HashUtils;
+import com.enterprise.iqk.util.SqlLikeUtils;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -23,7 +25,6 @@ import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
 import org.springframework.ai.reader.pdf.config.PdfDocumentReaderConfig;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
@@ -35,10 +36,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -69,9 +68,7 @@ public class IngestionService {
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
     private final GraphExtractionService graphExtractionService;
-    // 在整个 worker 线程池范围内串行化 SimpleVectorStore 快照写入，
-    // 避免并发任务交错写入同一个快照文件。
-    private final Object snapshotLock = new Object();
+    private final SimpleVectorStoreSnapshotPersister snapshotPersister;
 
     /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
@@ -143,6 +140,25 @@ public class IngestionService {
     /** 按租户列出最近入库任务（跨 chatId），供控制台知识库页展示，limit 下限保护为 1。 */
     public List<IngestionJob> listRecentByTenant(String tenantId, int limit) {
         return ingestionJobMapper.findLatestByTenant(TenantContext.normalize(tenantId), Math.max(limit, 1));
+    }
+
+    /**
+     * 知识库文档清单：当前租户内按 chat_id 分组、每组取最新一条任务代表一份文档，
+     * 分页 + 按文件名/批次模糊搜索。与管理员总览同一套"最新任务代表文档"的语义，但严格限定本租户。
+     */
+    public PagedResult<IngestionJob> listDocumentsByTenant(String tenantId, String search, int page, int pageSize) {
+        String normalizedTenantId = TenantContext.normalize(tenantId);
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(pageSize, 100));
+        String keyword = StringUtils.hasText(search) ? SqlLikeUtils.escapeForLike(search.trim()) : null;
+        long total = ingestionJobMapper.countLatestPerChatByTenant(normalizedTenantId, keyword);
+        if (total == 0) {
+            return new PagedResult<>(List.of(), 0, safePage, safePageSize);
+        }
+        long offset = (long) (safePage - 1) * safePageSize;
+        List<IngestionJob> items =
+                ingestionJobMapper.findLatestPerChatByTenant(normalizedTenantId, keyword, offset, safePageSize);
+        return new PagedResult<>(items, total, safePage, safePageSize);
     }
 
     /**
@@ -242,6 +258,14 @@ public class IngestionService {
                     null,
                     null
             );
+            // 切片数是纯展示字段：回写失败只告警，绝不能把已成功的任务拖进异常分支转 RETRY
+            // （那会重新解析入库，向量库里产生重复切片）。
+            try {
+                ingestionJobMapper.updateChunkCount(running.getJobId(), chunks.size(), LocalDateTime.now());
+            } catch (RuntimeException countEx) {
+                log.warn("chunk count 回写失败（不影响入库结果）: jobId={}, reason={}",
+                        running.getJobId(), countEx.toString());
+            }
             // SUCCEEDED 先落库再异步抽图谱：JVM 此刻挂掉最多丢一次图谱，
             // 可用回填端点补，绝不把图谱抽取耦合进入库重试。
             try {
@@ -331,7 +355,7 @@ public class IngestionService {
     private List<Document> processPdfJob(IngestionJob job) {
         List<Document> chunks = parseAndSplit(job);
         vectorStore.add(chunks);
-        persistSimpleVectorStoreIfNeeded();
+        snapshotPersister.persistIfNeeded(vectorStore);
         return chunks;
     }
 
@@ -410,39 +434,6 @@ public class IngestionService {
             chunk.getMetadata().putAll(metadata);
         }
         return chunks;
-    }
-
-    /** 仅 simple 后端且配置了快照路径时持久化 SimpleVectorStore，失败仅告警不影响入库结果。 */
-    private void persistSimpleVectorStoreIfNeeded() {
-        if (!(vectorStore instanceof SimpleVectorStore simpleVectorStore)) {
-            return;
-        }
-        if (!"simple".equalsIgnoreCase(vectorStoreProperties.getBackend())) {
-            return;
-        }
-        String storePath = vectorStoreProperties.getSimpleStorePath();
-        if (!StringUtils.hasText(storePath)) {
-            return;
-        }
-        try {
-            Path path = Path.of(storePath);
-            if (path.getParent() != null) {
-                Files.createDirectories(path.getParent());
-            }
-            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
-            synchronized (snapshotLock) {
-                // 先写入临时文件再原子替换快照，保证崩溃或并发读取方
-                // 永远不会看到写了一半的文件。
-                simpleVectorStore.save(tmp.toFile());
-                try {
-                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                } catch (AtomicMoveNotSupportedException atomicMoveNotSupported) {
-                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to persist SimpleVectorStore snapshot", e);
-        }
     }
 
     /** 把上传文件以 "jobId_清洗后文件名" 写入存储目录，返回绝对路径。 */

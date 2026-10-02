@@ -71,3 +71,6 @@ dist/
 /config/
 /*.log
 /*.tar.gz
+
+# Local runtime upload index written by LocalPdfFileRepository
+/chat-pdf.properties

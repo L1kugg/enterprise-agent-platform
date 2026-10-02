@@ -54,6 +54,7 @@ public class VectorRetriever {
                         .title(metaStr(d, "file_name", "unknown"))
                         .chunkId("chunk-" + metaStr(d, "chunk_index", String.valueOf(i)))
                         .content(d.getFormattedContent())
+                        .rawText(d.getText())
                         .retrievalScore(ChatScope.boost(extractScore(d, i), d, chatId))
                         .metadata(d.getMetadata())
                         .build());

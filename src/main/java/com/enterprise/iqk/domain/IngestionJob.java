@@ -30,6 +30,7 @@ public class IngestionJob {
     private String traceId;
     private Integer attemptCount;
     private Integer maxRetries;
+    private Integer chunkCount;
     private String errorMessage;
     private LocalDateTime nextRetryAt;
     private LocalDateTime startedAt;
