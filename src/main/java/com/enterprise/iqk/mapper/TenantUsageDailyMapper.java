@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Select;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Mapper
 public interface TenantUsageDailyMapper extends BaseMapper<TenantUsageDaily> {
@@ -86,4 +87,17 @@ public interface TenantUsageDailyMapper extends BaseMapper<TenantUsageDaily> {
     BigDecimal sumCostUsd(@Param("tenantId") String tenantId,
                           @Param("fromDate") LocalDate fromDate,
                           @Param("toDate") LocalDate toDate);
+
+    /** 按日期范围取逐日用量行（趋势图用），缺天由服务层补零。 */
+    @Select("""
+            SELECT id, tenant_id, usage_date, request_count, input_tokens, output_tokens,
+                   total_cost_usd, created_at, updated_at
+            FROM tenant_usage_daily
+            WHERE tenant_id = #{tenantId}
+              AND usage_date BETWEEN #{fromDate} AND #{toDate}
+            ORDER BY usage_date
+            """)
+    List<TenantUsageDaily> findByTenantIdAndDateRange(@Param("tenantId") String tenantId,
+                                                      @Param("fromDate") LocalDate fromDate,
+                                                      @Param("toDate") LocalDate toDate);
 }

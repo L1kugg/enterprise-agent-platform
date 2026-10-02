@@ -34,7 +34,7 @@ import java.util.List;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 /**
- * /ai/pdf 入口：PDF 上传入库、原文件下载与 RAG 问答三个端点。
+ * /ai/pdf 入口：文档上传入库（PDF/DOC/DOCX/MD）、原文件下载与 RAG 问答三个端点。
  * 问答走 RagAnswerService 简单版链路，检索按租户 + chatId 双重过滤；
  * chatId 传入检索前做单引号清洗，防过滤表达式注入。
  */
@@ -48,13 +48,13 @@ public class PdfController {
     private final RagAnswerService ragAnswerService;
     private final IngestionProperties ingestionProperties;
 
-    /** 上传 PDF 并提交异步入库任务（幂等键可选），返回受理状态与任务详情。 */
+    /** 上传文档（PDF/DOC/DOCX/MD）并提交异步入库任务（幂等键可选），返回受理状态与任务详情。 */
     @PostMapping("/upload/{chatId}")
-    public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
-                                       @RequestParam("file") MultipartFile file,
-                                       @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+    public IngestionSubmitVO uploadDocument(@PathVariable String chatId,
+                                            @RequestParam("file") MultipartFile file,
+                                            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
         String tenantId = currentTenantId();
-        IngestionJob job = ingestionService.submitPdf(tenantId, chatId, file, idempotencyKey, "");
+        IngestionJob job = ingestionService.submitDocument(tenantId, chatId, file, idempotencyKey, "");
         chatHistoryRepository.save("pdf", chatId);
         return IngestionSubmitVO.builder()
                 .ok(1)

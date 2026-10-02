@@ -22,6 +22,7 @@ import type {
   SessionState,
   TenantBudgetUpdate,
   TenantCostSummary,
+  TenantCostTrendPoint,
   WorkflowTask,
 } from '../types/react';
 
@@ -505,6 +506,20 @@ export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCo
   return payload;
 }
 
+/** 本租户近 N 天逐日用量趋势（含今日，后端返回裸数组，缺天补零）。 */
+export async function getTenantCostTrend(days: number, auth?: AuthContext): Promise<TenantCostTrendPoint[]> {
+  const response = await fetch(resolveApi(withQuery('/cost/trend', { days })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<TenantCostTrendPoint[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'cost trend failed');
+  }
+  return payload;
+}
+
 export async function updateTenantBudget(
   request: TenantBudgetUpdate,
   auth?: AuthContext,
@@ -633,7 +648,7 @@ export async function exportEvalRunReport(runId: string, auth?: AuthContext): Pr
   return text;
 }
 
-export async function uploadIngestionPdf(
+export async function uploadIngestionDocument(
   chatId: string,
   file: File,
   auth?: AuthContext,
@@ -649,7 +664,7 @@ export async function uploadIngestionPdf(
   });
   const payload = await parseJsonSafely<IngestionSubmitResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'upload pdf failed');
+    throw formatHttpError(response.status, payload?.msg ?? 'upload document failed');
   }
   return payload;
 }
@@ -727,35 +742,6 @@ export async function deleteAdminDocument(
   return payload.msg;
 }
 
-/** 知识库问答：后端同步计算答案，返回纯文本（含引用脚注）。 */
-export async function pdfChat(
-  prompt: string,
-  chatId: string,
-  options?: { docOnly?: boolean; modelProfile?: string },
-  auth?: AuthContext,
-): Promise<string> {
-  const response = await fetch(
-    resolveApi(
-      withQuery('/ai/pdf/chat', {
-        prompt,
-        chatId,
-        modelProfile: options?.modelProfile,
-        docOnly: options?.docOnly,
-      }),
-    ),
-    {
-      credentials: 'include',
-      method: 'POST',
-      headers: buildAuthHeaders(auth),
-    },
-  );
-  const text = await response.text();
-  if (!response.ok) {
-    throw formatHttpError(response.status, text || 'pdf chat failed');
-  }
-  return text;
-}
-
 /** 工作流任务列表（含深度研究任务，按 type 过滤；后端返回裸数组，元素带 steps）。 */
 export async function listWorkflowTasks(
   auth?: AuthContext,
@@ -774,11 +760,12 @@ export async function listWorkflowTasks(
   return payload;
 }
 
-/** 发起深度研究：后端同步执行（约 1-3 分钟），完成即返回报告。 */
+/** 发起深度研究：后端同步执行（约 1-3 分钟），完成即返回报告；signal 用于「停止」中断等待。 */
 export async function createResearchTask(
   topic: string,
   modelProfile: string | undefined,
   auth?: AuthContext,
+  signal?: AbortSignal,
 ): Promise<DeepResearchResult> {
   const response = await fetch(resolveApi('/ai/research/tasks'), {
     credentials: 'include',
@@ -788,6 +775,7 @@ export async function createResearchTask(
       ...buildAuthHeaders(auth),
     },
     body: JSON.stringify({ topic, modelProfile }),
+    signal,
   });
   // 成功时返回裸 DeepResearchResult（无 ok/msg 包装），错误响应体里才有 msg
   const payload = await parseJsonSafely<DeepResearchResult & { msg?: string }>(response);
@@ -795,21 +783,4 @@ export async function createResearchTask(
     throw formatHttpError(response.status, payload?.msg ?? 'create research task failed');
   }
   return payload;
-}
-
-/** 取历史研究报告正文（创建响应里已带 report，此接口用于回看旧任务）。 */
-export async function getResearchReport(taskId: string, auth?: AuthContext): Promise<string> {
-  const response = await fetch(
-    resolveApi(`/ai/research/tasks/${encodeURIComponent(taskId)}/report`),
-    {
-      credentials: 'include',
-      method: 'GET',
-      headers: buildAuthHeaders(auth),
-    },
-  );
-  const payload = await parseJsonSafely<{ taskId: string; report: string }>(response);
-  if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'load research report failed');
-  }
-  return payload.report;
 }

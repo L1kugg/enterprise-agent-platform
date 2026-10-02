@@ -150,6 +150,15 @@ export interface TenantBudgetUpdate {
   hardLimitEnabled?: boolean;
 }
 
+/** 用量趋势单日数据点（GET /cost/trend，裸数组元素，缺天由后端补零）。 */
+export interface TenantCostTrendPoint {
+  date: string;
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 export interface EvalCaseCreate {
   caseId?: string;
   category?: string;

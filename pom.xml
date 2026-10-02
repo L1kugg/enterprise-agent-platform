@@ -181,6 +181,18 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-pdf-document-reader</artifactId>
         </dependency>
+        <!-- Tika 读取器：解析 doc/docx/md 等非 PDF 文档（底层自带 POI） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-tika-document-reader</artifactId>
+        </dependency>
+        <!-- 显式对齐 Tika 3.3 所需版本：testcontainers 传递的 1.24.0 离根更近，
+             就近取胜会把 1.28.0 挤掉，导致 ZipArchiveInputStream.getNextEntry() NoSuchMethodError -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.28.0</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>

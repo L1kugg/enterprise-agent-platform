@@ -56,7 +56,7 @@ class IngestionControllerWebMvcTest {
     void shouldAcceptUploadJob() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "sample.pdf", "application/pdf", "data".getBytes());
         when(ingestionProperties.getQueueBackend()).thenReturn("redis_stream");
-        when(ingestionService.submitPdf(any(), any(), any(), any(), any())).thenReturn(IngestionJob.builder()
+        when(ingestionService.submitDocument(any(), any(), any(), any(), any())).thenReturn(IngestionJob.builder()
                 .jobId("job-1")
                 .tenantId("public")
                 .chatId("chat-1")

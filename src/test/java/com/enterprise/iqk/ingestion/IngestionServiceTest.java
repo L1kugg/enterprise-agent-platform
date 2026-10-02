@@ -71,7 +71,7 @@ class IngestionServiceTest {
         IngestionService service = buildService(mapper, vectorStore, ingestionProperties, vectorStoreProperties, queue, scanner);
 
         MockMultipartFile file = new MockMultipartFile("file", "a.pdf", "application/pdf", "pdf".getBytes());
-        IngestionJob job = service.submitPdf("public", "chat-1", file, "k1", "trace-1");
+        IngestionJob job = service.submitDocument("public", "chat-1", file, "k1", "trace-1");
         assertEquals("job-x", job.getJobId());
         verify(mapper, never()).insert(org.mockito.ArgumentMatchers.<IngestionJob>any());
     }
@@ -91,12 +91,40 @@ class IngestionServiceTest {
 
         IngestionService service = buildService(mapper, vectorStore, ingestionProperties, vectorStoreProperties, queue, scanner);
         MockMultipartFile file = new MockMultipartFile("file", "sample.pdf", "application/pdf", "dummy".getBytes());
-        IngestionJob job = service.submitPdf("public", "chat-2", file, null, "trace-x");
+        IngestionJob job = service.submitDocument("public", "chat-2", file, null, "trace-x");
         assertNotNull(job.getJobId());
         assertEquals("public", job.getTenantId());
         assertEquals("chat-2", job.getChatId());
+        assertEquals("PDF", job.getSourceType());
         verify(mapper).insert(org.mockito.ArgumentMatchers.<IngestionJob>any());
         verify(queue).publishJob(any(), any());
+    }
+
+    @Test
+    void shouldDeriveSourceTypeFromExtension() throws Exception {
+        IngestionJobMapper mapper = mock(IngestionJobMapper.class);
+        IngestionQueue queue = mock(IngestionQueue.class);
+        FileSafetyScanner scanner = mock(FileSafetyScanner.class);
+        when(mapper.findByIdempotencyKey(anyString(), anyString())).thenReturn(null);
+
+        IngestionProperties ingestionProperties = new IngestionProperties();
+        ingestionProperties.setStorageDir(Files.createTempDirectory("ingestion-test").toString());
+
+        IngestionService service = buildService(
+                mapper,
+                mock(org.springframework.ai.vectorstore.VectorStore.class),
+                ingestionProperties,
+                new VectorStoreProperties(),
+                queue,
+                scanner
+        );
+
+        assertEquals("MD", service.submitDocument("public", "chat-md",
+                new MockMultipartFile("file", "notes.md", "text/markdown", "x".getBytes()), null, "t").getSourceType());
+        assertEquals("DOC", service.submitDocument("public", "chat-doc",
+                new MockMultipartFile("file", "old.doc", "application/msword", "x".getBytes()), null, "t").getSourceType());
+        assertEquals("DOCX", service.submitDocument("public", "chat-docx",
+                new MockMultipartFile("file", "new.docx", "application/zip", "x".getBytes()), null, "t").getSourceType());
     }
 
     @Test

@@ -60,6 +60,7 @@ class JavaApiContractTest {
         assertSupports(endpoints, "POST", "/ai/evaluation/runs");
         assertSupports(endpoints, "GET", "/audit/logs");
         assertSupports(endpoints, "GET", "/cost/summary");
+        assertSupports(endpoints, "GET", "/cost/trend");
         assertSupports(endpoints, "POST", "/cost/budget");
 
         String appConfig = Files.readString(Path.of("src/main/resources/application.yml"));

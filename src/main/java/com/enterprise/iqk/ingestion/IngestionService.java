@@ -21,6 +21,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.ExtractedTextFormatter;
 import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
 import org.springframework.ai.reader.pdf.config.PdfDocumentReaderConfig;
+import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -43,6 +44,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -51,7 +53,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 /**
- * PDF 文档入库服务：接收上传 → 落盘 + 建任务 → 异步解析/分块/向量化。
+ * 文档入库服务：接收上传（PDF/DOC/DOCX/MD）→ 落盘 + 建任务 → 异步解析/分块/向量化。
  * 幂等键（客户端提供或按内容哈希自动生成）保证同一文件重复提交返回既有任务；
  * 失败按 attemptCount 与 baseDelaySeconds 递增延迟重试，超限转 FAILED 并投递 DLQ；
  * 任务与向量元数据全部携带 tenant_id/chat_id，检索侧按租户隔离。
@@ -71,8 +73,8 @@ public class IngestionService {
     // 避免并发任务交错写入同一个快照文件。
     private final Object snapshotLock = new Object();
 
-    /** 提交 PDF 入库任务：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
-    public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
+    /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
+    public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         if (!StringUtils.hasText(chatId)) {
             throw new IllegalArgumentException("chatId is required");
@@ -82,7 +84,8 @@ public class IngestionService {
         }
         fileSafetyScanner.scan(file);
 
-        String sourceName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "unknown.pdf";
+        String sourceName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "document";
+        String sourceType = sourceTypeOf(sourceName);
         String normalizedKey = normalizeIdempotencyKey(normalizedTenantId, chatId, file, idempotencyKey);
         IngestionJob existing = ingestionJobMapper.findByIdempotencyKey(normalizedTenantId, normalizedKey);
         if (existing != null) {
@@ -96,7 +99,7 @@ public class IngestionService {
                 .jobId(jobId)
                 .tenantId(normalizedTenantId)
                 .chatId(chatId)
-                .sourceType("PDF")
+                .sourceType(sourceType)
                 .sourceName(sourceName)
                 .filePath(filePath)
                 .idempotencyKey(normalizedKey)
@@ -113,7 +116,7 @@ public class IngestionService {
                 ingestionQueue.publishJob(job.getJobId(), traceId);
             }
             Counter.builder("ingestion.jobs.submitted")
-                    .tag("source", "pdf")
+                    .tag("source", sourceType.toLowerCase(Locale.ROOT))
                     .tag("tenant", normalizedTenantId)
                     .register(meterRegistry)
                     .increment();
@@ -324,7 +327,7 @@ public class IngestionService {
         return count;
     }
 
-    /** 解析 PDF 为单页文档 → token 分块 → 写入向量库 → 视后端情况落快照；返回切片供图谱抽取复用。 */
+    /** 解析文档 → token 分块 → 写入向量库 → 视后端情况落快照；返回切片供图谱抽取复用。 */
     private List<Document> processPdfJob(IngestionJob job) {
         List<Document> chunks = parseAndSplit(job);
         vectorStore.add(chunks);
@@ -332,21 +335,49 @@ public class IngestionService {
         return chunks;
     }
 
-    /** 解析 PDF 为单页文档并按配置切块（不写向量库）；包内可见供图谱回填服务复用。 */
+    /** 解析文档并按配置切块（不写向量库）；PDF 走专用读取器，doc/docx/md 走 Tika。包内可见供图谱回填服务复用。 */
     List<Document> parseAndSplit(IngestionJob job) {
         File source = new File(job.getFilePath());
         if (!source.exists()) {
-            throw new IllegalStateException("PDF file missing: " + job.getFilePath());
+            throw new IllegalStateException("source file missing: " + job.getFilePath());
         }
-        PagePdfDocumentReader reader = new PagePdfDocumentReader(
-                new FileSystemResource(source),
-                PdfDocumentReaderConfig.builder()
-                        .withPageExtractedTextFormatter(ExtractedTextFormatter.defaults())
-                        .withPagesPerDocument(1)
-                        .build()
-        );
-        List<Document> pages = reader.read();
+        List<Document> pages;
+        if (isPdf(job.getSourceName())) {
+            PagePdfDocumentReader reader = new PagePdfDocumentReader(
+                    new FileSystemResource(source),
+                    PdfDocumentReaderConfig.builder()
+                            .withPageExtractedTextFormatter(ExtractedTextFormatter.defaults())
+                            .withPagesPerDocument(1)
+                            .build()
+            );
+            pages = reader.read();
+        } else {
+            pages = new TikaDocumentReader(new FileSystemResource(source)).read();
+        }
         return splitDocuments(pages, job);
+    }
+
+    /** 文件名是否为 PDF（大小写不敏感）；其余后缀走 Tika 分发。 */
+    private boolean isPdf(String sourceName) {
+        return sourceName != null && sourceName.toLowerCase(Locale.ROOT).endsWith(".pdf");
+    }
+
+    /** 按文件后缀推导入库来源类型（PDF/DOC/DOCX/MD），未知后缀兜底 OTHER。 */
+    private String sourceTypeOf(String sourceName) {
+        String lower = sourceName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".pdf")) {
+            return "PDF";
+        }
+        if (lower.endsWith(".doc")) {
+            return "DOC";
+        }
+        if (lower.endsWith(".docx")) {
+            return "DOCX";
+        }
+        if (lower.endsWith(".md")) {
+            return "MD";
+        }
+        return "OTHER";
     }
 
     /**
@@ -424,7 +455,7 @@ public class IngestionService {
             file.transferTo(target);
             return target.toAbsolutePath().toString();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to store uploaded PDF", e);
+            throw new IllegalStateException("Failed to store uploaded document", e);
         }
     }
 

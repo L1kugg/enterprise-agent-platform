@@ -2,8 +2,10 @@ package com.enterprise.iqk.service;
 
 import com.enterprise.iqk.config.properties.CostGovernanceProperties;
 import com.enterprise.iqk.domain.TenantBudget;
+import com.enterprise.iqk.domain.TenantUsageDaily;
 import com.enterprise.iqk.domain.vo.TenantBudgetUpdateVO;
 import com.enterprise.iqk.domain.vo.TenantCostSummaryVO;
+import com.enterprise.iqk.domain.vo.TenantCostTrendVO;
 import com.enterprise.iqk.mapper.TenantBudgetMapper;
 import com.enterprise.iqk.mapper.TenantUsageDailyMapper;
 import com.enterprise.iqk.security.TenantContext;
@@ -16,7 +18,12 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -105,6 +112,30 @@ public class TenantCostService {
                 .budgetRemainingUsd(scale(remaining))
                 .budgetExceeded(exceeded)
                 .build();
+    }
+
+    /** 近 N 天逐日用量趋势（含今日），缺数据的天补零，保证连续序列。 */
+    public List<TenantCostTrendVO> trend(String tenantId, int days) {
+        String tenant = TenantContext.normalize(tenantId);
+        int safeDays = Math.min(90, Math.max(1, days));
+        LocalDate today = LocalDate.now();
+        LocalDate from = today.minusDays(safeDays - 1L);
+        List<TenantUsageDaily> rows = tenantUsageDailyMapper.findByTenantIdAndDateRange(tenant, from, today);
+        Map<LocalDate, TenantUsageDaily> byDate = rows.stream()
+                .collect(Collectors.toMap(TenantUsageDaily::getUsageDate, Function.identity(), (a, b) -> a));
+        List<TenantCostTrendVO> result = new ArrayList<>(safeDays);
+        for (int i = 0; i < safeDays; i++) {
+            LocalDate day = from.plusDays(i);
+            TenantUsageDaily row = byDate.get(day);
+            result.add(TenantCostTrendVO.builder()
+                    .date(day.toString())
+                    .requestCount(safeLong(row == null ? null : row.getRequestCount()))
+                    .inputTokens(safeLong(row == null ? null : row.getInputTokens()))
+                    .outputTokens(safeLong(row == null ? null : row.getOutputTokens()))
+                    .costUsd(scale(row == null ? null : row.getTotalCostUsd()))
+                    .build());
+        }
+        return result;
     }
 
     /** 更新租户月度预算与硬限制开关（负数预算拒绝）；无预算记录时先按默认值初始化。 */

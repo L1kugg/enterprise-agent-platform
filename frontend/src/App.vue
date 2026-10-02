@@ -40,61 +40,84 @@
     </div>
   </div>
 
-  <div v-if="canUseRemoteSync" class="app-shell">
-    <aside class="sidebar">
-      <div class="brand-block">
-        <p class="eyebrow">KnowledgeOps Agent</p>
-        <h1>Chat Console</h1>
-        <p class="brand-sub">面向知识运营团队的 ReAct 工作台</p>
+  <div
+    v-if="canUseRemoteSync"
+    class="app-shell"
+    :class="{ 'shell-with-sessions': sessionColVisible }"
+  >
+    <!-- 图标栏：只管"去哪个页面"，所有页签常驻 -->
+    <nav class="icon-rail" role="tablist" aria-label="Console views">
+      <div class="rail-brand" title="KnowledgeOps Agent">K</div>
+      <div class="rail-nav">
+        <el-tooltip content="聊天" placement="right" :show-after="300">
+          <button
+            type="button"
+            class="rail-btn"
+            :class="{ active: activeView === 'chat' }"
+            @click="activateView('chat')"
+          >
+            <el-icon :size="18"><ChatDotRound /></el-icon>
+            <span>聊天</span>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="RAG 评测" placement="right" :show-after="300">
+          <button
+            type="button"
+            class="rail-btn"
+            :class="{ active: activeView === 'evaluation' }"
+            @click="activateView('evaluation')"
+          >
+            <el-icon :size="18"><DataAnalysis /></el-icon>
+            <span>评测</span>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="知识库" placement="right" :show-after="300">
+          <button
+            type="button"
+            class="rail-btn"
+            :class="{ active: activeView === 'knowledge' }"
+            @click="activateView('knowledge')"
+          >
+            <el-icon :size="18"><FolderOpened /></el-icon>
+            <span>知识库</span>
+          </button>
+        </el-tooltip>
+        <el-tooltip v-if="isAdmin" content="管理员文档总览" placement="right" :show-after="300">
+          <button
+            type="button"
+            class="rail-btn"
+            :class="{ active: activeView === 'admin' }"
+            @click="activateView('admin')"
+          >
+            <el-icon :size="18"><Notebook /></el-icon>
+            <span>总览</span>
+          </button>
+        </el-tooltip>
+        <el-tooltip content="用量统计" placement="right" :show-after="300">
+          <button
+            type="button"
+            class="rail-btn"
+            :class="{ active: activeView === 'usage' }"
+            @click="activateView('usage')"
+          >
+            <el-icon :size="18"><TrendCharts /></el-icon>
+            <span>用量</span>
+          </button>
+        </el-tooltip>
       </div>
+      <div class="rail-foot">
+        <el-tooltip content="鉴权与模型" placement="right" :show-after="300">
+          <button type="button" class="rail-btn" @click="opsDialogVisible = true">
+            <el-icon :size="18"><Setting /></el-icon>
+            <span>设置</span>
+          </button>
+        </el-tooltip>
+      </div>
+    </nav>
 
+    <!-- 会话栏：仅聊天页显示，可折叠 -->
+    <aside v-if="sessionColVisible" class="session-col">
       <button class="new-chat-btn" type="button" @click="createAndSwitchSession">+ 新建会话</button>
-
-      <div class="console-nav" role="tablist" aria-label="Console views">
-        <button
-          type="button"
-          :class="{ active: activeView === 'chat' }"
-          @click="activateView('chat')"
-        >
-          Chat
-        </button>
-        <button
-          type="button"
-          :class="{ active: activeView === 'evaluation' }"
-          @click="activateView('evaluation')"
-        >
-          Evaluation
-        </button>
-        <button
-          type="button"
-          :class="{ active: activeView === 'knowledge' }"
-          @click="activateView('knowledge')"
-        >
-          知识库
-        </button>
-        <button
-          type="button"
-          :class="{ active: activeView === 'pdfchat' }"
-          @click="activateView('pdfchat')"
-        >
-          文档问答
-        </button>
-        <button
-          type="button"
-          :class="{ active: activeView === 'research' }"
-          @click="activateView('research')"
-        >
-          深度研究
-        </button>
-        <button
-          v-if="isAdmin"
-          type="button"
-          :class="{ active: activeView === 'admin' }"
-          @click="activateView('admin')"
-        >
-          文档总览
-        </button>
-      </div>
 
       <section class="session-tools">
         <el-input v-model="sessionSearch" size="small" placeholder="搜索会话标题或 ID" clearable />
@@ -116,29 +139,32 @@
             inactive-text="隐藏归档"
           />
         </div>
-        <div class="cloud-row">
-          <el-button
-            size="small"
-            :loading="cloudSyncing"
-            :disabled="!canUseRemoteSync"
-            @click="loadSessionsFromCloud"
-            >云端拉取</el-button
-          >
-          <el-button
-            size="small"
-            type="primary"
-            :loading="cloudSyncing"
-            :disabled="!canUseRemoteSync"
-            @click="syncActiveSessionToCloud"
-            >保存到云端</el-button
-          >
-        </div>
       </section>
 
       <section class="session-panel">
         <div class="section-head">
           <p class="section-label">会话</p>
-          <span class="section-meta">{{ filteredSessions.length }}/{{ sessionCount }}</span>
+          <div class="branch-head-actions">
+            <span class="section-meta">{{ filteredSessions.length }}/{{ sessionCount }}</span>
+            <el-tooltip content="云端拉取" placement="bottom" :show-after="300">
+              <button
+                type="button"
+                :disabled="cloudSyncing || !canUseRemoteSync"
+                @click="loadSessionsFromCloud"
+              >
+                <el-icon :size="13"><Download /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip content="保存当前会话到云端" placement="bottom" :show-after="300">
+              <button
+                type="button"
+                :disabled="cloudSyncing || !canUseRemoteSync"
+                @click="syncActiveSessionToCloud"
+              >
+                <el-icon :size="13"><Upload /></el-icon>
+              </button>
+            </el-tooltip>
+          </div>
         </div>
         <div class="session-list">
           <div
@@ -182,109 +208,24 @@
         </div>
       </section>
 
-      <section class="branch-panel">
-        <div class="section-head">
-          <p class="section-label">分支树</p>
-          <div class="branch-head-actions">
-            <span class="section-meta">{{ activeSession?.branches.length ?? 0 }} 条</span>
-            <button type="button" @click="forkFromCurrent">从当前分叉</button>
-            <button
-              type="button"
-              :disabled="!activeBranch?.parentBranchId"
-              @click="compareWithParent"
-            >
-              对比父分支
-            </button>
-            <button
-              type="button"
-              :disabled="!activeBranch?.parentBranchId"
-              @click="mergeIntoParent"
-            >
-              合并到父分支
-            </button>
-          </div>
-        </div>
-        <div class="branch-list">
-          <div
-            v-for="node in branchTreeItems"
-            :key="node.branch.id"
-            class="branch-item"
-            :class="{ active: node.branch.id === activeBranch?.id }"
-            :style="{ paddingLeft: `${12 + node.depth * 14}px` }"
-            role="button"
-            tabindex="0"
-            @click="switchBranch(node.branch.id)"
-            @keydown.enter.prevent="switchBranch(node.branch.id)"
-          >
-            <span class="branch-line" :style="{ opacity: node.depth > 0 ? 1 : 0 }"></span>
-            <div class="branch-content">
-              <p>{{ node.branch.title }}</p>
-              <small>{{ formatTime(node.branch.updatedAt) }}</small>
-            </div>
-          </div>
-          <div v-if="branchTreeItems.length === 0" class="session-empty">暂无分支</div>
-        </div>
-      </section>
-
-      <details class="ops-panel" open>
-        <summary><span>鉴权与模型</span></summary>
-        <div class="ops-body">
-          <el-form label-position="top" size="small">
-            <el-form-item label="API Key">
-              <el-input
-                v-model="apiKeyInput"
-                placeholder="输入 API Key（生产建议短时使用）"
-                show-password
-                type="password"
-              />
-            </el-form-item>
-            <el-form-item label="Tenant (可选)">
-              <el-input v-model="tenantInput" placeholder="public" />
-            </el-form-item>
-            <el-form-item label="Model Profile">
-              <el-select v-model="modelProfile" class="full-width">
-                <el-option label="economy（经济档 qwen-turbo）" value="economy" />
-                <el-option label="balanced（均衡档 qwen-plus）" value="balanced" />
-                <el-option label="quality（质量档 qwen-max）" value="quality" />
-                <el-option label="ab_auto（A/B 自动对比实验）" value="ab_auto" />
-                <el-option label="quality_first（固定最高档）" value="quality_first" />
-                <el-option label="cost_first（固定最低档）" value="cost_first" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="Agent 引擎（主聊天）">
-              <el-radio-group v-model="agentEngine">
-                <el-radio-button value="standard">标准 ReAct</el-radio-button>
-                <el-radio-button value="workflow">工作流引擎</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
-            <p class="engine-hint">
-              {{
-                agentEngine === 'workflow'
-                  ? '工作流引擎：每一步全留痕可回放、轨迹逐轮实时推送；但不读写会话记忆。'
-                  : '标准 ReAct：主聊天默认引擎，带会话记忆。'
-              }}
-            </p>
-            <el-form-item label="响应模式">
-              <el-switch v-model="streaming" inline-prompt active-text="SSE" inactive-text="JSON" />
-            </el-form-item>
-          </el-form>
-          <div class="auth-buttons">
-            <el-tag v-if="role" size="small" :type="isAdmin ? 'danger' : 'info'">{{ role }}</el-tag>
-            <el-button type="primary" :loading="authLoading" @click="handleLogin"
-              >换取 JWT</el-button
-            >
-            <el-button :disabled="!refreshToken" :loading="refreshing" @click="handleRefresh"
-              >刷新</el-button
-            >
-            <el-button @click="logout">退出登录</el-button>
-          </div>
-        </div>
-      </details>
+      <button class="collapse-col-btn" type="button" @click="sessionColCollapsed = true">
+        <el-icon :size="14"><CaretLeft /></el-icon>
+        收起会话栏
+      </button>
     </aside>
 
     <main class="workspace">
       <header class="workspace-head">
-        <div v-if="activeView === 'chat'">
+        <div v-if="activeView === 'chat'" class="head-title">
+          <button
+            v-if="sessionColCollapsed"
+            type="button"
+            class="expand-col-btn"
+            title="展开会话栏"
+            @click="sessionColCollapsed = false"
+          >
+            <el-icon :size="14"><CaretRight /></el-icon>
+          </button>
           <p class="workspace-kicker">Active Session</p>
           <h2>{{ activeSession?.title || '新会话' }}</h2>
           <p class="workspace-sub">
@@ -302,25 +243,30 @@
         <div v-else-if="activeView === 'knowledge'">
           <p class="workspace-kicker">Knowledge Base</p>
           <h2>知识库</h2>
-          <p class="workspace-sub">上传 PDF → 自动切分入库 → 参与全库检索</p>
+          <p class="workspace-sub">上传文档 → 自动切分入库 → 参与全库检索</p>
         </div>
         <div v-else-if="activeView === 'admin'">
           <p class="workspace-kicker">Admin Documents</p>
           <h2>文档总览</h2>
           <p class="workspace-sub">跨租户查看所有用户上传的文档</p>
         </div>
-        <div v-else-if="activeView === 'pdfchat'">
-          <p class="workspace-kicker">Doc Q&amp;A</p>
-          <h2>文档问答</h2>
-          <p class="workspace-sub">{{ pdfScopeLabel }} · {{ modelProfile }}</p>
-        </div>
-        <div v-else-if="activeView === 'research'">
-          <p class="workspace-kicker">Deep Research</p>
-          <h2>深度研究</h2>
-          <p class="workspace-sub">自动规划 → 检索 → 交叉验证 → 撰写报告，步骤全留痕</p>
+        <div v-else-if="activeView === 'usage'">
+          <p class="workspace-kicker">Tenant Usage</p>
+          <h2>用量统计</h2>
+          <p class="workspace-sub">本租户 token 用量与每日费用趋势</p>
         </div>
         <div v-if="activeView === 'chat'" class="head-actions">
-          <el-select v-model="activeWorkspaceId" size="small" class="workspace-select">
+          <!-- 工作区：选择已有，或直接输入新名字回车即创建并切换（filterable + allow-create） -->
+          <el-select
+            v-model="activeWorkspaceId"
+            size="small"
+            class="workspace-select"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择或输入工作区"
+            @change="handleWorkspaceChange"
+          >
             <el-option
               v-for="workspace in workspaceOptions"
               :key="workspace"
@@ -328,14 +274,6 @@
               :value="workspace"
             />
           </el-select>
-          <el-input
-            v-model="workspaceDraft"
-            size="small"
-            class="workspace-input"
-            placeholder="新工作区"
-            @keydown.enter.prevent="createWorkspace"
-          />
-          <el-button size="small" @click="createWorkspace">创建并切换</el-button>
           <el-switch v-model="darkMode" inline-prompt active-text="Dark" inactive-text="Light" />
           <el-tag :type="streamStatusTagType" effect="plain">{{ streamStatusLabel }}</el-tag>
           <span class="stream-detail">{{ streamStatusDetail }}</span>
@@ -344,6 +282,9 @@
               costSummary.monthlyBudgetUsd.toFixed(4)
             }}</span
           >
+          <el-button size="small" @click="branchDrawerVisible = true">
+            分支{{ activeSession?.branches.length ? ` (${activeSession.branches.length})` : '' }}
+          </el-button>
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
         <div v-else-if="activeView === 'evaluation'" class="head-actions">
@@ -388,16 +329,6 @@
             <div v-if="isEmptyConversation" class="welcome-block">
               <h3>开始一个新问题</h3>
               <p>支持消息编辑后重发分支、流式轨迹、长会话虚拟渲染。</p>
-              <div class="welcome-prompts">
-                <button
-                  v-for="sample in quickPrompts"
-                  :key="sample"
-                  type="button"
-                  @click="prompt = sample"
-                >
-                  {{ sample }}
-                </button>
-              </div>
             </div>
 
             <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
@@ -415,6 +346,7 @@
                 <div class="bubble-meta">
                   <span>{{ entry.item.role === 'user' ? 'You' : 'Assistant' }}</span>
                   <span>{{ formatTime(entry.item.createdAt) }}</span>
+                  <span v-if="entry.item.kind === 'research'" class="research-badge">深度研究</span>
                   <span v-if="entry.item.state === 'streaming'" class="status-dot">生成中</span>
                   <span v-if="entry.item.state === 'pending'" class="status-dot">思考中</span>
                 </div>
@@ -615,6 +547,19 @@
 
         <footer class="composer-shell">
           <div class="composer">
+            <div v-if="composerUploadChip" class="upload-chip" :class="composerUploadChip.kind">
+              <span class="upload-chip-text"
+                >📄 {{ composerUploadChip.name }} · {{ composerUploadChip.text }}</span
+              >
+              <button
+                type="button"
+                class="upload-chip-close"
+                aria-label="关闭状态提示"
+                @click="dismissComposerUploadChip"
+              >
+                ×
+              </button>
+            </div>
             <el-input
               v-model="prompt"
               class="composer-input"
@@ -625,15 +570,37 @@
               @keydown.enter.exact.prevent="send"
             />
             <div class="composer-footer">
-              <div class="quick-prompts">
-                <button
-                  v-for="sample in quickPrompts"
-                  :key="sample"
-                  type="button"
-                  @click="prompt = sample"
-                >
-                  {{ sample }}
-                </button>
+              <div class="composer-left">
+                <div class="composer-tools">
+                  <button
+                    type="button"
+                    class="composer-tool"
+                    :class="{ active: researchMode }"
+                    :disabled="sending"
+                    @click="researchMode = !researchMode"
+                  >
+                    <el-icon :size="14"><Compass /></el-icon>
+                    深度研究
+                  </button>
+                  <el-tooltip content="支持 PDF / Word（doc、docx）/ Markdown 文件" placement="top">
+                    <button
+                      type="button"
+                      class="composer-tool"
+                      :disabled="composerUploading"
+                      @click="triggerComposerUpload"
+                    >
+                      <el-icon :size="14"><Paperclip /></el-icon>
+                      上传文档
+                    </button>
+                  </el-tooltip>
+                  <input
+                    ref="composerFileInput"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.md"
+                    class="composer-file-input"
+                    @change="onComposerFileChosen"
+                  />
+                </div>
               </div>
               <div class="composer-actions">
                 <el-button :disabled="!sending" @click="stopGenerating">停止</el-button>
@@ -663,13 +630,13 @@
             v-model:file-list="knowledgeUploadFiles"
             class="knowledge-uploader"
             drag
-            accept=".pdf"
+            accept=".pdf,.doc,.docx,.md"
             :auto-upload="false"
             :limit="1"
             :on-exceed="() => ElMessage.warning('一次只能传一个文件，先移除已选文件')"
           >
-            <p class="uploader-title">点击或拖拽 PDF 到这里</p>
-            <p class="uploader-sub">上传后自动切分、向量化并入知识库</p>
+            <p class="uploader-title">点击或拖拽文档到这里</p>
+            <p class="uploader-sub">支持 PDF / Word（doc、docx）/ Markdown，上传后自动切分、向量化并入知识库</p>
           </el-upload>
 
           <el-button
@@ -782,219 +749,143 @@
         </section>
       </section>
 
-      <section v-else-if="activeView === 'pdfchat'" class="pdfchat-page">
-        <aside class="eval-side-panel">
-          <div class="eval-panel-head">
-            <div>
-              <p class="section-label">选择提问范围</p>
-              <strong>文档问答</strong>
+      <section v-else-if="activeView === 'usage'" class="usage-page">
+        <section v-loading="usageLoading" class="eval-main-panel usage-main">
+          <div class="knowledge-list-head">
+            <p class="section-label">用量统计（本租户）</p>
+            <div class="admin-docs-toolbar">
+              <el-select v-model="usageRange" size="small" class="usage-range-select">
+                <el-option label="近 7 天" :value="7" />
+                <el-option label="近 14 天" :value="14" />
+                <el-option label="近 30 天" :value="30" />
+              </el-select>
+              <el-button size="small" @click="loadUsageTrend()">刷新</el-button>
             </div>
           </div>
-
-          <el-upload
-            v-model:file-list="pdfUploadFiles"
-            class="knowledge-uploader"
-            drag
-            accept=".pdf"
-            :auto-upload="false"
-            :limit="1"
-            :on-exceed="() => ElMessage.warning('一次只能传一个文件，先移除已选文件')"
-          >
-            <p class="uploader-title">+ 上传新 PDF</p>
-            <p class="uploader-sub">入库成功后可直接就着它提问</p>
-          </el-upload>
-          <el-button
-            type="primary"
-            :loading="pdfUploading"
-            :disabled="pdfUploadFiles.length === 0"
-            @click="onPdfPageUpload"
-            >上传并入库</el-button
-          >
-
           <el-alert
-            v-if="pdfNeedsAuth"
+            v-if="usageNeedsAuth"
             class="kb-auth-alert"
             type="info"
             show-icon
             :closable="false"
-            title="登录后才能选择文档提问"
-            description="请先登录；登录过期时请退出重新登录，再回到本页刷新文档列表。"
+            title="需要登录"
+            description="请先完成鉴权后查看本租户用量统计。"
           />
-
-          <div class="eval-dataset-list pdf-scope-list">
-            <button type="button" :class="{ active: pdfActiveChatId === '' }" @click="pdfActiveChatId = ''">
-              <span>整个知识库</span>
-              <small>在所有文档里检索答案</small>
-            </button>
-            <button
-              v-for="doc in pdfDocs"
-              :key="doc.chatId"
-              type="button"
-              :class="{ active: pdfActiveChatId === doc.chatId }"
-              @click="pdfActiveChatId = doc.chatId"
-            >
-              <span>{{ doc.sourceName }}</span>
-              <small>{{ formatJobTime(doc.createdAt) }} · 仅检索这份文档</small>
-            </button>
-            <div v-if="!pdfDocs.length" class="session-empty">还没有入库成功的文档</div>
-          </div>
-        </aside>
-
-        <section class="eval-main-panel pdfchat-main">
-          <div class="knowledge-list-head">
-            <p class="section-label">
-              {{ pdfActiveChatId ? `正在问：${pdfDocName(pdfActiveChatId)}` : '正在问：整个知识库' }}
-            </p>
-          </div>
-
-          <div ref="pdfMessageContainer" class="pdfchat-messages">
-            <div v-if="!pdfActiveMessages.length" class="pdfchat-empty">
-              选好范围，问点什么吧。回答基于知识库检索生成，末尾附引用来源。
-            </div>
-            <article
-              v-for="m in pdfActiveMessages"
-              :key="m.id"
-              class="message-row"
-              :class="m.role"
-            >
-              <div class="avatar">{{ m.role === 'user' ? 'U' : 'AI' }}</div>
-              <div class="bubble-wrap">
-                <div class="bubble">
-                  <div v-if="m.role === 'assistant' && !m.content" class="assistant-skeleton">
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                  </div>
-                  <!-- eslint-disable-next-line vue/no-v-html -->
-                  <div v-else class="markdown" v-html="renderMarkdown(m.content)"></div>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div class="pdfchat-composer">
-            <el-input
-              v-model="pdfPrompt"
-              type="textarea"
-              :rows="2"
-              resize="none"
-              placeholder="基于知识库提问，Ctrl+Enter 发送"
-              @keydown.ctrl.enter.prevent="sendPdfQuestion"
-            />
-            <el-button
-              type="primary"
-              :loading="pdfAnswering"
-              :disabled="!pdfPrompt.trim()"
-              @click="sendPdfQuestion"
-              >发送</el-button
-            >
-          </div>
-        </section>
-      </section>
-
-      <section v-else-if="activeView === 'research'" class="research-page">
-        <aside class="eval-side-panel">
-          <div class="eval-panel-head">
-            <div>
-              <p class="section-label">Deep Research</p>
-              <strong>深度研究</strong>
+          <div class="usage-cards">
+            <div v-for="card in usageMetricCards" :key="card.label" class="eval-metric-card">
+              <span>{{ card.label }}</span>
+              <strong :class="card.tone">{{ card.value }}</strong>
             </div>
           </div>
-
-          <p class="knowledge-tip">
-            输入一个研究题目，系统会自动规划 → 检索知识库 → 交叉验证 → 写出一份带步骤留痕的研究报告（约
-            1-3 分钟）。
-          </p>
-
-          <el-input
-            v-model="researchTopic"
-            type="textarea"
-            :rows="4"
-            resize="none"
-            maxlength="500"
-            show-word-limit
-            placeholder="研究题目，例如：Java 面试中 HashMap 的高频考点全景"
-          />
-          <el-button
-            type="primary"
-            :loading="researchRunning"
-            :disabled="!researchTopic.trim()"
-            @click="startResearch"
-            >{{ researchRunning ? '研究进行中…' : '开始研究' }}</el-button
-          >
-          <p v-if="researchRunning" class="research-status-line">
-            <span class="status-dot">进行中</span> {{ researchStatusText || '任务排队中' }}
-          </p>
-
-          <el-alert
-            v-if="researchNeedsAuth"
-            class="kb-auth-alert"
-            type="info"
-            show-icon
-            :closable="false"
-            title="登录后才能发起研究和查看历史"
-            description="请先登录；登录过期时请退出重新登录，再回来点「刷新」。"
-          />
-
-          <div class="research-history-head">
-            <p class="section-label">研究历史</p>
-            <el-button size="small" @click="loadResearchTasks()">刷新</el-button>
-          </div>
-          <div v-loading="researchLoading" class="eval-dataset-list pdf-scope-list">
-            <button
-              v-for="task in researchTasks"
-              :key="task.taskId"
-              type="button"
-              :class="{ active: task.taskId === researchActiveTaskId }"
-              @click="openResearchTask(task)"
+          <div class="usage-chart-block">
+            <div class="usage-chart-head">
+              <p class="usage-chart-title">使用趋势</p>
+              <span class="usage-chart-range">近 {{ usageRange }} 天</span>
+            </div>
+            <svg
+              v-if="usagePoints.length"
+              class="usage-chart-svg"
+              :viewBox="`0 0 ${usageTrendChart.W} ${usageTrendChart.H}`"
+              role="img"
+              aria-label="使用趋势图：输入、输出 tokens 与费用"
+              @mouseleave="usageHoverIndex = null"
             >
-              <span>{{ task.userInput || shortId(task.taskId) }}</span>
-              <small
-                >{{ researchStatusLabel(task.status) }} ·
-                {{ formatJobTime(task.createdAt) }}</small
-              >
-            </button>
-            <div v-if="!researchTasks.length" class="session-empty">还没有研究记录</div>
+              <line
+                v-for="(tick, i) in usageTrendChart.yTicksLeft"
+                :key="`grid-${i}`"
+                class="grid-line"
+                :x1="usageTrendChart.padL"
+                :x2="usageTrendChart.W - usageTrendChart.padR"
+                :y1="tick.y"
+                :y2="tick.y"
+              />
+              <text
+                v-for="(tick, i) in usageTrendChart.yTicksLeft"
+                :key="`yl-${i}`"
+                class="axis-text"
+                :x="usageTrendChart.padL - 6"
+                :y="tick.y + 3"
+                text-anchor="end"
+              >{{ tick.text }}</text>
+              <text
+                v-for="(tick, i) in usageTrendChart.yTicksRight"
+                :key="`yr-${i}`"
+                class="axis-text"
+                :x="usageTrendChart.W - usageTrendChart.padR + 6"
+                :y="tick.y + 3"
+                text-anchor="start"
+              >{{ tick.text }}</text>
+              <path v-if="usageTrendChart.areaPath" class="area-input" :d="usageTrendChart.areaPath" />
+              <polyline class="line-input" :points="usageTrendChart.inputLine" />
+              <polyline class="line-output" :points="usageTrendChart.outputLine" />
+              <polyline class="line-cost" :points="usageTrendChart.costLine" />
+              <g v-for="day in usageTrendChart.days" :key="`xl-${day.key}`">
+                <text
+                  v-if="day.showXLabel"
+                  class="axis-text"
+                  :x="day.x"
+                  :y="usageTrendChart.labelY"
+                  text-anchor="middle"
+                >{{ day.shortDate }}</text>
+              </g>
+              <g v-if="usageHoverDay" class="usage-hover">
+                <line
+                  class="hover-line"
+                  :x1="usageHoverDay.x"
+                  :x2="usageHoverDay.x"
+                  :y1="usageTrendChart.padT"
+                  :y2="usageTrendChart.baseY"
+                />
+                <rect
+                  class="tooltip-box"
+                  :x="usageHoverDay.boxX"
+                  :y="usageHoverDay.boxY"
+                  :width="usageHoverDay.boxW"
+                  :height="usageHoverDay.boxH"
+                  rx="8"
+                />
+                <text class="tooltip-title" :x="usageHoverDay.boxX + 12" :y="usageHoverDay.boxY + 22">{{ usageHoverDay.key.replaceAll('-', '/') }}</text>
+                <circle class="tt-dot input" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 42" r="4" />
+                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 46">输入：{{ usageHoverDay.input.toLocaleString() }}</text>
+                <circle class="tt-dot output" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 64" r="4" />
+                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 68">输出：{{ usageHoverDay.output.toLocaleString() }}</text>
+                <circle class="tt-dot cost" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 86" r="4" />
+                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 90">成本：${{ usageHoverDay.cost.toFixed(6) }}</text>
+              </g>
+              <rect
+                v-for="(day, i) in usageTrendChart.days"
+                :key="`hit-${day.key}`"
+                :x="day.hitX"
+                :y="usageTrendChart.padT"
+                :width="day.hitWidth"
+                :height="usageTrendChart.plotH"
+                fill="transparent"
+                @mouseenter="usageHoverIndex = i"
+                @mouseleave="usageHoverIndex = null"
+              />
+            </svg>
+            <p v-else class="usage-chart-empty">暂无用量数据</p>
+            <div class="usage-legend-bottom">
+              <span class="usage-legend"><i class="usage-dot blue"></i>输入</span>
+              <span class="usage-legend"><i class="usage-dot green"></i>输出</span>
+              <span class="usage-legend"><i class="usage-dot red"></i>成本</span>
+            </div>
           </div>
-        </aside>
-
-        <section class="eval-main-panel research-main">
-          <div class="knowledge-list-head">
-            <p class="section-label">研究报告</p>
-            <el-tag v-if="researchStatusText" size="small" effect="plain">{{
-              researchStatusText
-            }}</el-tag>
-          </div>
-
-          <div v-if="!researchReport && !researchRunning" class="pdfchat-empty">
-            <h3>还没有报告</h3>
-            <p>在左侧输入研究题目并点「开始研究」，报告会显示在这里。</p>
-          </div>
-
-          <div v-if="researchRunning && !researchReport" class="research-progress">
-            <p class="research-progress-main">{{ researchStatusText || '任务排队中' }}…</p>
-            <p class="research-progress-sub">规划 → 检索 → 召回 → 撰写，全程约 1-3 分钟，别关页面</p>
-          </div>
-
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div
-            v-if="researchReport"
-            class="markdown research-report"
-            v-html="renderMarkdown(formatResearchReport(researchReport))"
-          ></div>
-
-          <el-collapse v-if="researchSteps.length" class="research-steps">
-            <el-collapse-item :title="`研究过程（${researchSteps.length} 步）`" name="steps">
-              <div v-for="(step, idx) in researchSteps" :key="idx" class="research-step">
-                <p class="research-step-head">
-                  <strong>#{{ idx + 1 }} {{ step.agentName || 'agent' }}</strong>
-                  <small v-if="step.latencyMs">{{ step.latencyMs }}ms</small>
-                </p>
-                <p v-if="step.thought" class="research-step-line">{{ step.thought }}</p>
-                <p v-if="step.action" class="research-step-line dim">动作：{{ step.action }}</p>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
+          <el-table :data="usagePoints" height="100%" empty-text="暂无用量数据">
+            <el-table-column prop="date" label="日期" min-width="100" />
+            <el-table-column label="请求数" width="90">
+              <template #default="{ row }">{{ row.requestCount.toLocaleString() }}</template>
+            </el-table-column>
+            <el-table-column label="输入 tokens" min-width="110">
+              <template #default="{ row }">{{ row.inputTokens.toLocaleString() }}</template>
+            </el-table-column>
+            <el-table-column label="输出 tokens" min-width="110">
+              <template #default="{ row }">{{ row.outputTokens.toLocaleString() }}</template>
+            </el-table-column>
+            <el-table-column label="费用" width="110">
+              <template #default="{ row }">${{ row.costUsd.toFixed(4) }}</template>
+            </el-table-column>
+          </el-table>
         </section>
       </section>
 
@@ -1113,6 +1004,106 @@
         </section>
       </section>
     </main>
+
+    <!-- 鉴权与模型：低频配置收进弹窗（原侧栏 ops-panel） -->
+    <el-dialog v-model="opsDialogVisible" title="鉴权与模型" width="520px">
+      <div class="ops-body">
+        <el-form label-position="top" size="small">
+          <el-form-item label="API Key">
+            <el-input
+              v-model="apiKeyInput"
+              placeholder="输入 API Key（生产建议短时使用）"
+              show-password
+              type="password"
+            />
+          </el-form-item>
+          <el-form-item label="Tenant (可选)">
+            <el-input v-model="tenantInput" placeholder="public" />
+          </el-form-item>
+          <el-form-item label="Model Profile">
+            <el-select v-model="modelProfile" class="full-width">
+              <el-option label="economy（经济档 qwen-turbo）" value="economy" />
+              <el-option label="balanced（均衡档 qwen-plus）" value="balanced" />
+              <el-option label="quality（质量档 qwen-max）" value="quality" />
+              <el-option label="ab_auto（A/B 自动对比实验）" value="ab_auto" />
+              <el-option label="quality_first（固定最高档）" value="quality_first" />
+              <el-option label="cost_first（固定最低档）" value="cost_first" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Agent 引擎（主聊天）">
+            <el-radio-group v-model="agentEngine">
+              <el-radio-button value="standard">标准 ReAct</el-radio-button>
+              <el-radio-button value="workflow">工作流引擎</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <p class="engine-hint">
+            {{
+              agentEngine === 'workflow'
+                ? '工作流引擎：每一步全留痕可回放、轨迹逐轮实时推送；但不读写会话记忆。'
+                : '标准 ReAct：主聊天默认引擎，带会话记忆。'
+            }}
+          </p>
+          <el-form-item label="响应模式">
+            <el-switch v-model="streaming" inline-prompt active-text="SSE" inactive-text="JSON" />
+          </el-form-item>
+        </el-form>
+        <div class="auth-buttons">
+          <el-tag v-if="role" size="small" :type="isAdmin ? 'danger' : 'info'">{{ role }}</el-tag>
+          <el-button type="primary" :loading="authLoading" @click="handleLogin">换取 JWT</el-button>
+          <el-button :disabled="!refreshToken" :loading="refreshing" @click="handleRefresh"
+            >刷新</el-button
+          >
+          <el-button @click="logout">退出登录</el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 分支树：从顶栏「分支」按钮打开（原侧栏 branch-panel） -->
+    <el-drawer v-model="branchDrawerVisible" title="分支树" size="360px">
+      <section class="branch-panel in-drawer">
+        <div class="section-head">
+          <p class="section-label">分支列表</p>
+          <div class="branch-head-actions">
+            <span class="section-meta">{{ activeSession?.branches.length ?? 0 }} 条</span>
+            <button type="button" @click="forkFromCurrent">从当前分叉</button>
+            <button
+              type="button"
+              :disabled="!activeBranch?.parentBranchId"
+              @click="compareWithParent"
+            >
+              对比父分支
+            </button>
+            <button
+              type="button"
+              :disabled="!activeBranch?.parentBranchId"
+              @click="mergeIntoParent"
+            >
+              合并到父分支
+            </button>
+          </div>
+        </div>
+        <div class="branch-list">
+          <div
+            v-for="node in branchTreeItems"
+            :key="node.branch.id"
+            class="branch-item"
+            :class="{ active: node.branch.id === activeBranch?.id }"
+            :style="{ paddingLeft: `${12 + node.depth * 14}px` }"
+            role="button"
+            tabindex="0"
+            @click="switchBranch(node.branch.id)"
+            @keydown.enter.prevent="switchBranch(node.branch.id)"
+          >
+            <span class="branch-line" :style="{ opacity: node.depth > 0 ? 1 : 0 }"></span>
+            <div class="branch-content">
+              <p>{{ node.branch.title }}</p>
+              <small>{{ formatTime(node.branch.updatedAt) }}</small>
+            </div>
+          </div>
+          <div v-if="branchTreeItems.length === 0" class="session-empty">暂无分支</div>
+        </div>
+      </section>
+    </el-drawer>
   </div>
 </template>
 
@@ -1131,6 +1122,20 @@ import xmlLang from 'highlight.js/lib/languages/xml';
 import yamlLang from 'highlight.js/lib/languages/yaml';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadUserFile } from 'element-plus';
+import {
+  CaretLeft,
+  CaretRight,
+  ChatDotRound,
+  Compass,
+  DataAnalysis,
+  Download,
+  FolderOpened,
+  Notebook,
+  Paperclip,
+  Setting,
+  TrendCharts,
+  Upload,
+} from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { Ref } from 'vue';
@@ -1143,8 +1148,8 @@ import {
   exchangeApiKey,
   exportEvalRunReport,
   getEvalComparison,
-  getResearchReport,
   getTenantCostSummary,
+  getTenantCostTrend,
   listAdminDocuments,
   listEvalDatasets,
   listRecentIngestionJobs,
@@ -1162,8 +1167,7 @@ import {
   streamReactChat,
   submitAnswerFeedback,
   triggerEvalRun,
-  pdfChat,
-  uploadIngestionPdf,
+  uploadIngestionDocument,
 } from './api/client';
 import type {
   AdminDocumentSummary,
@@ -1181,8 +1185,7 @@ import type {
   ReactTraceStep,
   SessionState,
   TenantCostSummary,
-  WorkflowStep,
-  WorkflowTask,
+  TenantCostTrendPoint,
 } from './types/react';
 
 interface ChatMessage {
@@ -1193,6 +1196,7 @@ interface ChatMessage {
   citations?: string[];
   evidence?: string[];
   state?: 'pending' | 'streaming' | 'done' | 'error' | 'stopped';
+  kind?: 'research'; // 深度研究产生的助手消息（打徽标用）
 }
 
 interface SessionBranch {
@@ -1231,7 +1235,7 @@ interface MessageMetric {
 }
 
 type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
-type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'pdfchat' | 'admin' | 'research';
+type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'admin' | 'usage';
 
 interface EvalMetricCard {
   key: keyof EvalMetricSummary;
@@ -1413,6 +1417,7 @@ function normalizeMessage(raw: unknown): ChatMessage {
       ? candidate.evidence.map((item) => String(item).trim()).filter(Boolean)
       : [],
     state: candidate.state || 'done',
+    kind: candidate.kind === 'research' ? 'research' : undefined,
   };
 }
 
@@ -1580,7 +1585,7 @@ const bootstrap = Object.keys(cached).length > 0 ? cached : legacy;
 
 const darkMode = ref(Boolean(bootstrap.darkMode));
 const activeView = ref<ConsoleView>(
-  ['evaluation', 'knowledge', 'pdfchat', 'admin', 'research'].includes(bootstrap.activeView as string)
+  ['evaluation', 'knowledge', 'admin', 'usage'].includes(bootstrap.activeView as string)
     ? (bootstrap.activeView as ConsoleView)
     : 'chat',
 );
@@ -1594,9 +1599,16 @@ const authMode = ref<'login' | 'register'>('login');
 const authUsername = ref('');
 const authPassword = ref('');
 const isAdmin = computed(() => role.value === 'ADMIN');
+// 会话栏只在聊天页且未折叠时占一列；其它页签由内容区占满整行
+const sessionColVisible = computed(() => activeView.value === 'chat' && !sessionColCollapsed.value);
 const sessionSearch = ref((bootstrap.sessionSearch as string | undefined) ?? '');
 const workspaceFilter = ref((bootstrap.workspaceFilter as string | undefined) ?? 'all');
 const showArchivedSessions = ref(Boolean(bootstrap.showArchivedSessions));
+// 会话栏折叠状态（仅聊天页生效），随其它界面偏好一起持久化
+const sessionColCollapsed = ref(Boolean(bootstrap.sessionColCollapsed));
+// 鉴权与模型弹窗 / 分支树抽屉：临时 UI 状态，不持久化
+const opsDialogVisible = ref(false);
+const branchDrawerVisible = ref(false);
 
 const sessions = ref<SessionRecord[]>(
   Array.isArray(bootstrap.sessions) && bootstrap.sessions.length > 0
@@ -1639,7 +1651,6 @@ const hydrating = ref(true);
 const prompt = ref('');
 const messageContainer = ref<HTMLElement | null>(null);
 const currentAbortController = ref<AbortController | null>(null);
-const workspaceDraft = ref('');
 const editingMessageId = ref<string | null>(null);
 const editingMessageDraft = ref('');
 const streamPhase = ref<StreamPhase>('idle');
@@ -1662,13 +1673,8 @@ const knowledgeJobs = ref<IngestionJob[]>([]);
 const knowledgeLoading = ref(false);
 const knowledgeUploading = ref(false);
 const knowledgeUploadFiles = ref<UploadUserFile[]>([]);
-const pdfDocs = ref<IngestionJob[]>([]);
-const pdfLoading = ref(false);
-const pdfUploading = ref(false);
-const pdfUploadFiles = ref<UploadUserFile[]>([]);
 // 未登录 / 登录过期时不弹报错，改在页面里给一句提示
 const knowledgeNeedsAuth = ref(false);
-const pdfNeedsAuth = ref(false);
 // 管理员文档总览（跨租户）：列表数据 + 分页/搜索 + 未登录提示
 const adminDocs = ref<AdminDocumentSummary[]>([]);
 const adminDocsLoading = ref(false);
@@ -1680,33 +1686,202 @@ const adminNeedsAuth = ref(false);
 // Agent 引擎：standard = 主聊天标准 ReAct；workflow = 工作流版（步骤全留痕可回放，不读写会话记忆）
 const agentEngine = ref<AgentEngine>(bootstrap.agentEngine === 'workflow' ? 'workflow' : 'standard');
 
-// ---------- 深度研究页状态 ----------
-const researchTopic = ref('');
-const researchRunning = ref(false);
-const researchStatusText = ref('');
-const researchReport = ref('');
-const researchSteps = ref<WorkflowStep[]>([]);
-const researchTasks = ref<WorkflowTask[]>([]);
-const researchLoading = ref(false);
-const researchNeedsAuth = ref(false);
-const researchActiveTaskId = ref('');
+// ---------- 深度研究（聊天输入框模式，开关不持久化） ----------
+const researchMode = ref(false); // 开着时，下一次「发送」改走深度研究
+const researchRunning = ref(false); // 当前 in-flight 的发送是否为深度研究
+
+// ---------- 聊天输入框上传文档（进知识库，非文档限定问答） ----------
+const composerFileInput = ref<HTMLInputElement | null>(null);
+const composerUploading = ref(false);
+type ComposerChipKind = 'uploading' | 'parsing' | 'ready' | 'error';
+interface ComposerUploadChip {
+  kind: ComposerChipKind;
+  name: string;
+  chatId: string;
+  text: string;
+}
+const composerUploadChip = ref<ComposerUploadChip | null>(null);
+let composerUploadPollTimer: number | null = null;
+let composerChipDismissTimer: number | null = null;
+
+// ---------- 用量（本租户 token 统计 + 每日趋势） ----------
+const usageRange = ref<7 | 14 | 30>(14);
+const usagePoints = ref<TenantCostTrendPoint[]>([]);
+const usageLoading = ref(false);
+const usageNeedsAuth = ref(false);
+
+// 趋势图为手写 SVG 双轴折线图（无图表库），固定 viewBox 随容器等比缩放：左轴 tokens 右轴费用 $
+const USAGE_CHART_W = 720;
+const USAGE_CHART_H = 260;
+
+// 指标卡直接复用右上角同一份 costSummary 数据，不重复请求
+const usageMetricCards = computed(() => {
+  const summary = costSummary.value;
+  return [
+    { label: '本月费用', value: summary ? `$${summary.monthCostUsd.toFixed(4)}` : '—', tone: 'neutral' },
+    {
+      label: '预算余量',
+      value: summary ? `$${summary.budgetRemainingUsd.toFixed(4)}` : '—',
+      tone: summary?.budgetExceeded ? 'bad' : 'neutral',
+    },
+    { label: '本月请求', value: summary ? summary.monthRequestCount.toLocaleString() : '—', tone: 'neutral' },
+    { label: '本月输入 token', value: summary ? summary.monthInputTokens.toLocaleString() : '—', tone: 'neutral' },
+    { label: '本月输出 token', value: summary ? summary.monthOutputTokens.toLocaleString() : '—', tone: 'neutral' },
+    { label: '今日费用', value: summary ? `$${summary.todayCostUsd.toFixed(4)}` : '—', tone: 'neutral' },
+  ];
+});
+
+/** 向上取整到 1/2/2.5/5 × 10^k，让 y 轴刻度是整数。 */
+function niceCeil(value: number): number {
+  if (value <= 0) {
+    return 1;
+  }
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  for (const multiple of [1, 2, 2.5, 5, 10]) {
+    if (value <= multiple * magnitude) {
+      return multiple * magnitude;
+    }
+  }
+  return 10 * magnitude;
+}
+
+const usageHoverIndex = ref<number | null>(null);
+
+/** y 轴刻度：≥1万 用「万」，≥1000 用 k，其余原样。 */
+function formatTokenTick(value: number): string {
+  if (value >= 10000) {
+    const wan = value / 10000;
+    return `${Number.isInteger(wan) ? wan : wan.toFixed(1)}万`;
+  }
+  if (value >= 1000) {
+    return `${Math.round(value / 100) / 10}k`;
+  }
+  return String(value);
+}
+
+// 单图双轴：左轴输入/输出 tokens（蓝/绿实线），右轴费用 $（红色虚线），悬停出竖参考线+提示框
+const usageTrendChart = computed(() => {
+  const padL = 52;
+  const padR = 52;
+  const padT = 14;
+  const padB = 26;
+  const plotH = USAGE_CHART_H - padT - padB;
+  const plotW = USAGE_CHART_W - padL - padR;
+  const baseY = padT + plotH;
+  const points = usagePoints.value;
+  const count = Math.max(1, points.length);
+  const band = plotW / count;
+  // 三条线各自独立（不堆叠），tokens 轴取输入/输出中的较大者；全零时除零保护
+  const tokensMax = niceCeil(Math.max(1, ...points.flatMap((point) => [point.inputTokens, point.outputTokens])));
+  const costMax = niceCeil(Math.max(0.01, ...points.map((point) => point.costUsd)));
+  const xAt = (index: number) => padL + index * band + band / 2;
+  const yTok = (value: number) => baseY - (value / tokensMax) * plotH;
+  const yCost = (value: number) => baseY - (value / costMax) * plotH;
+  const joinPts = (coords: Array<{ x: number; y: number }>) => coords.map((d) => `${d.x},${d.y}`).join(' ');
+  const inputPts = points.map((point, index) => ({ x: xAt(index), y: yTok(point.inputTokens) }));
+  const fracs = [0, 0.25, 0.5, 0.75, 1];
+  return {
+    W: USAGE_CHART_W,
+    H: USAGE_CHART_H,
+    padL,
+    padR,
+    padT,
+    plotH,
+    baseY,
+    inputLine: joinPts(inputPts),
+    outputLine: joinPts(points.map((point, index) => ({ x: xAt(index), y: yTok(point.outputTokens) }))),
+    costLine: joinPts(points.map((point, index) => ({ x: xAt(index), y: yCost(point.costUsd) }))),
+    areaPath:
+      inputPts.length >= 2
+        ? `M ${inputPts[0].x} ${baseY} L ${inputPts.map((d) => `${d.x} ${d.y}`).join(' L ')} L ${inputPts[inputPts.length - 1].x} ${baseY} Z`
+        : '',
+    yTicksLeft: fracs.map((frac) => ({ text: formatTokenTick(tokensMax * frac), y: yTok(tokensMax * frac) })),
+    yTicksRight: fracs.map((frac) => ({ text: formatCostTick(costMax * frac), y: yCost(costMax * frac) })),
+    labelY: baseY + 16,
+    days: points.map((point, index) => ({
+      key: point.date,
+      x: xAt(index),
+      hitX: padL + index * band,
+      hitWidth: band,
+      showXLabel: count <= 7 || index % (count > 20 ? 5 : 2) === 0,
+      shortDate: point.date.slice(5).replace('-', '/'),
+      input: point.inputTokens,
+      output: point.outputTokens,
+      cost: point.costUsd,
+    })),
+  };
+});
+
+/** 悬停日 → 提示框几何（靠右时翻到竖线左边），null 表示未悬停。 */
+const usageHoverDay = computed(() => {
+  const index = usageHoverIndex.value;
+  if (index === null) {
+    return null;
+  }
+  const chart = usageTrendChart.value;
+  const day = chart.days[index];
+  if (!day) {
+    return null;
+  }
+  const boxW = 176;
+  const boxH = 104;
+  const flip = day.x > chart.W - chart.padR - boxW - 12;
+  return {
+    ...day,
+    boxW,
+    boxH,
+    boxX: flip ? day.x - boxW - 12 : day.x + 12,
+    boxY: chart.padT + 4,
+  };
+});
+
+/** 费用刻度：≥1 美元两位小数，≥1 美分两位小数，更小用三位小数。 */
+function formatCostTick(value: number): string {
+  if (value >= 1) {
+    return `$${value.toFixed(2)}`;
+  }
+  if (value >= 0.01) {
+    return `$${value.toFixed(2)}`;
+  }
+  return `$${value.toFixed(3)}`;
+}
+
+async function loadUsageTrend(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    // 压根没登录过，别去打接口，页面里提示即可
+    usageNeedsAuth.value = true;
+    usagePoints.value = [];
+    return;
+  }
+  if (!silent) {
+    usageLoading.value = true;
+  }
+  try {
+    usagePoints.value = await getTenantCostTrend(usageRange.value, authContext());
+    usageNeedsAuth.value = false;
+  } catch (error) {
+    if (isAuthError(error)) {
+      // 登录过期（JWT 两小时失效），页面里提示，不弹报错
+      usageNeedsAuth.value = true;
+      usagePoints.value = [];
+    } else if (!silent) {
+      const message = error instanceof Error ? error.message : '用量趋势加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      usageLoading.value = false;
+    }
+  }
+}
+
+watch(usageRange, () => {
+  void loadUsageTrend();
+});
 
 function isAuthError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith('HTTP 401');
 }
-const pdfActiveChatId = ref('');
-const pdfPrompt = ref('');
-const pdfAnswering = ref(false);
-const pdfMessageContainer = ref<HTMLElement | null>(null);
-
-// 顶部标题用：当前提问范围的一句话描述
-const pdfScopeLabel = computed(() => {
-  if (!pdfActiveChatId.value) {
-    return '整个知识库';
-  }
-  const doc = pdfDocs.value.find((d) => d.chatId === pdfActiveChatId.value);
-  return doc ? `单文档：${doc.sourceName}` : '单文档';
-});
 
 const messageHeights = ref<Record<string, number>>({});
 const viewportHeight = ref(0);
@@ -1714,12 +1889,6 @@ const scrollTop = ref(0);
 const messageRowElements = new Map<string, HTMLElement>();
 let resizeObserver: ResizeObserver | null = null;
 let streamResetTimer: number | null = null;
-
-const quickPrompts = [
-  '先总结这个会话的关键结论，再列出 3 条行动项',
-  '帮我按课程类型推荐三门就业导向课程',
-  '先检索知识库，再给出本周学习计划',
-];
 
 const sessionCount = computed(() => sessions.value.length);
 
@@ -1976,6 +2145,7 @@ function persistState(): void {
       sessionSearch: sessionSearch.value,
       workspaceFilter: workspaceFilter.value,
       showArchivedSessions: showArchivedSessions.value,
+      sessionColCollapsed: sessionColCollapsed.value,
       sessions: sessions.value,
     }),
   );
@@ -1998,14 +2168,11 @@ function activateView(view: ConsoleView): void {
   if (view === 'knowledge' && !knowledgeLoading.value) {
     void loadKnowledgeJobs();
   }
-  if (view === 'pdfchat' && !pdfLoading.value) {
-    void loadPdfDocs();
-  }
   if (view === 'admin' && isAdmin.value) {
     void loadAdminDocuments();
   }
-  if (view === 'research' && !researchLoading.value) {
-    void loadResearchTasks();
+  if (view === 'usage') {
+    void loadUsageTrend();
   }
 }
 
@@ -2067,6 +2234,13 @@ async function loadKnowledgeJobs(silent = false): Promise<void> {
   }
 }
 
+// 上传批次的 chatId：doc-年月日-时分秒，知识库页和输入框上传共用
+function mintIngestionChatId(): string {
+  const stamp = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `doc-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}`;
+}
+
 async function submitIngestionUpload(
   files: Ref<UploadUserFile[]>,
   loading: Ref<boolean>,
@@ -2074,16 +2248,14 @@ async function submitIngestionUpload(
 ): Promise<void> {
   const file = files.value[0]?.raw;
   if (!(file instanceof File)) {
-    ElMessage.warning('请先选择一个 PDF 文件');
+    ElMessage.warning('请先选择一个文档文件（支持 PDF / Word / Markdown）');
     return;
   }
   loading.value = true;
   try {
     // 每次上传独立批次：chatId 用时间戳生成，入库任务按批次隔离
-    const stamp = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const chatId = `doc-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}`;
-    const result = await uploadIngestionPdf(chatId, file, authContext());
+    const chatId = mintIngestionChatId();
+    const result = await uploadIngestionDocument(chatId, file, authContext());
     ElMessage.success(`已提交入库任务 ${shortId(result.job?.jobId ?? '')}，切分入库需要一点时间`);
     files.value = [];
     opts?.afterUpload?.(chatId);
@@ -2239,124 +2411,121 @@ function stopKnowledgePolling(): void {
   }
 }
 
-// ---------- 文档问答（知识库检索问答） ----------
+// ---------- 聊天输入框上传文档（进知识库，非文档限定问答） ----------
 
-interface PdfChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: number;
+function triggerComposerUpload(): void {
+  composerFileInput.value?.click();
 }
 
-// 全库模式用固定 key 存消息；选中文档时 key = 该批次 chatId
-const PDF_ALL_KEY = '__kb_all__';
-
-const pdfMessages = ref<Record<string, PdfChatMessage[]>>({});
-const pdfActiveKey = computed(() => pdfActiveChatId.value || PDF_ALL_KEY);
-const pdfActiveMessages = computed(() => pdfMessages.value[pdfActiveKey.value] ?? []);
-
-async function loadPdfDocs(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
-    pdfNeedsAuth.value = true;
-    pdfDocs.value = [];
-    return;
-  }
-  if (!silent) {
-    pdfLoading.value = true;
-  }
-  try {
-    const jobs = await listRecentIngestionJobs(authContext(), 100);
-    const seen = new Set<string>();
-    const docs: IngestionJob[] = [];
-    for (const job of jobs) {
-      if (job.status !== 'SUCCEEDED' || seen.has(job.chatId)) {
-        continue;
-      }
-      seen.add(job.chatId);
-      docs.push(job);
-    }
-    pdfDocs.value = docs;
-    pdfNeedsAuth.value = false;
-  } catch (error) {
-    if (isAuthError(error)) {
-      pdfNeedsAuth.value = true;
-      pdfDocs.value = [];
-    } else if (!silent) {
-      const message = error instanceof Error ? error.message : '文档列表加载失败';
-      ElMessage.error(message);
-    }
-  } finally {
-    if (!silent) {
-      pdfLoading.value = false;
-    }
-  }
-}
-
-function pdfDocName(chatId: string): string {
-  return pdfDocs.value.find((doc) => doc.chatId === chatId)?.sourceName ?? shortId(chatId);
-}
-
-function scrollPdfToBottom(): void {
-  const el = pdfMessageContainer.value;
-  if (el) {
-    el.scrollTop = el.scrollHeight;
-  }
-}
-
-watch(pdfActiveKey, () => {
-  void nextTick(scrollPdfToBottom);
-});
-
-async function onPdfPageUpload(): Promise<void> {
-  await submitIngestionUpload(pdfUploadFiles, pdfUploading, {
-    afterUpload: (chatId) => {
-      pdfActiveChatId.value = chatId;
-      void loadPdfDocs(true);
-    },
-  });
-}
-
-async function sendPdfQuestion(): Promise<void> {
-  const question = pdfPrompt.value.trim();
-  if (!question || pdfAnswering.value) {
+async function onComposerFileChosen(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许下次重选同一个文件
+  if (!file) {
     return;
   }
   if (!canUseRemoteSync.value) {
-    ElMessage.warning('请先完成鉴权后再提问');
+    ElMessage.warning('请先登录后再上传文档到知识库');
     return;
   }
-  const key = pdfActiveKey.value;
-  const list = (pdfMessages.value[key] ??= []);
-  const now = Date.now();
-  list.push({ id: `u-${now}`, role: 'user', content: question, createdAt: now });
-  const pendingId = `a-${now}`;
-  list.push({ id: pendingId, role: 'assistant', content: '', createdAt: now });
-  pdfPrompt.value = '';
-  pdfAnswering.value = true;
-  void nextTick(scrollPdfToBottom);
-  try {
-    const answer = await pdfChat(
-      question,
-      pdfActiveChatId.value || 'kb-all',
-      {
-        docOnly: Boolean(pdfActiveChatId.value),
-        modelProfile: modelProfile.value,
-      },
-      authContext(),
-    );
-    const pending = (pdfMessages.value[key] ?? []).find((m) => m.id === pendingId);
-    if (pending) {
-      pending.content = answer;
-    }
-  } catch (error) {
-    const pending = (pdfMessages.value[key] ?? []).find((m) => m.id === pendingId);
-    if (pending) {
-      pending.content = `**出错了**：${error instanceof Error ? error.message : '提问失败'}`;
-    }
-  } finally {
-    pdfAnswering.value = false;
-    void nextTick(scrollPdfToBottom);
+  if (!/\.(pdf|docx?|md)$/i.test(file.name)) {
+    ElMessage.warning('支持 PDF / Word（doc、docx）/ Markdown 文件');
+    return;
   }
+  if (
+    composerUploadChip.value &&
+    (composerUploadChip.value.kind === 'uploading' || composerUploadChip.value.kind === 'parsing')
+  ) {
+    ElMessage.warning('已有文件在解析中，稍等片刻再传');
+    return;
+  }
+  await submitComposerUpload(file);
+}
+
+async function submitComposerUpload(file: File): Promise<void> {
+  const chatId = mintIngestionChatId();
+  composerUploadChip.value = { kind: 'uploading', name: file.name, chatId, text: '上传中…' };
+  composerUploading.value = true;
+  try {
+    await uploadIngestionDocument(chatId, file, authContext());
+    composerUploadChip.value = { kind: 'parsing', name: file.name, chatId, text: '解析中…' };
+    startComposerUploadPolling();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '上传失败';
+    composerUploadChip.value = { kind: 'error', name: file.name, chatId, text: message };
+    scheduleComposerChipDismiss(8000);
+  } finally {
+    composerUploading.value = false;
+  }
+}
+
+// 每 3 秒盯一次入库任务，把 解析中→已可提问/失败 刷到胶囊上
+function startComposerUploadPolling(): void {
+  stopComposerUploadPolling();
+  let ticks = 0;
+  composerUploadPollTimer = window.setInterval(() => {
+    void (async () => {
+      ticks += 1;
+      const chip = composerUploadChip.value;
+      if (!chip || chip.kind !== 'parsing') {
+        stopComposerUploadPolling();
+        return;
+      }
+      if (ticks > 100) {
+        // 约 5 分钟兜底：别让胶囊永远转下去
+        composerUploadChip.value = { ...chip, kind: 'error', text: '解析超时，可到知识库页查看状态' };
+        stopComposerUploadPolling();
+        scheduleComposerChipDismiss(8000);
+        return;
+      }
+      try {
+        const jobs = await listRecentIngestionJobs(authContext(), 20);
+        const job = jobs.find((item) => item.chatId === chip.chatId);
+        if (!job) {
+          return; // 任务还没出现在列表里，等下一轮
+        }
+        if (job.status === 'SUCCEEDED') {
+          composerUploadChip.value = { ...chip, kind: 'ready', text: '已入库，照常提问即可检索到' };
+          stopComposerUploadPolling();
+          scheduleComposerChipDismiss(5000);
+        } else if (job.status === 'FAILED') {
+          composerUploadChip.value = { ...chip, kind: 'error', text: job.errorMessage || '解析失败' };
+          stopComposerUploadPolling();
+          scheduleComposerChipDismiss(8000);
+        }
+      } catch (error) {
+        if (isAuthError(error)) {
+          composerUploadChip.value = { ...chip, kind: 'error', text: '登录已过期，重新登录后可见结果' };
+          stopComposerUploadPolling();
+          scheduleComposerChipDismiss(8000);
+        }
+        // 其他轮询失败不打断，等下一轮
+      }
+    })();
+  }, 3000);
+}
+
+function stopComposerUploadPolling(): void {
+  if (composerUploadPollTimer !== null) {
+    window.clearInterval(composerUploadPollTimer);
+    composerUploadPollTimer = null;
+  }
+}
+
+function scheduleComposerChipDismiss(delay = 5000): void {
+  if (composerChipDismissTimer !== null) {
+    window.clearTimeout(composerChipDismissTimer);
+  }
+  composerChipDismissTimer = window.setTimeout(dismissComposerUploadChip, delay);
+}
+
+function dismissComposerUploadChip(): void {
+  stopComposerUploadPolling();
+  if (composerChipDismissTimer !== null) {
+    window.clearTimeout(composerChipDismissTimer);
+    composerChipDismissTimer = null;
+  }
+  composerUploadChip.value = null;
 }
 
 // ---------- 深度研究 ----------
@@ -2383,36 +2552,7 @@ function researchStatusLabel(status: string | undefined): string {
   }
 }
 
-async function loadResearchTasks(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
-    researchNeedsAuth.value = true;
-    researchTasks.value = [];
-    return;
-  }
-  if (!silent) {
-    researchLoading.value = true;
-  }
-  try {
-    const tasks = await listWorkflowTasks(authContext(), 1, 50);
-    researchTasks.value = tasks.filter((task) => task.type === 'DEEP_RESEARCH');
-    researchNeedsAuth.value = false;
-  } catch (error) {
-    if (isAuthError(error)) {
-      // 登录过期（JWT 两小时失效），页面里提示，不弹报错
-      researchNeedsAuth.value = true;
-      researchTasks.value = [];
-    } else if (!silent) {
-      const message = error instanceof Error ? error.message : '研究任务加载失败';
-      ElMessage.error(message);
-    }
-  } finally {
-    if (!silent) {
-      researchLoading.value = false;
-    }
-  }
-}
-
-// 研究进行中时每 3 秒盯一次任务列表，把中间状态刷成进度文案
+// 研究进行中时每 3 秒盯一次任务列表，把中间状态回调给气泡文案
 let researchPollTimer: number | null = null;
 
 function stopResearchPolling(): void {
@@ -2422,7 +2562,7 @@ function stopResearchPolling(): void {
   }
 }
 
-function startResearchPolling(): void {
+function startResearchPolling(onStatus: (label: string) => void): void {
   stopResearchPolling();
   researchPollTimer = window.setInterval(() => {
     void (async () => {
@@ -2432,8 +2572,7 @@ function startResearchPolling(): void {
           (task) => task.type === 'DEEP_RESEARCH' && task.status !== 'DONE' && task.status !== 'FAILED',
         );
         if (running) {
-          researchStatusText.value = researchStatusLabel(running.status);
-          researchActiveTaskId.value = running.taskId;
+          onStatus(researchStatusLabel(running.status));
         }
       } catch {
         // 轮询失败不打断主流程，等下一轮
@@ -2442,43 +2581,104 @@ function startResearchPolling(): void {
   }, 3000);
 }
 
-async function startResearch(): Promise<void> {
-  const topic = researchTopic.value.trim();
-  if (!topic || researchRunning.value) {
+// 输入框发起的深度研究：报告直接落到当前会话，当普通消息持久化
+async function runResearchInChat(question: string): Promise<void> {
+  if (!question || sending.value) {
     return;
   }
   if (!canUseRemoteSync.value) {
-    ElMessage.warning('请先登录后再发起研究');
+    ElMessage.warning('请先登录后再发起深度研究');
     return;
   }
+
+  sanitizeMessageStates();
+
+  const assistantMsg: ChatMessage = {
+    ...createMessage('assistant', ''),
+    citations: [],
+    evidence: [],
+    state: 'pending',
+    kind: 'research',
+  };
+  messages.value.push(createMessage('user', question));
+  messages.value.push(assistantMsg);
+
+  // 研究不是流式接口，清掉旧 trace 时间线，避免上一条的回答过程挂在研究气泡下面
+  traceSteps.value = [];
+  sending.value = true;
   researchRunning.value = true;
-  researchStatusText.value = '任务排队中';
-  researchReport.value = '';
-  researchSteps.value = [];
-  researchActiveTaskId.value = '';
+  isStreamingResponse.value = true;
+  prompt.value = '';
+  streamPhase.value = 'thinking';
+  streamStatusDetail.value = '深度研究：任务排队中';
+
+  syncCurrentSessionBranch();
+  persistState();
+  await scrollToBottom(true);
+
   // 创建接口是同步阻塞的（研究做完才返回报告），轮询器同时把
-  // 规划→检索→召回→撰写 的中间状态刷到界面上
-  startResearchPolling();
+  // 规划→检索→召回→撰写 的中间状态刷到气泡里
+  const controller = new AbortController();
+  currentAbortController.value = controller;
+  startResearchPolling((label) => {
+    streamStatusDetail.value = `深度研究：${label}`;
+    if (assistantMsg.state === 'pending') {
+      assistantMsg.content = `**深度研究进行中：${label}**\n\n> 规划 → 检索 → 召回 → 撰写，全程约 1-3 分钟。`;
+    }
+  });
+
   try {
-    const result = await createResearchTask(topic, modelProfile.value, authContext());
+    const result = await createResearchTask(
+      question,
+      modelProfile.value,
+      authContext(),
+      controller.signal,
+    );
     stopResearchPolling();
-    researchStatusText.value = researchStatusLabel(result.status);
-    researchReport.value = result.report ?? '';
-    researchTopic.value = '';
-    if (result.taskId) {
-      researchActiveTaskId.value = result.taskId;
-      // 列表里带 steps，刷新一次拿最新历史 + 步骤留痕
-      const fresh = await listWorkflowTasks(authContext(), 1, 50);
-      researchTasks.value = fresh.filter((task) => task.type === 'DEEP_RESEARCH');
-      researchSteps.value = fresh.find((task) => task.taskId === result.taskId)?.steps ?? [];
+    if (result.status === 'FAILED' || !(result.report ?? '').trim()) {
+      assistantMsg.content = `深度研究失败：后端返回「${researchStatusLabel(result.status)}」，且没有报告内容。`;
+      assistantMsg.state = 'error';
+      streamPhase.value = 'error';
+      streamStatusDetail.value = '深度研究失败';
+      ElMessage.error('深度研究任务失败');
+    } else {
+      assistantMsg.content = formatResearchReport(result.report ?? '');
+      assistantMsg.state = 'done';
+      streamPhase.value = 'done';
+      streamStatusDetail.value = '深度研究完成';
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : '研究任务失败';
-    researchStatusText.value = '失败';
-    ElMessage.error(message);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      assistantMsg.content = assistantMsg.content.trim() || '深度研究已手动停止（后端任务仍会跑完并计费）。';
+      assistantMsg.state = 'stopped';
+      streamPhase.value = 'stopped';
+      streamStatusDetail.value = '你手动停止了本次研究';
+    } else {
+      const message = error instanceof Error ? error.message : 'research failed';
+      assistantMsg.content = `深度研究失败：${message}`;
+      assistantMsg.state = 'error';
+      streamPhase.value = 'error';
+      streamStatusDetail.value = message;
+      ElMessage.error(message);
+    }
   } finally {
     stopResearchPolling();
+    sending.value = false;
     researchRunning.value = false;
+    isStreamingResponse.value = false;
+    currentAbortController.value = null;
+
+    syncCurrentSessionBranch();
+    persistState();
+    await scrollToBottom(true);
+
+    if (
+      streamPhase.value === 'done' ||
+      streamPhase.value === 'error' ||
+      streamPhase.value === 'stopped'
+    ) {
+      scheduleStreamReset();
+    }
   }
 }
 
@@ -2524,25 +2724,6 @@ function researchInlineValue(value: unknown): string {
     return JSON.stringify(value);
   }
   return String(value);
-}
-
-async function openResearchTask(task: WorkflowTask): Promise<void> {
-  if (researchRunning.value) {
-    return;
-  }
-  researchActiveTaskId.value = task.taskId;
-  researchStatusText.value = researchStatusLabel(task.status);
-  researchSteps.value = task.steps ?? [];
-  if (task.finalOutput) {
-    researchReport.value = task.finalOutput;
-    return;
-  }
-  try {
-    researchReport.value = await getResearchReport(task.taskId, authContext());
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '报告加载失败';
-    ElMessage.error(message);
-  }
 }
 
 function metricCard(
@@ -3000,15 +3181,20 @@ async function toggleSessionArchive(sessionId: string): Promise<void> {
   }
 }
 
-function createWorkspace(): void {
-  const value = workspaceDraft.value.trim().toLowerCase();
-  if (!value) {
+/**
+ * 工作区下拉变更：选已有项直接切；allow-create 输入的新名字在这里落地——
+ * 规范化（去空白/转小写）后把当前会话挪过去，并把会话栏过滤器同步到该工作区。
+ */
+function handleWorkspaceChange(value: string): void {
+  const normalized = (value ?? '').trim().toLowerCase();
+  if (!normalized) {
     return;
   }
-
-  activeWorkspaceId.value = value;
-  workspaceFilter.value = value;
-  workspaceDraft.value = '';
+  if (normalized !== value) {
+    // 输入的新名字可能带空格/大写：纠正回规范化值再落库
+    activeWorkspaceId.value = normalized;
+  }
+  workspaceFilter.value = normalized;
   persistState();
 }
 
@@ -3631,6 +3817,11 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
 
 async function send(): Promise<void> {
   const question = prompt.value.trim();
+  // 深度研究开关开着时，这一条发送改走研究报告流程（ask 仍服务普通聊天和重新生成）
+  if (researchMode.value) {
+    await runResearchInChat(question);
+    return;
+  }
   await ask(question, true);
 }
 
@@ -3670,7 +3861,15 @@ watch(
 );
 
 watch(
-  [modelProfile, streaming, workspaceFilter, showArchivedSessions, sessionSearch, agentEngine],
+  [
+    modelProfile,
+    streaming,
+    workspaceFilter,
+    showArchivedSessions,
+    sessionSearch,
+    agentEngine,
+    sessionColCollapsed,
+  ],
   () => {
     syncCurrentSessionBranch();
     persistState();
@@ -3690,8 +3889,13 @@ watch([apiKeyInput, tenantInput, token, refreshToken, role], () => {
   persistState();
   if (canUseRemoteSync.value) {
     void refreshCostSummary();
+    if (activeView.value === 'usage') {
+      void loadUsageTrend(true);
+    }
   } else {
     costSummary.value = null;
+    usageNeedsAuth.value = true;
+    usagePoints.value = [];
   }
 });
 
@@ -3746,12 +3950,8 @@ onMounted(() => {
     void loadKnowledgeJobs();
   }
 
-  if (activeView.value === 'pdfchat') {
-    void loadPdfDocs();
-  }
-
-  if (activeView.value === 'research') {
-    void loadResearchTasks();
+  if (activeView.value === 'usage') {
+    void loadUsageTrend();
   }
 
   void scrollToBottom(true);
@@ -3761,6 +3961,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewport);
   stopKnowledgePolling();
   stopResearchPolling();
+  stopComposerUploadPolling();
+  dismissComposerUploadChip();
 
   if (resizeObserver) {
     messageRowElements.forEach((element) => {
@@ -3780,59 +3982,136 @@ onBeforeUnmount(() => {
 <style scoped>
 .app-shell {
   /* 定高框架：页面本体永远等于一屏。此前用 min-height，侧栏内容一长
-     （会话列表+分支树+鉴权表单）就把整页撑高，聊天区滚到底再往下滚，
-     整页跟着滚、输入框下方露出大片空白。 */
+     就把整页撑高，聊天区滚到底再往下滚，整页跟着滚、输入框下方露出大片空白。 */
   height: 100vh;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   color: var(--ui-text);
 }
 
-.sidebar {
+/* 聊天页且未折叠时，会话栏占中间一列；其它页签内容区占满整行 */
+.app-shell.shell-with-sessions {
+  grid-template-columns: 64px 260px minmax(0, 1fr);
+}
+
+/* ---------- 图标栏（64px，只管页面导航） ---------- */
+
+.icon-rail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  /* 行高锁死后侧栏允许收缩：内容超出在自己内部滚动，不再撑高整页 */
-  min-height: 0;
-  overflow-y: auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
   border-right: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-card) 88%, transparent);
   backdrop-filter: blur(12px);
 }
 
-/* flex 纵向布局默认"先压缩孩子、再出滚动条"：不锁 flex-shrink，
-   底部的鉴权与模型面板会被压扁（它自带 overflow:hidden，压掉的部分直接看不见）。
-   子元素一律保持自然高度，超高才轮到侧栏整体滚动。 */
-.sidebar > * {
+.rail-brand {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(150deg, rgba(14, 116, 144, 0.85), rgba(15, 118, 110, 0.7));
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
   flex-shrink: 0;
 }
 
-.brand-block {
-  padding: 4px 2px;
+.rail-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 4px;
 }
 
-.eyebrow {
-  margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.rail-foot {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rail-btn {
+  width: 48px;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 0 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   color: var(--ui-muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
 }
 
-h1 {
-  margin: 8px 0 0;
-  font-size: 25px;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+.rail-btn:hover {
+  color: var(--ui-text);
+  background: color-mix(in oklab, var(--ui-panel) 80%, transparent);
 }
 
-.brand-sub {
-  margin: 8px 0 0;
-  font-size: 13px;
+.rail-btn.active {
+  color: #fff;
+  background: linear-gradient(150deg, rgba(14, 116, 144, 0.9), rgba(15, 118, 110, 0.78));
+}
+
+/* ---------- 会话栏（260px，仅聊天页，可折叠） ---------- */
+
+.session-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+/* flex 纵向布局默认"先压缩孩子、再出滚动条"：按钮/工具区锁 flex-shrink，
+   超高时只让会话列表（flex:1 + 内部滚动）收缩，其余面板保持自然高度。 */
+.session-col > *,
+.session-col .session-tools {
+  flex-shrink: 0;
+}
+
+.collapse-col-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   color: var(--ui-muted);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.collapse-col-btn:hover {
+  color: var(--ui-text);
+  border-color: rgba(14, 116, 144, 0.4);
 }
 
 .new-chat-btn {
@@ -3854,33 +4133,6 @@ h1 {
   box-shadow: 0 10px 24px rgba(14, 116, 144, 0.18);
 }
 
-.console-nav {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--ui-border);
-  border-radius: 12px;
-  background: color-mix(in oklab, var(--ui-panel) 80%, transparent);
-}
-
-.console-nav button {
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: var(--ui-muted);
-  background: transparent;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.console-nav button.active {
-  color: var(--ui-text);
-  background: color-mix(in oklab, var(--ui-card) 94%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.22);
-}
-
 .session-tools {
   border: 1px solid var(--ui-border);
   border-radius: 12px;
@@ -3896,12 +4148,6 @@ h1 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-}
-
-.cloud-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .tool-select {
@@ -3937,13 +4183,37 @@ h1 {
   background: color-mix(in oklab, var(--ui-panel) 84%, transparent);
 }
 
+/* 会话面板撑满会话栏剩余高度：列表内部滚动，会话再多也不挤压其它区域 */
+.session-col .session-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .session-list,
 .branch-list {
-  max-height: 214px;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.session-col .session-list {
+  flex: 1;
+}
+
+/* 分支面板住在抽屉里：同样撑满抽屉高度，列表内部滚动 */
+.branch-panel.in-drawer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-panel.in-drawer .branch-list {
+  flex: 1;
 }
 
 .session-item {
@@ -4068,28 +4338,9 @@ h1 {
   color: var(--ui-muted);
 }
 
-.ops-panel {
-  border: 1px solid var(--ui-border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: color-mix(in oklab, var(--ui-panel) 86%, transparent);
-}
-
-.ops-panel summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  background: color-mix(in oklab, var(--ui-card) 80%, transparent);
-}
-
-.ops-panel summary::-webkit-details-marker {
-  display: none;
-}
-
+/* 鉴权与模型住在弹窗里，只保留表单体样式 */
 .ops-body {
-  padding: 12px;
+  padding: 4px 2px 2px;
 }
 
 .auth-buttons {
@@ -4134,6 +4385,35 @@ h1 {
   color: var(--ui-muted);
 }
 
+/* 聊天页标题块：折叠后左缘挂"展开会话栏"小按钮 */
+.head-title {
+  position: relative;
+  min-width: 0;
+}
+
+.expand-col-btn {
+  position: absolute;
+  left: -8px;
+  top: 14px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-muted);
+  background: color-mix(in oklab, var(--ui-card) 90%, transparent);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.expand-col-btn:hover {
+  color: var(--ui-text);
+  border-color: rgba(14, 116, 144, 0.4);
+}
+
 h2 {
   margin: 8px 0 0;
   font-size: 22px;
@@ -4155,11 +4435,7 @@ h2 {
 }
 
 .workspace-select {
-  width: 130px;
-}
-
-.workspace-input {
-  width: 130px;
+  width: 160px;
 }
 
 .stream-detail {
@@ -4232,15 +4508,6 @@ h2 {
   color: var(--ui-muted);
 }
 
-.welcome-prompts {
-  margin-top: 14px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.welcome-prompts button,
-.quick-prompts button,
 .message-actions button {
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
@@ -4629,13 +4896,13 @@ h2 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  /* 同 .pdfchat-page：行高锁死，表格区内部滚动 */
+  /* 行高锁死，表格区内部滚动 */
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
 }
 
-/* 同 .pdfchat-main：压过文件后部的 .eval-main-panel 行高覆盖 */
+/* 双类选择器提高优先级：压过文件后部的 .eval-main-panel 行高覆盖 */
 .eval-main-panel.admin-docs-main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -4657,101 +4924,168 @@ h2 {
   justify-self: end;
 }
 
-/* ---------- 深度研究 ---------- */
-
-.research-page {
+/* ---------- 用量统计页 ---------- */
+.usage-page {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  /* 同 .pdfchat-page：行高锁死，报告区内部滚动，不被内容顶出去 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
 }
 
-/* 同 .eval-main-panel.pdfchat-main：提高优先级压过文件后部的 .eval-main-panel 行高覆盖。
-   模板里的子块都是 v-if 互斥的，同时最多 头部/正文/步骤 三段，正好落三行 */
-.eval-main-panel.research-main {
+/* 头 / 卡片 / 趋势图 / 表格各占一行：头和卡片自适应，其余平分剩余高度，页面不出滚动条 */
+.eval-main-panel.usage-main {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
 }
 
-.research-history-head {
+.usage-range-select {
+  width: 120px;
+}
+
+.usage-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.usage-cards strong.bad {
+  color: #dc2626;
+}
+
+.usage-chart-block {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usage-chart-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.research-status-line {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ui-accent);
-}
-
-.research-progress {
-  align-self: center;
-  justify-self: center;
-  text-align: center;
-  padding: 32px 12px;
-}
-
-.research-progress-main {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ui-text);
-}
-
-.research-progress-sub {
-  margin: 8px 0 0;
+.usage-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--ui-muted);
 }
 
-.research-report {
+.usage-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.usage-chart-svg {
+  flex: 1;
+  width: 100%;
   min-height: 0;
-  overflow-y: auto;
-  padding: 4px 2px;
 }
 
-.research-steps {
-  max-height: 240px;
-  overflow-y: auto;
+.usage-chart-svg .grid-line {
+  stroke: var(--ui-border);
+  stroke-width: 1;
 }
 
-.research-step {
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--ui-border);
+.usage-chart-svg .axis-text {
+  fill: var(--ui-muted);
+  font-size: 10px;
 }
 
-.research-step:last-child {
-  border-bottom: none;
+/* 折线配色取自参考图：输入蓝 / 输出绿 / 成本红虚线（颜色+线型双通道编码，色弱也能分） */
+.usage-chart-svg .line-input {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 2;
 }
 
-.research-step-head {
-  margin: 0 0 4px;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+.usage-chart-svg .line-output {
+  fill: none;
+  stroke: #22c55e;
+  stroke-width: 2;
 }
 
-.research-step-head small {
+.usage-chart-svg .line-cost {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.usage-chart-svg .area-input {
+  fill: color-mix(in oklab, #3b82f6 12%, transparent);
+  stroke: none;
+}
+
+.usage-chart-svg .hover-line {
+  stroke: var(--ui-border);
+  stroke-width: 1;
+}
+
+.usage-chart-svg .tooltip-box {
+  fill: var(--ui-panel);
+  stroke: var(--ui-border);
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 18%));
+}
+
+.usage-chart-svg .tooltip-title {
+  fill: var(--ui-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usage-chart-svg .tooltip-text {
+  fill: var(--ui-text);
+  font-size: 11px;
+}
+
+.usage-chart-svg .tt-dot.input,
+.usage-dot.blue {
+  fill: #3b82f6;
+  background: #3b82f6;
+}
+
+.usage-chart-svg .tt-dot.output,
+.usage-dot.green {
+  fill: #22c55e;
+  background: #22c55e;
+}
+
+.usage-chart-svg .tt-dot.cost,
+.usage-dot.red {
+  fill: #ef4444;
+  background: #ef4444;
+}
+
+.usage-chart-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.usage-chart-range {
+  font-size: 12px;
   color: var(--ui-muted);
 }
 
-.research-step-line {
-  margin: 2px 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--ui-text);
-  word-break: break-word;
+.usage-legend-bottom {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
 }
 
-.research-step-line.dim {
+.usage-chart-empty {
+  margin: 0;
+  font-size: 12px;
   color: var(--ui-muted);
 }
 
@@ -4803,10 +5137,6 @@ h2 {
 
 .kb-auth-alert {
   margin: 8px 0;
-}
-
-.pdfchat-page .kb-auth-alert {
-  margin: 10px 0;
 }
 
 /* ---------- 登录/注册门闩 ---------- */
@@ -4864,52 +5194,6 @@ h2 {
 .admin-key-login[open] {
   padding-top: 10px;
   border-top: 1px dashed var(--ui-border);
-}
-
-.pdfchat-page {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  /* 行高锁死在可用视口内：否则行随内容长高，整页滚动、输入框被顶出屏幕 */
-  grid-template-rows: minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px;
-}
-
-.pdf-scope-list {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  overflow-y: auto;
-}
-
-/* 两个选择器提高优先级：文件后部的 .eval-main-panel（auto auto 1fr）会覆盖
-   同权重的单类规则，导致消息区无限长高、输入框被顶出屏幕外 */
-.eval-main-panel.pdfchat-main {
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.pdfchat-messages {
-  overflow-y: auto;
-  padding: 4px 2px;
-}
-
-.pdfchat-empty {
-  padding: 32px 12px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--ui-muted);
-}
-
-.pdfchat-composer {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-}
-
-.pdfchat-composer .el-button {
-  height: 54px;
 }
 
 .eval-side-panel,
@@ -5167,10 +5451,102 @@ h2 {
   gap: 10px;
 }
 
-.quick-prompts {
+/* 输入框左下工具区：深度研究开关 + 上传文档 */
+.composer-left {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.composer-tools {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* ChatGPT 风格工具药丸：小圆角胶囊 + 面板底色 */
+.composer-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
+  color: var(--ui-text);
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.composer-tool:hover {
+  border-color: var(--ui-accent);
+}
+
+.composer-tool.active {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 12%, transparent);
+}
+
+.composer-tool:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.composer-file-input {
+  display: none;
+}
+
+/* 上传状态胶囊：上传中→解析中→已可提问（或失败红），完成后自动消失 */
+.upload-chip {
+  max-width: 930px;
+  margin: 0 auto 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 90%, transparent);
+  width: fit-content;
+}
+
+.upload-chip.ready {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.upload-chip.error {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.upload-chip.uploading,
+.upload-chip.parsing {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.upload-chip-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+/* 深度研究消息徽标（bubble-meta 内） */
+.research-badge {
+  border: 1px solid var(--ui-accent);
+  color: var(--ui-accent);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
 }
 
 .composer-actions {
@@ -5317,28 +5693,27 @@ h2 {
 }
 
 @media (max-width: 1160px) {
-  .app-shell {
-    grid-template-columns: 300px minmax(0, 1fr);
+  .app-shell.shell-with-sessions {
+    grid-template-columns: 64px 224px minmax(0, 1fr);
   }
 
   .eval-score-strip {
     grid-template-columns: repeat(3, minmax(112px, 1fr));
   }
+
+  .usage-cards {
+    grid-template-columns: repeat(3, minmax(112px, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
-  .app-shell {
-    grid-template-columns: 1fr;
+  .app-shell,
+  .app-shell.shell-with-sessions {
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
-  .sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--ui-border);
-  }
-
-  .session-list,
-  .branch-list {
-    max-height: 170px;
+  .session-col {
+    display: none;
   }
 
   .workspace-head {
@@ -5346,8 +5721,7 @@ h2 {
   }
 
   .evaluation-page,
-  .knowledge-page,
-  .pdfchat-page {
+  .knowledge-page {
     grid-template-columns: 1fr;
   }
 
@@ -5370,19 +5744,18 @@ h2 {
     justify-content: flex-start;
   }
 
-  .workspace-select,
-  .workspace-input {
+  .workspace-select {
     width: 120px;
   }
 
   .evaluation-page,
-  .knowledge-page,
-  .pdfchat-page {
+  .knowledge-page {
     padding: 12px;
   }
 
   .eval-score-strip,
-  .eval-run-grid {
+  .eval-run-grid,
+  .usage-cards {
     grid-template-columns: 1fr;
   }
 

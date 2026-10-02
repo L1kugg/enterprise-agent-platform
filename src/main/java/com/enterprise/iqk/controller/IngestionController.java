@@ -47,12 +47,12 @@ public class IngestionController {
     private final IngestionProperties ingestionProperties;
 
     @PostMapping("/upload/{chatId}")
-    /** 上传 PDF 创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。 */
-    public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
-                                       @RequestParam("file") MultipartFile file,
-                                       @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+    /** 上传文档（PDF/DOC/DOCX/MD）创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。 */
+    public IngestionSubmitVO uploadDocument(@PathVariable String chatId,
+                                            @RequestParam("file") MultipartFile file,
+                                            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
         String traceId = currentTraceId();
-        IngestionJob job = ingestionService.submitPdf(currentTenantId(), chatId, file, idempotencyKey, traceId);
+        IngestionJob job = ingestionService.submitDocument(currentTenantId(), chatId, file, idempotencyKey, traceId);
         chatHistoryRepository.save("pdf", chatId);
         return IngestionSubmitVO.builder()
                 .ok(1)
