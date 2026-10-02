@@ -47,6 +47,10 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskRecord> {
     List<AgentTaskRecord> findStaleTasks(@Param("cutoff") LocalDateTime cutoff,
                                          @Param("limit") int limit);
 
+    /** 启动 sweep：进程启动时遗留的全部非终态任务（无时间阈值——上一进程的中断现场）。 */
+    @Select("SELECT * FROM agent_task WHERE status NOT IN ('DONE', 'FAILED') ORDER BY updated_at ASC LIMIT #{limit}")
+    List<AgentTaskRecord> findNonTerminalTasks(@Param("limit") int limit);
+
     /** 守卫式收尾：仅当任务仍在非终态时置 FAILED，返回是否实际更新（防"取消与完成竞态"把 DONE 覆盖成 FAILED）。 */
     @Update("UPDATE agent_task SET status = 'FAILED', final_output = #{reason}, updated_at = NOW() WHERE task_id = #{taskId} AND status NOT IN ('DONE', 'FAILED')")
     int failIfNotTerminal(@Param("taskId") String taskId,

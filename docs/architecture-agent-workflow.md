@@ -15,6 +15,7 @@ stateDiagram-v2
     SEARCHING --> RETRIEVING
     SEARCHING --> JUDGING
     SEARCHING --> FAILED
+    RETRIEVING --> WRITING
     RETRIEVING --> JUDGING
     RETRIEVING --> REFLECTING
     RETRIEVING --> FAILED
@@ -122,9 +123,34 @@ workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, finalReport);
    （守卫 = `UPDATE ... WHERE status NOT IN ('DONE','FAILED')`，与正常完成
    竞态时不会把 DONE 覆盖成 FAILED）。
 
-兜底回收：`WorkflowTaskReclaimer` @Scheduled 每 5 分钟扫描非终态超过 30 分钟
-（`app.workflow.stale-task-minutes`）的任务守卫式置 FAILED，覆盖两类第一现场
-收不住的遗留：进程重启/强杀（cancel 信号来不及处理）与编排层异常路径遗漏收尾。
+兜底回收分两层：
+
+- **启动清扫**（第一现场）：`WorkflowTaskStartupSweeper`（ApplicationRunner）
+  在进程启动时把上一进程遗留的全部非终态任务守卫式收尾（批量循环扫到空批，
+  上限 20 批），计数器 `agent.workflow.task.swept`。run 绝不抛异常——
+  ApplicationRunner 抛出会中止 Spring Boot 启动。
+- **运行期保险丝**：`WorkflowTaskReclaimer` @Scheduled 每 5 分钟扫描非终态
+  超过 30 分钟（`app.workflow.stale-task-minutes`）的任务守卫式置 FAILED，
+  覆盖运行中两类第一现场收不住的遗留：SSE 断连漏网与编排层异常路径遗漏收尾。
+
+## 深度研究异步执行
+
+`POST /ai/research/tasks` 是异步受理：`DeepResearchService.createResearch()`
+同步落库任务（保证客户端首轮轮询必能查到）后，把研究剧本提交到专用后台池
+（`app.research.worker-count` 默认 3 / `app.research.queue-capacity` 默认 20，
+gauge `research.pool.active`/`research.pool.queued`、排队时长 `research.queue.wait`），
+立即返回 202 + taskId（report 为空、状态 PLANNING）。HTTP 请求不随 1-3 分钟的
+研究时长挂住；客户端轮询 `GET /ai/research/tasks/{taskId}` 至 DONE/FAILED，
+再经 `GET /ai/research/tasks/{taskId}/report` 取报告。
+
+队列打满时守卫式 `abandonTask` + 计数 `research.task.rejected`，对外 429。
+任务记录只在受理时落库一次：`executeResearch` 推进的是 createResearch 已创建的
+那条任务（它再自行 startTask 会导致客户端持有的 taskId 永远 PLANNING、报告挂在
+另一条重复任务名下——已修并有用例锁定）。租户 ID 在提交线程上归一化后闭包传入
+后台线程（不触碰 TenantContext，照 IngestionWorker 惯例）。`@PreDestroy`
+shutdownNow + 限时 5 秒等待；被中断的
+在途任务多数经 failTask 收尾，漏网的由启动清扫兜底。研究池是 JVM 内队列：
+多副本部署时实例死亡的任务由清扫收尾（安全但丢进度），本项目为单节点部署。
 
 ## API 端点
 

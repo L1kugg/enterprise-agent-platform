@@ -23,7 +23,7 @@ KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构�
 
 | 证明点 | 仓库证据 |
 |---|---|
-| 企业级 RAG | PDF 上传、异步入库任务、租户隔离检索、答案引用、证据片段 |
+| 企业级 RAG | 文档上传（PDF / Word / Markdown）、异步入库任务、租户隔离检索、答案引用、证据片段 |
 | 租户与权限边界 | API Key、JWT、Refresh Token 生命周期、RBAC 权限、租户请求头、审计日志 |
 | 运维基线 | Docker Compose、Flyway 迁移、结构化日志、Prometheus 指标、Loki 日志、Tempo 链路追踪、Alertmanager 规则 |
 | 质量证据 | RAG Evaluation Studio、单元测试、Testcontainers 集成测试、JaCoCo、回归评测、端到端 smoke 日志、Docker 镜像构建；另有框架无关的外部评测 [ragproof](https://github.com/however-yir/ragproof) |
@@ -33,8 +33,9 @@ KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构�
 
 | 功能面 | 检查内容 |
 |---|---|
-| 控制台工作区 | 会话分支、流式模式、模型档位、JWT/API Key 鉴权、租户上下文 |
-| Evaluation Studio | 评测数据集、基线与当前运行对比、检索/引用/忠实度指标、Markdown 报告导出 |
+| 控制台工作区 | 会话分支、会话重命名、流式模式、模型档位、双引擎切换（ReAct / workflow）、用量统计、JWT/API Key 鉴权、租户上下文 |
+| 知识库管理 | 文档清单与删除、多格式上传（PDF / Word / Markdown）、入库任务轮询、试搜（三路本地召回，不调模型） |
+| Evaluation Studio | 评测数据集（可删，级联清理运行与结果）、基线与当前运行对比、检索/引用/忠实度指标、Markdown 报告导出 |
 | RAG 问答 | 引用标签、证据片段、空结果兜底策略 |
 | API 面 | Swagger UI、curl 示例、chat/RAG/ingestion/auth/audit 端点 |
 | 运维面 | 健康检查、Prometheus 指标、端到端产物、回归报告、容器镜像 |
@@ -165,7 +166,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 能力域 | 当前实现 |
 |---|---|
 | 多Agent工作流 | AgentWorkflowEngine 状态机（CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE），agent_task/step/event 持久化与事件溯源 |
-| DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，同步执行并持久化 task/step/event；外部 Web 搜索默认关闭 |
+| DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，异步受理（202 + taskId，后台池执行）并持久化 task/step/event，前端按 taskId 轮询；外部 Web 搜索默认关闭 |
 | 混合检索 | VectorRetriever（pgvector）+ KeywordRetriever（关键词）+ GraphRetriever（知识图谱）+ WebRetriever（外部搜索）= HybridRetrievalService 融合排序 |
 | 证据评分与引用溯源 | EvidenceJudgeService 三维评分（相关性/权威性/时效性），CitationService 编号引用（来源/片段/可信度） |
 | 知识图谱 | MySQL 轻量图谱（kg_entity/kg_relation/kg_fact），支持实体搜索、一跳邻居、事实检索，种子课程图谱数据 |
@@ -441,10 +442,10 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### DeepResearch 深度研究
 
-- `POST /ai/research/tasks`（创建并执行研究任务）
-- `GET /ai/research/tasks/{taskId}`（查询研究任务状态与步骤）
+- `POST /ai/research/tasks`（创建研究任务：异步受理 202 + taskId，队列满 429）
+- `GET /ai/research/tasks/{taskId}`（轮询研究任务状态与步骤）
 - `GET /ai/research/tasks/{taskId}/events`（查询研究事件流）
-- `GET /ai/research/tasks/{taskId}/report`（查询研究报告）
+- `GET /ai/research/tasks/{taskId}/report`（完成后获取研究报告）
 
 ### 混合检索与图谱
 

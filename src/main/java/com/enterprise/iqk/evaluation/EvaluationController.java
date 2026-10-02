@@ -2,6 +2,7 @@ package com.enterprise.iqk.evaluation;
 
 import com.enterprise.iqk.evaluation.vo.EvalComparisonVO;
 import com.enterprise.iqk.evaluation.vo.EvalDatasetCreateVO;
+import com.enterprise.iqk.evaluation.vo.EvalDatasetDeleteVO;
 import com.enterprise.iqk.evaluation.vo.EvalDatasetVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunRequestVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunVO;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +38,12 @@ public class EvaluationController {
     @GetMapping("/datasets")
     public List<EvalDatasetVO> listDatasets() {
         return evaluationService.listDatasets(TenantContext.currentTenantId());
+    }
+
+    /** 删除评测数据集：联动清掉其用例、运行与结果明细。 */
+    @DeleteMapping("/datasets/{datasetId}")
+    public EvalDatasetDeleteVO deleteDataset(@PathVariable("datasetId") String datasetId) {
+        return evaluationService.deleteDataset(TenantContext.currentTenantId(), datasetId);
     }
 
     /** 触发一轮评测：逐 case 调用真实 RAG 链路并打分落库。 */

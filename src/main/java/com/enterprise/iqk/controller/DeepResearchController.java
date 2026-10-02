@@ -1,6 +1,7 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.agent.research.DeepResearchService;
+import com.enterprise.iqk.agent.research.ResearchQueueFullException;
 import com.enterprise.iqk.agent.research.ResearchTaskRequest;
 import com.enterprise.iqk.agent.workflow.AgentWorkflowEngine;
 import com.enterprise.iqk.agent.workflow.WorkflowEventVO;
@@ -24,19 +25,27 @@ import java.util.Map;
 @RestController
 @RequestMapping("/ai/research")
 @RequiredArgsConstructor
-/** 深度研究 API：创建并执行研究任务，以及任务详情、事件流、报告查询（租户隔离）。 */
+/** 深度研究 API：创建任务（异步受理 202）、任务详情轮询、事件流与报告查询（租户隔离）。 */
 public class DeepResearchController {
 
     private final DeepResearchService deepResearchService;
     private final AgentWorkflowEngine workflowEngine;
 
-    @Operation(summary = "创建并执行深度研究任务")
+    @Operation(summary = "创建深度研究任务（异步受理）")
     @PostMapping("/tasks")
-    /** 创建并同步执行深度研究任务，完成后返回报告 */
+    /**
+     * 创建深度研究任务并立即返回 202 + 任务号（report 为空，状态 PLANNING）；
+     * 研究在后台执行，进度经 GET /tasks/{taskId} 轮询，报告经 GET /tasks/{taskId}/report 获取。
+     * 队列打满返回 429。
+     */
     public ResponseEntity<?> createResearch(@RequestBody ResearchTaskRequest request) {
-        DeepResearchService.DeepResearchResult result = deepResearchService.executeResearch(
-                request, TenantContext.currentTenantId());
-        return ResponseEntity.ok(result);
+        try {
+            DeepResearchService.DeepResearchResult result = deepResearchService.createResearch(
+                    request, TenantContext.currentTenantId());
+            return ResponseEntity.accepted().body(result);
+        } catch (ResearchQueueFullException e) {
+            return ResponseEntity.status(429).body(Map.of("ok", 0, "msg", e.getMessage()));
+        }
     }
 
     @Operation(summary = "查询研究任务详情")

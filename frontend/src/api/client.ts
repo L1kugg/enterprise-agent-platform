@@ -11,6 +11,7 @@ import type {
   EvalComparison,
   EvalDataset,
   EvalDatasetCreate,
+  EvalDatasetDeleteResult,
   EvalRun,
   EvalRunRequest,
   FeedbackRequest,
@@ -509,7 +510,10 @@ export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCo
 }
 
 /** 本租户近 N 天逐日用量趋势（含今日，后端返回裸数组，缺天补零）。 */
-export async function getTenantCostTrend(days: number, auth?: AuthContext): Promise<TenantCostTrendPoint[]> {
+export async function getTenantCostTrend(
+  days: number,
+  auth?: AuthContext,
+): Promise<TenantCostTrendPoint[]> {
   const response = await fetch(resolveApi(withQuery('/cost/trend', { days })), {
     credentials: 'include',
     method: 'GET',
@@ -571,6 +575,26 @@ export async function listEvalDatasets(auth?: AuthContext): Promise<EvalDataset[
   const payload = await parseJsonSafely<EvalDataset[]>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, 'list evaluation datasets failed');
+  }
+  return payload;
+}
+
+/** 删除评测集：后端联动清理其题目、运行与结果明细，返回清理回执供提示展示。 */
+export async function deleteEvalDataset(
+  datasetId: string,
+  auth?: AuthContext,
+): Promise<EvalDatasetDeleteResult> {
+  const response = await fetch(
+    resolveApi(`/ai/evaluation/datasets/${encodeURIComponent(datasetId)}`),
+    {
+      credentials: 'include',
+      method: 'DELETE',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<EvalDatasetDeleteResult>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'delete evaluation dataset failed');
   }
   return payload;
 }
@@ -671,7 +695,10 @@ export async function uploadIngestionDocument(
   return payload;
 }
 
-export async function listRecentIngestionJobs(auth?: AuthContext, limit = 20): Promise<IngestionJob[]> {
+export async function listRecentIngestionJobs(
+  auth?: AuthContext,
+  limit = 20,
+): Promise<IngestionJob[]> {
   const response = await fetch(resolveApi(withQuery('/ingestion/jobs/recent', { limit })), {
     credentials: 'include',
     method: 'GET',
@@ -729,14 +756,11 @@ export async function searchIngestionPreview(
   auth?: AuthContext,
   topK = 6,
 ): Promise<RetrievalPreviewResult> {
-  const response = await fetch(
-    resolveApi(withQuery('/ingestion/search', { q: query, topK })),
-    {
-      credentials: 'include',
-      method: 'GET',
-      headers: buildAuthHeaders(auth),
-    },
-  );
+  const response = await fetch(resolveApi(withQuery('/ingestion/search', { q: query, topK })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
   const payload = await parseJsonSafely<RetrievalPreviewResult>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, 'search preview failed');
@@ -809,7 +833,7 @@ export async function listWorkflowTasks(
   return payload;
 }
 
-/** 发起深度研究：后端同步执行（约 1-3 分钟），完成即返回报告；signal 用于「停止」中断等待。 */
+/** 发起深度研究：后端异步受理即返回 202（report 为空，状态 PLANNING），报告经 getResearchReport 轮询获取。 */
 export async function createResearchTask(
   topic: string,
   modelProfile: string | undefined,
@@ -826,10 +850,46 @@ export async function createResearchTask(
     body: JSON.stringify({ topic, modelProfile }),
     signal,
   });
-  // 成功时返回裸 DeepResearchResult（无 ok/msg 包装），错误响应体里才有 msg
+  // 成功时返回裸 DeepResearchResult（无 ok/msg 包装），错误响应体里才有 msg（429 队列满等）
   const payload = await parseJsonSafely<DeepResearchResult & { msg?: string }>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, payload?.msg ?? 'create research task failed');
+  }
+  return payload;
+}
+
+/** 查询单个深度研究任务详情（按 taskId 精确轮询；任务不存在或跨租户不可见返回 404）。 */
+export async function getResearchTask(taskId: string, auth?: AuthContext): Promise<WorkflowTask> {
+  const response = await fetch(resolveApi(`/ai/research/tasks/${encodeURIComponent(taskId)}`), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<WorkflowTask & { msg?: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? 'get research task failed');
+  }
+  return payload;
+}
+
+/** 拉取深度研究任务报告（任务不存在 404；任务未完成时 report 为空）。 */
+export async function getResearchReport(
+  taskId: string,
+  auth?: AuthContext,
+): Promise<{ taskId: string; report?: string }> {
+  const response = await fetch(
+    resolveApi(`/ai/research/tasks/${encodeURIComponent(taskId)}/report`),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<{ taskId: string; report?: string; msg?: string }>(
+    response,
+  );
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? 'get research report failed');
   }
   return payload;
 }

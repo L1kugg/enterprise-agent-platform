@@ -25,7 +25,8 @@
         class="auth-submit"
         :loading="authLoading"
         @click="handlePasswordAuth"
-      >{{ authMode === 'login' ? '登录' : '注册并登录' }}</el-button>
+        >{{ authMode === 'login' ? '登录' : '注册并登录' }}</el-button
+      >
       <details class="admin-key-login">
         <summary>管理员 API Key 登录</summary>
         <el-input
@@ -283,7 +284,11 @@
           }}</el-tag>
           <span class="stream-detail">{{ streamStatusDetail }}</span>
           <!-- 只有 1 条分支时没有可切换/对比的内容，不显示入口 -->
-          <el-button v-if="(activeSession?.branches.length ?? 0) > 1" size="small" @click="branchDrawerVisible = true">
+          <el-button
+            v-if="(activeSession?.branches.length ?? 0) > 1"
+            size="small"
+            @click="branchDrawerVisible = true"
+          >
             分支 ({{ activeSession?.branches.length }})
           </el-button>
           <el-button size="small" @click="clearConversation">清空会话</el-button>
@@ -656,7 +661,9 @@
             :on-exceed="() => ElMessage.warning('一次只能传一个文件，先移除已选文件')"
           >
             <p class="uploader-title">点击或拖拽文档到这里</p>
-            <p class="uploader-sub">支持 PDF / Word（doc、docx）/ Markdown，上传后自动切分、向量化并入知识库</p>
+            <p class="uploader-sub">
+              支持 PDF / Word（doc、docx）/ Markdown，上传后自动切分、向量化并入知识库
+            </p>
           </el-upload>
 
           <el-button
@@ -667,7 +674,9 @@
             >提交入库</el-button
           >
 
-          <p class="knowledge-tip">入库是异步的：提交后等状态变成 SUCCEEDED 才能被检索到；失败会自动重试。</p>
+          <p class="knowledge-tip">
+            入库是异步的：提交后等状态变成 SUCCEEDED 才能被检索到；失败会自动重试。
+          </p>
         </aside>
 
         <section v-loading="knowledgeLoading" class="eval-main-panel kb-main-panel">
@@ -696,14 +705,25 @@
                 <el-button size="small" @click="loadKnowledgeDocuments()">刷新</el-button>
               </div>
               <div class="kb-table-wrap">
-                <el-table :data="knowledgeDocuments" height="100%" empty-text="还没有入库文档，先上传一个">
-                  <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
+                <el-table
+                  :data="knowledgeDocuments"
+                  height="100%"
+                  empty-text="还没有入库文档，先上传一个"
+                >
+                  <el-table-column
+                    prop="sourceName"
+                    label="文件"
+                    min-width="180"
+                    show-overflow-tooltip
+                  />
                   <el-table-column label="类型" width="80">
                     <template #default="{ row }">{{ row.sourceType || '—' }}</template>
                   </el-table-column>
                   <el-table-column label="状态" width="110">
                     <template #default="{ row }">
-                      <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+                      <el-tag :type="statusTagType(row.status)" size="small">{{
+                        row.status
+                      }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column label="切片数" width="80">
@@ -713,11 +733,19 @@
                     <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
                   </el-table-column>
                   <el-table-column label="入库时间" width="130">
-                    <template #default="{ row }">{{ formatJobTime(row.finishedAt ?? row.createdAt) }}</template>
+                    <template #default="{ row }">{{
+                      formatJobTime(row.finishedAt ?? row.createdAt)
+                    }}</template>
                   </el-table-column>
                   <el-table-column label="操作" width="80">
                     <template #default="{ row }">
-                      <el-button size="small" type="danger" link @click="removeKnowledgeDocument(row)">删除</el-button>
+                      <el-button
+                        size="small"
+                        type="danger"
+                        link
+                        @click="removeKnowledgeDocument(row)"
+                        >删除</el-button
+                      >
                     </template>
                   </el-table-column>
                 </el-table>
@@ -738,24 +766,49 @@
                 <el-button size="small" @click="loadKnowledgeJobs()">刷新</el-button>
               </div>
               <div class="kb-table-wrap">
-                <el-table :data="knowledgeJobs" height="100%" empty-text="还没有入库记录，先上传一个文档">
-                  <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip />
+                <el-table
+                  :data="knowledgeJobs"
+                  height="100%"
+                  empty-text="还没有入库记录，先上传一个文档"
+                >
+                  <el-table-column
+                    prop="sourceName"
+                    label="文件"
+                    min-width="180"
+                    show-overflow-tooltip
+                  />
                   <el-table-column label="状态" width="110">
                     <template #default="{ row }">
-                      <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+                      <el-tag :type="statusTagType(row.status)" size="small">{{
+                        row.status
+                      }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column label="重试" width="80">
-                    <template #default="{ row }">{{ row.attemptCount ?? 0 }}/{{ row.maxRetries ?? 0 }}</template>
+                    <template #default="{ row }"
+                      >{{ row.attemptCount ?? 0 }}/{{ row.maxRetries ?? 0 }}</template
+                    >
                   </el-table-column>
                   <el-table-column label="上传时间" width="120">
                     <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
                   </el-table-column>
-                  <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
-                  <el-table-column prop="errorMessage" label="错误" min-width="160" show-overflow-tooltip />
+                  <el-table-column
+                    prop="chatId"
+                    label="批次"
+                    min-width="140"
+                    show-overflow-tooltip
+                  />
+                  <el-table-column
+                    prop="errorMessage"
+                    label="错误"
+                    min-width="160"
+                    show-overflow-tooltip
+                  />
                   <el-table-column v-if="isAdmin" label="操作" width="90">
                     <template #default="{ row }">
-                      <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)">删除</el-button>
+                      <el-button size="small" type="danger" link @click="removeKnowledgeJob(row)"
+                        >删除</el-button
+                      >
                     </template>
                   </el-table-column>
                 </el-table>
@@ -770,7 +823,9 @@
                   clearable
                   @keyup.enter="runPreviewSearch"
                 />
-                <el-button type="primary" :loading="previewLoading" @click="runPreviewSearch">试搜</el-button>
+                <el-button type="primary" :loading="previewLoading" @click="runPreviewSearch"
+                  >试搜</el-button
+                >
               </div>
               <el-alert
                 v-if="previewResult?.degradedSources.length"
@@ -786,9 +841,15 @@
                 <p v-else-if="previewResult.items.length === 0" class="kb-preview-hint">
                   没搜到相关内容：换个说法试试，或到「文档清单」确认文档已入库完成。
                 </p>
-                <div v-for="item in previewResult?.items ?? []" :key="item.chunkId" class="kb-preview-item">
+                <div
+                  v-for="item in previewResult?.items ?? []"
+                  :key="item.chunkId"
+                  class="kb-preview-item"
+                >
                   <div class="kb-preview-meta">
-                    <el-tag size="small" effect="plain">{{ previewSourceLabel(item.source) }}</el-tag>
+                    <el-tag size="small" effect="plain">{{
+                      previewSourceLabel(item.source)
+                    }}</el-tag>
                     <span class="kb-preview-file">{{ item.fileName }}</span>
                     <span class="kb-preview-score">相关度 {{ item.score }}</span>
                   </div>
@@ -828,7 +889,12 @@
           />
           <el-table :data="adminDocs" height="100%" empty-text="还没有任何入库文档">
             <el-table-column prop="tenantId" label="租户" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="sourceName" label="文件名" min-width="180" show-overflow-tooltip />
+            <el-table-column
+              prop="sourceName"
+              label="文件名"
+              min-width="180"
+              show-overflow-tooltip
+            />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
@@ -843,10 +909,17 @@
             <el-table-column label="创建时间" width="150">
               <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
             </el-table-column>
-            <el-table-column prop="errorMessage" label="错误" min-width="140" show-overflow-tooltip />
+            <el-table-column
+              prop="errorMessage"
+              label="错误"
+              min-width="140"
+              show-overflow-tooltip
+            />
             <el-table-column label="操作" width="90" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" type="danger" link @click="removeAdminDocument(row)">删除</el-button>
+                <el-button size="small" type="danger" link @click="removeAdminDocument(row)"
+                  >删除</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -918,7 +991,9 @@
                 :x="usageTrendChart.padL - 6"
                 :y="tick.y + 3"
                 text-anchor="end"
-              >{{ tick.text }}</text>
+              >
+                {{ tick.text }}
+              </text>
               <text
                 v-for="(tick, i) in usageTrendChart.yTicksRight"
                 :key="`yr-${i}`"
@@ -926,8 +1001,14 @@
                 :x="usageTrendChart.W - usageTrendChart.padR + 6"
                 :y="tick.y + 3"
                 text-anchor="start"
-              >{{ tick.text }}</text>
-              <path v-if="usageTrendChart.areaPath" class="area-input" :d="usageTrendChart.areaPath" />
+              >
+                {{ tick.text }}
+              </text>
+              <path
+                v-if="usageTrendChart.areaPath"
+                class="area-input"
+                :d="usageTrendChart.areaPath"
+              />
               <polyline class="line-input" :points="usageTrendChart.inputLine" />
               <polyline class="line-output" :points="usageTrendChart.outputLine" />
               <polyline class="line-cost" :points="usageTrendChart.costLine" />
@@ -938,7 +1019,9 @@
                   :x="day.x"
                   :y="usageTrendChart.labelY"
                   text-anchor="middle"
-                >{{ day.shortDate }}</text>
+                >
+                  {{ day.shortDate }}
+                </text>
               </g>
               <g v-if="usageHoverDay" class="usage-hover">
                 <line
@@ -956,13 +1039,52 @@
                   :height="usageHoverDay.boxH"
                   rx="8"
                 />
-                <text class="tooltip-title" :x="usageHoverDay.boxX + 12" :y="usageHoverDay.boxY + 22">{{ usageHoverDay.key.replaceAll('-', '/') }}</text>
-                <circle class="tt-dot input" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 42" r="4" />
-                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 46">输入：{{ usageHoverDay.input.toLocaleString() }}</text>
-                <circle class="tt-dot output" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 64" r="4" />
-                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 68">输出：{{ usageHoverDay.output.toLocaleString() }}</text>
-                <circle class="tt-dot cost" :cx="usageHoverDay.boxX + 16" :cy="usageHoverDay.boxY + 86" r="4" />
-                <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 90">成本：${{ usageHoverDay.cost.toFixed(6) }}</text>
+                <text
+                  class="tooltip-title"
+                  :x="usageHoverDay.boxX + 12"
+                  :y="usageHoverDay.boxY + 22"
+                >
+                  {{ usageHoverDay.key.replaceAll('-', '/') }}
+                </text>
+                <circle
+                  class="tt-dot input"
+                  :cx="usageHoverDay.boxX + 16"
+                  :cy="usageHoverDay.boxY + 42"
+                  r="4"
+                />
+                <text
+                  class="tooltip-text"
+                  :x="usageHoverDay.boxX + 26"
+                  :y="usageHoverDay.boxY + 46"
+                >
+                  输入：{{ usageHoverDay.input.toLocaleString() }}
+                </text>
+                <circle
+                  class="tt-dot output"
+                  :cx="usageHoverDay.boxX + 16"
+                  :cy="usageHoverDay.boxY + 64"
+                  r="4"
+                />
+                <text
+                  class="tooltip-text"
+                  :x="usageHoverDay.boxX + 26"
+                  :y="usageHoverDay.boxY + 68"
+                >
+                  输出：{{ usageHoverDay.output.toLocaleString() }}
+                </text>
+                <circle
+                  class="tt-dot cost"
+                  :cx="usageHoverDay.boxX + 16"
+                  :cy="usageHoverDay.boxY + 86"
+                  r="4"
+                />
+                <text
+                  class="tooltip-text"
+                  :x="usageHoverDay.boxX + 26"
+                  :y="usageHoverDay.boxY + 90"
+                >
+                  成本：${{ usageHoverDay.cost.toFixed(6) }}
+                </text>
               </g>
               <rect
                 v-for="(day, i) in usageTrendChart.days"
@@ -1011,16 +1133,24 @@
           </div>
 
           <div class="eval-dataset-list">
-            <button
-              v-for="dataset in evalDatasets"
-              :key="dataset.datasetId"
-              type="button"
-              :class="{ active: dataset.datasetId === evalSelectedDatasetId }"
-              @click="selectEvalDataset(dataset.datasetId)"
-            >
-              <span>{{ dataset.name }}</span>
-              <small>{{ dataset.caseCount }} 道题 · {{ shortId(dataset.datasetId) }}</small>
-            </button>
+            <div v-for="dataset in evalDatasets" :key="dataset.datasetId" class="eval-dataset-row">
+              <button
+                type="button"
+                :class="{ active: dataset.datasetId === evalSelectedDatasetId }"
+                @click="selectEvalDataset(dataset.datasetId)"
+              >
+                <span>{{ dataset.name }}</span>
+                <small>{{ dataset.caseCount }} 道题 · {{ shortId(dataset.datasetId) }}</small>
+              </button>
+              <button
+                type="button"
+                class="eval-dataset-delete"
+                :title="`删除评测集 ${dataset.name}`"
+                @click="removeEvalDataset(dataset)"
+              >
+                ✕
+              </button>
+            </div>
             <div v-if="!evalDatasets.length" class="session-empty">暂无评测集</div>
           </div>
 
@@ -1088,10 +1218,14 @@
                   <template v-if="row.citations?.length">
                     <p class="eval-expand-label">引用来源</p>
                     <ul class="eval-expand-citations">
-                      <li v-for="(cite, citeIndex) in row.citations" :key="citeIndex">{{ cite }}</li>
+                      <li v-for="(cite, citeIndex) in row.citations" :key="citeIndex">
+                        {{ cite }}
+                      </li>
                     </ul>
                   </template>
-                  <p v-if="row.errorMessage" class="eval-expand-error">失败原因：{{ row.errorMessage }}</p>
+                  <p v-if="row.errorMessage" class="eval-expand-error">
+                    失败原因：{{ row.errorMessage }}
+                  </p>
                 </div>
               </template>
             </el-table-column>
@@ -1106,12 +1240,7 @@
             <el-table-column label="耗时" width="120">
               <template #default="{ row }">{{ row.latencyMs }}ms</template>
             </el-table-column>
-            <el-table-column
-              prop="question"
-              label="问题"
-              min-width="280"
-              show-overflow-tooltip
-            />
+            <el-table-column prop="question" label="问题" min-width="280" show-overflow-tooltip />
           </el-table>
         </section>
       </section>
@@ -1261,17 +1390,19 @@ import {
   createEvalDataset,
   createResearchTask,
   deleteAdminDocument,
+  deleteEvalDataset,
   deleteIngestionDocument,
   exchangeApiKey,
   exportEvalRunReport,
   getEvalComparison,
+  getResearchReport,
+  getResearchTask,
   getTenantCostSummary,
   getTenantCostTrend,
   listAdminDocuments,
   listEvalDatasets,
   listIngestionDocuments,
   listRecentIngestionJobs,
-  listWorkflowTasks,
   markEvalRunBaseline,
   listSessionStates,
   loginWithPassword,
@@ -1294,6 +1425,7 @@ import type {
   EvalCaseCreate,
   EvalComparison,
   EvalDataset,
+  EvalDatasetDeleteResult,
   EvalMetricSummary,
   EvalRun,
   IngestionDocumentSummary,
@@ -1827,7 +1959,9 @@ const adminDocsPageSize = ref(20);
 const adminDocsSearch = ref('');
 const adminNeedsAuth = ref(false);
 // Agent 引擎：standard = 主聊天标准 ReAct；workflow = 工作流版（步骤全留痕可回放，不读写会话记忆）
-const agentEngine = ref<AgentEngine>(bootstrap.agentEngine === 'workflow' ? 'workflow' : 'standard');
+const agentEngine = ref<AgentEngine>(
+  bootstrap.agentEngine === 'workflow' ? 'workflow' : 'standard',
+);
 
 // ---------- 深度研究（聊天输入框模式，开关不持久化） ----------
 const researchMode = ref(false); // 开着时，下一次「发送」改走深度研究
@@ -1861,16 +1995,36 @@ const USAGE_CHART_H = 260;
 const usageMetricCards = computed(() => {
   const summary = costSummary.value;
   return [
-    { label: '本月费用', value: summary ? `$${summary.monthCostUsd.toFixed(4)}` : '—', tone: 'neutral' },
+    {
+      label: '本月费用',
+      value: summary ? `$${summary.monthCostUsd.toFixed(4)}` : '—',
+      tone: 'neutral',
+    },
     {
       label: '预算余量',
       value: summary ? `$${summary.budgetRemainingUsd.toFixed(4)}` : '—',
       tone: summary?.budgetExceeded ? 'bad' : 'neutral',
     },
-    { label: '本月请求', value: summary ? summary.monthRequestCount.toLocaleString() : '—', tone: 'neutral' },
-    { label: '本月输入 token', value: summary ? summary.monthInputTokens.toLocaleString() : '—', tone: 'neutral' },
-    { label: '本月输出 token', value: summary ? summary.monthOutputTokens.toLocaleString() : '—', tone: 'neutral' },
-    { label: '今日费用', value: summary ? `$${summary.todayCostUsd.toFixed(4)}` : '—', tone: 'neutral' },
+    {
+      label: '本月请求',
+      value: summary ? summary.monthRequestCount.toLocaleString() : '—',
+      tone: 'neutral',
+    },
+    {
+      label: '本月输入 token',
+      value: summary ? summary.monthInputTokens.toLocaleString() : '—',
+      tone: 'neutral',
+    },
+    {
+      label: '本月输出 token',
+      value: summary ? summary.monthOutputTokens.toLocaleString() : '—',
+      tone: 'neutral',
+    },
+    {
+      label: '今日费用',
+      value: summary ? `$${summary.todayCostUsd.toFixed(4)}` : '—',
+      tone: 'neutral',
+    },
   ];
 });
 
@@ -1915,12 +2069,15 @@ const usageTrendChart = computed(() => {
   const count = Math.max(1, points.length);
   const band = plotW / count;
   // 三条线各自独立（不堆叠），tokens 轴取输入/输出中的较大者；全零时除零保护
-  const tokensMax = niceCeil(Math.max(1, ...points.flatMap((point) => [point.inputTokens, point.outputTokens])));
+  const tokensMax = niceCeil(
+    Math.max(1, ...points.flatMap((point) => [point.inputTokens, point.outputTokens])),
+  );
   const costMax = niceCeil(Math.max(0.01, ...points.map((point) => point.costUsd)));
   const xAt = (index: number) => padL + index * band + band / 2;
   const yTok = (value: number) => baseY - (value / tokensMax) * plotH;
   const yCost = (value: number) => baseY - (value / costMax) * plotH;
-  const joinPts = (coords: Array<{ x: number; y: number }>) => coords.map((d) => `${d.x},${d.y}`).join(' ');
+  const joinPts = (coords: Array<{ x: number; y: number }>) =>
+    coords.map((d) => `${d.x},${d.y}`).join(' ');
   const inputPts = points.map((point, index) => ({ x: xAt(index), y: yTok(point.inputTokens) }));
   const fracs = [0, 0.25, 0.5, 0.75, 1];
   return {
@@ -1932,14 +2089,22 @@ const usageTrendChart = computed(() => {
     plotH,
     baseY,
     inputLine: joinPts(inputPts),
-    outputLine: joinPts(points.map((point, index) => ({ x: xAt(index), y: yTok(point.outputTokens) }))),
+    outputLine: joinPts(
+      points.map((point, index) => ({ x: xAt(index), y: yTok(point.outputTokens) })),
+    ),
     costLine: joinPts(points.map((point, index) => ({ x: xAt(index), y: yCost(point.costUsd) }))),
     areaPath:
       inputPts.length >= 2
         ? `M ${inputPts[0].x} ${baseY} L ${inputPts.map((d) => `${d.x} ${d.y}`).join(' L ')} L ${inputPts[inputPts.length - 1].x} ${baseY} Z`
         : '',
-    yTicksLeft: fracs.map((frac) => ({ text: formatTokenTick(tokensMax * frac), y: yTok(tokensMax * frac) })),
-    yTicksRight: fracs.map((frac) => ({ text: formatCostTick(costMax * frac), y: yCost(costMax * frac) })),
+    yTicksLeft: fracs.map((frac) => ({
+      text: formatTokenTick(tokensMax * frac),
+      y: yTok(tokensMax * frac),
+    })),
+    yTicksRight: fracs.map((frac) => ({
+      text: formatCostTick(costMax * frac),
+      y: yCost(costMax * frac),
+    })),
     labelY: baseY + 16,
     days: points.map((point, index) => ({
       key: point.date,
@@ -2322,7 +2487,9 @@ function activateView(view: ConsoleView): void {
 
 // ---------- 知识库（文档入库） ----------
 
-function statusTagType(status: IngestionJobStatus): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
+function statusTagType(
+  status: IngestionJobStatus,
+): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   switch (status) {
     case 'SUCCEEDED':
       return 'success';
@@ -2715,7 +2882,11 @@ function startComposerUploadPolling(): void {
       }
       if (ticks > 100) {
         // 约 5 分钟兜底：别让胶囊永远转下去
-        composerUploadChip.value = { ...chip, kind: 'error', text: '解析超时，可到知识库页查看状态' };
+        composerUploadChip.value = {
+          ...chip,
+          kind: 'error',
+          text: '解析超时，可到知识库页查看状态',
+        };
         stopComposerUploadPolling();
         scheduleComposerChipDismiss(8000);
         return;
@@ -2731,13 +2902,21 @@ function startComposerUploadPolling(): void {
           stopComposerUploadPolling();
           scheduleComposerChipDismiss(5000);
         } else if (job.status === 'FAILED') {
-          composerUploadChip.value = { ...chip, kind: 'error', text: job.errorMessage || '解析失败' };
+          composerUploadChip.value = {
+            ...chip,
+            kind: 'error',
+            text: job.errorMessage || '解析失败',
+          };
           stopComposerUploadPolling();
           scheduleComposerChipDismiss(8000);
         }
       } catch (error) {
         if (isAuthError(error)) {
-          composerUploadChip.value = { ...chip, kind: 'error', text: '登录已过期，重新登录后可见结果' };
+          composerUploadChip.value = {
+            ...chip,
+            kind: 'error',
+            text: '登录已过期，重新登录后可见结果',
+          };
           stopComposerUploadPolling();
           scheduleComposerChipDismiss(8000);
         }
@@ -2794,7 +2973,7 @@ function researchStatusLabel(status: string | undefined): string {
   }
 }
 
-// 研究进行中时每 3 秒盯一次任务列表，把中间状态回调给气泡文案
+// 受理成功后按 taskId 精确盯任务（每 3 秒查单任务，不再扫任务列表，避免同租户他人任务串台）
 let researchPollTimer: number | null = null;
 
 function stopResearchPolling(): void {
@@ -2804,26 +2983,105 @@ function stopResearchPolling(): void {
   }
 }
 
-function startResearchPolling(onStatus: (label: string) => void): void {
+// 研究终态收尾：填气泡、复位发送状态、持久化。
+// 守卫：迟到的轮询/停止回调不再覆盖已定稿的气泡（重复完成保护）。
+function finalizeResearchBubble(
+  assistantMsg: ChatMessage,
+  phase: 'done' | 'error' | 'stopped',
+  content: string,
+  statusDetail: string,
+): void {
+  if (assistantMsg.state !== 'pending') {
+    return;
+  }
+  assistantMsg.content = content;
+  assistantMsg.state = phase;
+  streamPhase.value = phase;
+  streamStatusDetail.value = statusDetail;
+  sending.value = false;
+  researchRunning.value = false;
+  isStreamingResponse.value = false;
+  currentAbortController.value = null;
+
+  void (async () => {
+    syncCurrentSessionBranch();
+    persistState();
+    await scrollToBottom(true);
+    scheduleStreamReset();
+  })();
+}
+
+function watchResearchTask(taskId: string, assistantMsg: ChatMessage): void {
   stopResearchPolling();
+  let ticks = 0;
   researchPollTimer = window.setInterval(() => {
     void (async () => {
-      try {
-        const tasks = await listWorkflowTasks(authContext(), 1, 20);
-        const running = tasks.find(
-          (task) => task.type === 'DEEP_RESEARCH' && task.status !== 'DONE' && task.status !== 'FAILED',
+      ticks += 1;
+      if (ticks > 200) {
+        // 3s × 200 ≈ 10 分钟兜底：别让气泡永远转下去
+        stopResearchPolling();
+        finalizeResearchBubble(
+          assistantMsg,
+          'error',
+          '深度研究超时：10 分钟未完成，已停止等待（后端任务仍会继续）。',
+          '深度研究超时',
         );
-        if (running) {
-          onStatus(researchStatusLabel(running.status));
+        ElMessage.error('深度研究超时');
+        return;
+      }
+      try {
+        const task = await getResearchTask(taskId, authContext());
+        const label = researchStatusLabel(task.status);
+        streamStatusDetail.value = `深度研究：${label}`;
+        if (assistantMsg.state === 'pending') {
+          assistantMsg.content = `**深度研究进行中：${label}**\n\n> 规划 → 检索 → 召回 → 撰写，全程约 1-3 分钟。`;
         }
-      } catch {
-        // 轮询失败不打断主流程，等下一轮
+        if (task.status === 'DONE') {
+          stopResearchPolling();
+          try {
+            const report = await getResearchReport(taskId, authContext());
+            finalizeResearchBubble(
+              assistantMsg,
+              'done',
+              formatResearchReport(report.report ?? ''),
+              '深度研究完成',
+            );
+          } catch {
+            finalizeResearchBubble(
+              assistantMsg,
+              'error',
+              '深度研究已完成，但报告获取失败，可稍后重试或到任务记录中查看。',
+              '报告获取失败',
+            );
+          }
+        } else if (task.status === 'FAILED') {
+          stopResearchPolling();
+          // finalOutput 里是后端的失败原因，比泛化文案更有用
+          finalizeResearchBubble(
+            assistantMsg,
+            'error',
+            `深度研究失败：${task.finalOutput || '后端任务异常'}`,
+            '深度研究失败',
+          );
+          ElMessage.error('深度研究任务失败');
+        }
+      } catch (error) {
+        if (isAuthError(error)) {
+          stopResearchPolling();
+          finalizeResearchBubble(
+            assistantMsg,
+            'error',
+            '登录已过期，研究结果可稍后到任务记录中查看。',
+            '登录已过期',
+          );
+        }
+        // 其他轮询失败不打断，等下一轮
       }
     })();
   }, 3000);
 }
 
-// 输入框发起的深度研究：报告直接落到当前会话，当普通消息持久化
+// 输入框发起的深度研究：受理（202 + taskId，毫秒级）→ 按 taskId 轮询 → 完成后拉报告落气泡
 async function runResearchInChat(question: string): Promise<void> {
   if (!question || sending.value) {
     return;
@@ -2852,74 +3110,47 @@ async function runResearchInChat(question: string): Promise<void> {
   isStreamingResponse.value = true;
   prompt.value = '';
   streamPhase.value = 'thinking';
-  streamStatusDetail.value = '深度研究：任务排队中';
+  streamStatusDetail.value = '深度研究：任务提交中';
 
   syncCurrentSessionBranch();
   persistState();
   await scrollToBottom(true);
 
-  // 创建接口是同步阻塞的（研究做完才返回报告），轮询器同时把
-  // 规划→检索→召回→撰写 的中间状态刷到气泡里
   const controller = new AbortController();
   currentAbortController.value = controller;
-  startResearchPolling((label) => {
-    streamStatusDetail.value = `深度研究：${label}`;
-    if (assistantMsg.state === 'pending') {
-      assistantMsg.content = `**深度研究进行中：${label}**\n\n> 规划 → 检索 → 召回 → 撰写，全程约 1-3 分钟。`;
-    }
+  // 受理之后「停止」按钮的 abort 变成"停止观察"：停轮询、气泡置 stopped，后台任务照跑（跑完仍计费）
+  controller.signal.addEventListener('abort', () => {
+    stopResearchPolling();
+    finalizeResearchBubble(
+      assistantMsg,
+      'stopped',
+      '深度研究已停止等待（后端任务仍会跑完并计费）。',
+      '你手动停止了本次研究',
+    );
   });
 
   try {
-    const result = await createResearchTask(
+    const accepted = await createResearchTask(
       question,
       modelProfile.value,
       authContext(),
       controller.signal,
     );
-    stopResearchPolling();
-    if (result.status === 'FAILED' || !(result.report ?? '').trim()) {
-      assistantMsg.content = `深度研究失败：后端返回「${researchStatusLabel(result.status)}」，且没有报告内容。`;
-      assistantMsg.state = 'error';
-      streamPhase.value = 'error';
-      streamStatusDetail.value = '深度研究失败';
-      ElMessage.error('深度研究任务失败');
-    } else {
-      assistantMsg.content = formatResearchReport(result.report ?? '');
-      assistantMsg.state = 'done';
-      streamPhase.value = 'done';
-      streamStatusDetail.value = '深度研究完成';
-    }
+    streamStatusDetail.value = `深度研究：${researchStatusLabel(accepted.status)}`;
+    watchResearchTask(accepted.taskId, assistantMsg);
   } catch (error) {
+    stopResearchPolling();
     if (error instanceof DOMException && error.name === 'AbortError') {
-      assistantMsg.content = assistantMsg.content.trim() || '深度研究已手动停止（后端任务仍会跑完并计费）。';
-      assistantMsg.state = 'stopped';
-      streamPhase.value = 'stopped';
-      streamStatusDetail.value = '你手动停止了本次研究';
+      finalizeResearchBubble(
+        assistantMsg,
+        'stopped',
+        '深度研究已停止等待（后端任务仍会跑完并计费）。',
+        '你手动停止了本次研究',
+      );
     } else {
       const message = error instanceof Error ? error.message : 'research failed';
-      assistantMsg.content = `深度研究失败：${message}`;
-      assistantMsg.state = 'error';
-      streamPhase.value = 'error';
-      streamStatusDetail.value = message;
+      finalizeResearchBubble(assistantMsg, 'error', `深度研究失败：${message}`, message);
       ElMessage.error(message);
-    }
-  } finally {
-    stopResearchPolling();
-    sending.value = false;
-    researchRunning.value = false;
-    isStreamingResponse.value = false;
-    currentAbortController.value = null;
-
-    syncCurrentSessionBranch();
-    persistState();
-    await scrollToBottom(true);
-
-    if (
-      streamPhase.value === 'done' ||
-      streamPhase.value === 'error' ||
-      streamPhase.value === 'stopped'
-    ) {
-      scheduleStreamReset();
     }
   }
 }
@@ -3094,6 +3325,41 @@ async function selectEvalDataset(datasetId: string): Promise<void> {
   evalSelectedDatasetId.value = datasetId;
   persistState();
   await loadEvalComparison(datasetId);
+}
+
+/** 删除评测集：二次确认后调删除接口，清本地选中态；成功提示带各层清理条数。 */
+async function removeEvalDataset(dataset: EvalDataset): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除评测集「${dataset.name}」？它的 ${dataset.caseCount} 道题、历史评测运行与结果明细会一并删除，不可恢复。`,
+      '删除评测集',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    );
+  } catch {
+    return;
+  }
+  try {
+    const removed: EvalDatasetDeleteResult = await deleteEvalDataset(
+      dataset.datasetId,
+      authContext(),
+    );
+    evalDatasets.value = evalDatasets.value.filter((item) => item.datasetId !== dataset.datasetId);
+    if (evalSelectedDatasetId.value === dataset.datasetId) {
+      evalSelectedDatasetId.value = evalDatasets.value[0]?.datasetId ?? '';
+      if (evalSelectedDatasetId.value) {
+        await loadEvalComparison(evalSelectedDatasetId.value);
+      } else {
+        evalComparison.value = null;
+      }
+    }
+    persistState();
+    ElMessage.success(
+      `已删除「${removed.datasetName}」（${removed.cases} 题 / ${removed.runs} 轮 / ${removed.results} 条结果）`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '评测集删除失败';
+    ElMessage.error(message);
+  }
 }
 
 async function createEvalDatasetFromJson(): Promise<void> {
@@ -5649,6 +5915,34 @@ h2 {
   gap: 8px;
   max-height: 260px;
   overflow-y: auto;
+}
+
+.eval-dataset-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.eval-dataset-row > button:first-child {
+  flex: 1;
+}
+
+.eval-dataset-list .eval-dataset-delete {
+  flex: none;
+  width: 32px;
+  padding: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.eval-dataset-list .eval-dataset-delete:hover {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.45);
 }
 
 .eval-dataset-list button {

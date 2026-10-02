@@ -12,6 +12,13 @@ import java.time.Duration;
 
 /**
  * 面向 LLM API 调用的 Resilience4j 熔断与重试配置。
+ *
+ * <p><b>当前状态：配置已定义、尚未织入调用链。</b>三个 Registry/Config Bean 保持参数基线，
+ * 但 LLM 调用点（ReactAgentService#callModel、ResearchPlannerAgent#plan、
+ * ReportWriterAgent#writeReport 等）暂未通过注解或编程式装饰接入，
+ * 相关依赖与配置在当前版本中不产生实际防护效果。
+ * 接入时优先考虑在 callModel 链路用 CircuitBreakerRegistry 编程式装饰，
+ * 并同步启用 resilience4j-micrometer 指标（r4j.circuit_breaker.*）。</p>
  */
 @Configuration
 public class ResilienceConfiguration {

@@ -56,17 +56,18 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 ## 二、检索（Hybrid Retrieval & Ingestion）
 
-**职责**：四路并行召回 → 加权融合 → 去重 → 证据判分 → 引用构建；另有 PDF 入库与知识图谱两路数据供给。
+**职责**：四路并行召回 → 加权融合 → 去重 → 证据判分 → 引用构建；另有文档入库（PDF/Word/Markdown）与知识图谱两路数据供给。
 
 ### 混合检索（`retrieval/`）
 
 | 类 | 职责 |
 |---|---|
-| `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，可配 `app.retrieval.pool-size` 默认 16）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路异常/超时降级为空且**真取消**底层任务（调度超时 → `cancel(true)`：排队任务跳过、运行中任务中断，区别于 completeOnTimeout 的"只完成不取消"）；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued） |
+| `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，`app.retrieval.pool-size` 默认 16，**须 ≤ DB 连接池 `DB_POOL_MAX_SIZE` 默认 20**——三路直连数据库）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路**超时从任务真正开始执行起算**（排队不占预算，高并发排队不再集体假超时），到点中断运行线程**真取消**；队列有界（`app.retrieval.queue-capacity` 默认 64），池/队列打满提交被拒 → 立即降级并记 `saturated`；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout/saturated}` + 排队时长 `retrieval.queue.wait{source}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued）；web 路禁用（`app.web-search.enabled=false`）时短路不提交任务、不占槽；worker `catch (Exception)` 保证停机中断也完成 promise（join 不永挂） |
 | `HybridWeights.java` | 权重配置：DEFAULT 0.40/0.25/0.20/0.15（向量/关键词/图谱/网络），预置 SEMANTIC/KEYWORD/BALANCED 档位，`normalize()` 归一化 |
 | `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；向量/关键词路均为租户级过滤 + 会话软作用域（chat_id 不硬过滤，同会话命中 +0.05 有界加分）；keyword 路在向量候选池（阈值 0、池 max(topK×4,40)）上做 CJK 2-gram 词法重排；web 默认关闭（`app.web-search.enabled`） |
 | `ChatScope.java` | 会话软作用域：租户共享知识库，chat_id 只作有界加分不作硬边界（防跨会话割裂与临时 chatId 必空） |
 | `LexicalMatcher.java` | 词面匹配共用工具：CJK 感知切词（中文段 2-gram、拉丁段整token）+ 查询召回分（分母=查询 token 数），keyword 路/线上重排/证据判分三处共用 |
+| `RetrievalPreviewService.java` + `RetrievalPreviewItem/Result` | 知识库「试搜」：只走向量/关键词/图谱三条本地路返回原始命中（不调 LLM、不出答案），单路失败降级并记 `degradedSources` + `log.warn` 留痕，供 `GET /ingestion/search` |
 | `web/WebSearchBackend.java` + `SearXNGBackend` / `BingSearchBackend` / `WebSearchProperties` | 外部搜索适配层（SearXNG 自托管 / Bing API） |
 | `Reranker.java` / `IdentityReranker.java` | 重排接口与恒等实现 |
 | `ScoredDocument.java` | 检索结果统一结构（docId/sourceType/title/content/retrievalScore/finalScore） |
@@ -77,9 +78,10 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `ingestion/IngestionService.java` | PDF/文档入库：解析、分块、向量化、元数据（tenant_id/chat_id/job_id/file_name/source_type/chunk_index/created_at，时间戳激活证据判分时效度） |
+| `ingestion/IngestionService.java` | 文档入库（PDF 走 PagePdfDocumentReader，doc/docx/md 走 Tika）：解析、分块、向量化、元数据（tenant_id/chat_id/job_id/file_name/source_type/chunk_index/created_at，时间戳激活证据判分时效度）；文档清单 `listDocumentsByTenant`（每 chat 取最新任务）与删除 `deleteDocumentByChat`（向量切片 → 磁盘文件 → 任务记录级联，任一步失败即中止） |
 | `ingestion/IngestionWorker.java` + `queue/`（RabbitMq / RedisStream / Noop / db_polling） | 异步入队消费，多后端可切换 |
-| `graph/GraphService.java` + `KgEntityRecord` / `KgFactRecord` / `KgRelationRecord` | 知识图谱：课程/难度/主题实体与关系，供 GraphRetriever |
+| `graph/GraphService.java` + `KgEntityRecord` / `KgFactRecord` / `KgRelationRecord` | 知识图谱读侧：实体/关系/事实查询供 GraphRetriever（中文文本适配）；写入侧 `graph/GraphExtractionService.java` 在文档入库完成后由 LLM 抽取实体/关系/事实入库，文档删除联动清理对应图谱数据 |
+| `ingestion/DocumentGraphBackfillService.java` | 存量文档补图谱：重解析磁盘文档重建该 chat 的实体/关系/事实，`POST /ingestion/documents/{chatId}/graph/build` 触发 |
 | `config/VectorStoreConfiguration.java` | pgvector VectorStore 装配（`OpenAiEmbeddingModel`） |
 
 **调用链**：`HybridRagAnswerService.answer()` 第 1 步（`rag/HybridRagAnswerService.java:61`）→ `HybridRetrievalService.retrieve()` → 第 2 步证据判分（:78）→ 第 3 步引用（:86）。
@@ -132,7 +134,8 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `AgentWorkflowEngine.java` | 任务生命周期/状态管理/事件溯源：startStep/completeStep、状态落库、`completeTask` 触发任务结论记忆、`abandonTask` 守卫式收尾（SSE 断连/孤儿回收用，不覆盖已终态任务） |
 | `AgentTaskRecord` / `AgentStepRecord` / `AgentEventRecord` + 各 Mapper | 任务/步骤/事件持久化（agent_task / agent_step / agent_event 表）；`findStaleTasks`/`failIfNotTerminal` 支撑孤儿回收 |
 | `WorkflowReactAgentService.java` | ReAct 迭代与状态映射：`mapToWorkflowState(step)`（:1→SEARCHING、2→RETRIEVING、3→JUDGING、4→REFLECTING、其余→WRITING）；`stream()` 真流式（`stepFlux` 递归单步流，每步完成即发 trace 帧）+ 断连处理（doFinally 识别 CANCEL → abandonTask，任务不停在非终态） |
-| `WorkflowTaskReclaimer.java` | 孤儿任务回收：@Scheduled 每 5 分钟把非终态超 30 分钟的任务守卫式置 FAILED（兜底断连漏网与进程重启遗留） |
+| `WorkflowTaskReclaimer.java` | 孤儿任务回收：@Scheduled 每 5 分钟把非终态超 30 分钟的任务守卫式置 FAILED（运行期兜底保险丝） |
+| `WorkflowTaskStartupSweeper.java` | 启动清扫器（ApplicationRunner）：进程启动即把上一进程遗留的全部非终态任务守卫式收尾（批量循环扫到空批，上限 20 批），`agent.workflow.task.swept` 指标；run 绝不抛异常（ApplicationRunner 抛出会中止启动），故障只记日志放行启动 |
 | `ReactPlannerFallbacks.java` | 规划器确定性降级（关键词路由预设动作）+ 动作白名单归一 |
 | `controller/WorkflowController.java` | 工作流任务提交与状态查询 |
 
@@ -140,11 +143,11 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `DeepResearchService.java` | 深度研究剧本：拆题→检索→评证→反思→成稿 的状态转移与步骤编排 |
+| `DeepResearchService.java` | 深度研究剧本：`createResearch()` 异步受理（同步落库 startTask → 提交专用池 `researchExecutor`（`app.research.worker-count` 3 / `queue-capacity` 20）→ 返回 202 形状 result{report=null, status=PLANNING}，队列满守卫式 abandonTask + 抛 `ResearchQueueFullException`（对外 429））；`executeResearch()` 后台执行拆题→检索→评证→反思→成稿 的状态转移与步骤编排；`@PreDestroy` shutdownNow + 限时等待，漏网任务由启动 sweep 收尾 |
 | `ResearchPlannerAgent.java` | 拆题（LLM 规划，含防御性提取） |
 | `ReportWriterAgent.java` | 成稿（LLM 汇总） |
 | `ResearchTaskRequest.java` | 任务请求结构 |
-| `controller/DeepResearchController.java` | 深度研究入口 |
+| `controller/DeepResearchController.java` | 深度研究入口：POST /tasks 异步受理（202 + taskId，队列满 429）、GET /tasks/{id} 状态轮询、GET events 事件流、GET report 报告查询 |
 
 ### ReAct 循环（`service/`）
 
@@ -186,12 +189,13 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 类 | 职责 |
 |---|---|
-| `EvaluationService.java` | 评测主服务：加载数据集 → 逐 case 调 `HybridRagAnswerService.answer()`（:220-226，conversationId 用 `ConversationIdHelper.build("eval", chatId)`）→ 打分 → 落库 |
+| `EvaluationService.java` | 评测主服务：加载数据集 → 逐 case 调 `HybridRagAnswerService.answer()`（:261 起，conversationId 用 `ConversationIdHelper.build("eval", chatId)`）→ 打分 → 落库；`deleteDataset()` 在同一事务内按 结果 → 运行 → 用例 → 数据集 级联清理四张表（无外键、仅逻辑引用），未知数据集直接报错不触碰其它表 |
 | `EvaluationScorer.java` | 打分器（命中率/引用正确性等指标） |
 | `EvaluationReportRenderer.java` | 评测报告渲染 |
-| `EvalDatasetRecord` / `EvalCaseRecord` / `EvalRunRecord` / `EvalResultRecord` + Mapper | 数据集/用例/运行/结果四层模型（eval_dataset / eval_case / eval_run / eval_result 表） |
-| `controller/EvaluationController.java` | `POST /ai/evaluation/datasets/{id}/runs` 触发评测 |
-| `vo/` | 请求与展示 VO（数据集创建、运行请求、指标汇总、对比） |
+| `EvalCitationFormatter.java` | 纯函数转换：RAG 回答的引用去重成 sourceType:title:chunkId、证据只留非空片段，落 eval_result 前统一整形 |
+| `EvalDatasetRecord` / `EvalCaseRecord` / `EvalRunRecord` / `EvalResultRecord` + Mapper | 数据集/用例/运行/结果四层模型（eval_dataset / eval_case / eval_run / eval_result 表），各 Mapper 均带按租户 + 数据集的级联删除 |
+| `controller/EvaluationController.java` | 评测 REST 面：数据集创建/列表/删除、触发运行、基线标记、基线对比、Markdown 报告导出 |
+| `vo/` | 请求与展示 VO（数据集创建、删除回执、运行请求、指标汇总、对比） |
 
 ### 评测与回归脚本（`scripts/`，Python）
 
@@ -211,24 +215,26 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `service/AnswerFeedbackService.java` | 答案反馈采集，追加写 `evaluation/feedback_dataset.jsonl`（数据集轮转） |
 | `controller/FeedbackController.java` + `domain/AnswerFeedback*` | 反馈提交接口与模型 |
 
-### 测试清单（49 个文件、173 个测试，全 mock 无外部依赖）
+### 测试清单（63 个文件、251 个测试，全 mock 无外部依赖）
 
 | 包 | 测试类 | 覆盖点 |
 |---|---|---|
 | `agent/harness/`（10 个） | ActionPolicyGuardTest、AgentHarnessServiceTest、AgentObservationTest、BuiltinToolRuntimeTest、HarnessEvaluationTest、HarnessEventRecorderTest、HttpMcpToolAdapterTest、McpToolRuntimeTest、TrustedActionServiceTest、WorkspaceRuntimeTest | 策略守卫、动作分发、SSRF 防护、工作区安全 |
-| `agent/workflow/` | AgentWorkflowEngineTenantIsolationTest | 引擎租户隔离 + DONE 才写任务记忆 |
+| `agent/workflow/`（4 个） | AgentWorkflowEngineTenantIsolationTest、WorkflowReactAgentServiceStreamTest、WorkflowTaskReclaimerTest、WorkflowTaskStartupSweeperTest | 引擎租户隔离 + DONE 才写任务记忆；SSE 流式；孤儿任务回收；启动清扫（守卫输家不计数、故障不阻断启动） |
+| `agent/research/`（1 个） | DeepResearchServiceTest | 剧本状态迁移与失败重抛；异步受理形状、后台在受理 taskId 名下跑完（防重复落库回归）、队列满拒绝、shutdown 幂等 |
 | `memory/`（6 个） | MemoryServiceTenantIsolationTest、MemoryInjectionAdvisorTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离；advisor 注入契约（system 首插/user 原文不动/未传参透传/召回失败降级） |
-| `rag/` | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、RagAnswerServiceRerankTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；重排分母 + 会话加成 |
-| `controller/`、`service/` | ChatControllerMemoryTest、ReactAgentServiceTest | chat/react 链路记忆注入断言、原始 prompt 写回（防自我循环）+ 召回失败降级 |
-| `retrieval/`（7 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest、KeywordRetrieverTest、EvidenceJudgeServiceTest、LexicalMatcherTest、ChatScopeTest | 加权融合、去重计数、分数下限、租户级过滤断言；中文 bigram 命中、长文档不稀释、会话加成；时效度激活；切词/召回分契约；软作用域加成封顶 |
-| `service/`（3 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest | ReAct 决策解析与格式化 |
-| `controller/`（5 个） | AgentHarnessControllerWebMvcTest、AuthControllerWebMvcTest、IngestionControllerWebMvcTest、JavaApiContractTest、MemoryControllerTest | Web 层契约 |
-| `evaluation/` | EvaluationScorerTest | 打分逻辑 |
-| `security/`（5 个） | ApiKeyOrJwtAuthFilterTest、DefaultFileSafetyScannerTest、JwtServiceTest、RateLimitFilterTest、RequestContextFilterTest | 认证、限流、文件安全扫描 |
+| `rag/`（4 个） | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、RagAnswerServiceRerankTest、RagAnswerServiceRetrieveFallbackTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；重排分母 + 会话加成；检索异常兜底 |
+| `retrieval/`（9 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest、KeywordRetrieverTest、GraphRetrieverTest、EvidenceJudgeServiceTest、LexicalMatcherTest、ChatScopeTest、RetrievalPreviewServiceTest | 加权融合、去重计数、分数下限、租户级过滤断言；真取消超时与按路计数（error/timeout 断言轮询等落表）、排队不烧超时预算、队列满 saturated、web 禁用短路、停机中断兜底完成 promise、排队时长指标；中文 bigram 命中、长文档不稀释、会话加成；时效度激活；切词/召回分契约；软作用域加成封顶；图谱路与试搜降级 |
+| `ingestion/`（3 个） | IngestionServiceTest、IngestionServiceGraphHookTest、DocumentGraphBackfillServiceTest | 入库解析/文档删除级联；图谱抽取钩子与存量回填 |
+| `service/`（4 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest、TenantCostServiceTrendTest | ReAct 决策解析与格式化；用量趋势缺天补零 |
+| `controller/`（9 个） | AgentHarnessControllerWebMvcTest、AuthControllerWebMvcTest、IngestionControllerWebMvcTest、JavaApiContractTest、MemoryControllerTest、AdminControllerWebMvcTest、AdminControllerSecurityTest、ChatControllerMemoryTest、DeepResearchControllerWebMvcTest | Web 层契约；管理员总览跨租户可见性；chat 链路记忆注入断言；深度研究 202 受理形状与 429 |
+| `evaluation/`（2 个） | EvaluationScorerTest、EvaluationServiceTest | 打分逻辑；评测集删除级联清理与未知集拒绝 |
+| `security/`（6 个） | ApiKeyOrJwtAuthFilterTest、DefaultFileSafetyScannerTest、JwtServiceTest、RateLimitFilterTest、RequestContextFilterTest、UserAuthServiceTest | 认证、限流、文件安全扫描（PDF/Word/Markdown 魔数）；注册/登录 |
+| `graph/` | GraphExtractionServiceTest | LLM 实体抽取入库 |
 | `config/`（4 个） | FlywayMigrationVersionTest、MysqlChatMemoryTest、ProdProfileConfigTest、SecurityDefaultsTest | 迁移版本、配置安全默认值 |
-| 其他 | IngestionServiceTest、ModelRouterTest、HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
+| 其他 | ModelRouterTest、HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
 
-**运行**：`mvn test`（当前基线 173 个测试全绿，2 个跳过为 TestVector 需外部模型）。
+**运行**：`mvn test`（当前基线 274 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
 
 ---
 
@@ -239,6 +245,6 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `POST /ai/pdf/chat` | PdfController → RagAnswerService（向量检索 + 本地重排 + 引用） |
 | 评测 API | EvaluationController → EvaluationService → HybridRagAnswerService（四路混合 + 证据判分 + 记忆注入 + 引用） |
 | React SSE | ReactController → ReactAgentService（reason/execute/summarize 循环）→ AgentHarnessService → 各 Runtime |
-| 深度研究 | DeepResearchController → DeepResearchService（剧本）→ AgentWorkflowEngine（状态机落库）→ Planner/Writer Agent |
+| 深度研究 | DeepResearchController → DeepResearchService.createResearch（异步受理 202）→ researchExecutor 后台池 → executeResearch（剧本）→ AgentWorkflowEngine（状态机落库）→ Planner/Writer Agent；前端按 taskId 轮询 GET /tasks/{id}，DONE 后 GET /tasks/{id}/report |
 | 记忆管理 | MemoryController → MemoryService（按 userId 查询/任务结论查询 /task/{taskId}/事件链/写入） |
 | 文档入库 | IngestionController → IngestionService → 队列（RabbitMQ/Redis Stream/DB 轮询）→ IngestionWorker |

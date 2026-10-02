@@ -186,6 +186,13 @@ export interface EvalDataset {
   updatedAt: string;
 }
 
+export interface EvalDatasetDeleteResult {
+  datasetName: string;
+  cases: number;
+  runs: number;
+  results: number;
+}
+
 export interface EvalRunRequest {
   modelProfile?: string;
   chatIdPrefix?: string;

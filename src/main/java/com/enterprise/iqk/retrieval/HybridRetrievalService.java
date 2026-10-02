@@ -1,5 +1,6 @@
 package com.enterprise.iqk.retrieval;
 
+import com.enterprise.iqk.retrieval.web.WebSearchProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,9 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -30,11 +32,15 @@ import java.util.stream.Stream;
  * 取 topK。topK 截断按来源轮转配额：每轮各健康路出一条本路最高分，避免低权重路
  * （如图谱 0.20）的证据被高权重路整体挤出、永远不可见。
  * 设计要点：各源均为阻塞 IO，跑在专用线程池上以免拖垮公共 ForkJoinPool；
- * 单路故障（异常/超时）降级返回空列表并计入按路指标（retrieval.source.requests），
+ * 单路故障（异常/超时/被拒）降级返回空列表并计入按路指标（retrieval.source.requests），
  * 结果携带 degradedSources、整体 outcome 标注 degraded / degraded-empty，
  * 局部故障不会被伪装成"知识库为空"的系统性空结果。
- * 超时是"真取消"：调度超时回调会 cancel 底层任务（排队中的直接跳过、
- * 运行中的收到中断），慢依赖不会持续占用线程拖垮整池。
+ * 超时是"真取消"，且从任务真正开始执行起算——排队等待不占用超时预算，
+ * 高并发下的排队不会演变成四路集体"超时降级"的假故障；到点中断运行线程，
+ * 慢依赖不会持续占用线程拖垮整池。
+ * 队列有界（app.retrieval.queue-capacity）：池与队列打满时提交被拒，立即降级并记
+ * saturated 结局，拒绝可见可观测而非在调用线程无限堆积。
+ * web 路禁用时不提交任务：不占线程槽、不产生按路计数（禁用是配置而非故障）。
  */
 @Slf4j
 @Service
@@ -44,13 +50,18 @@ public class HybridRetrievalService {
     private final KeywordRetriever keywordRetriever;
     private final GraphRetriever graphRetriever;
     private final WebRetriever webRetriever;
+    private final WebSearchProperties webSearchProperties;
     private final MeterRegistry meterRegistry;
-    /** 单路检索超时（毫秒），超时取消底层任务并降级为空列表 */
+    /** 单路检索超时（毫秒），从任务开始执行起算，超时中断底层执行并降级为空列表 */
     private final long sourceTimeoutMs;
+    /** 单路任务队列容量，打满即拒绝（saturated），防无界堆积 */
+    private final int queueCapacity;
 
     // 各检索来源执行的是阻塞 IO；若在 ForkJoinPool.commonPool() 上运行，
     // 可能导致 JVM 中其他并行流饥饿，因此使用专用线程池。
-    // 池容量默认 16（4 路 × 4 并发请求），可配 app.retrieval.pool-size。
+    // 池容量默认 16（4 路 × 4 并发请求），可配 app.retrieval.pool-size；
+    // 须 ≤ 数据库连接池（DB_POOL_MAX_SIZE，默认 20）——vector/keyword/graph 三路均直连数据库，
+    // 盲目扩线程只会让线程卡在排队拿连接。
     private final ThreadPoolExecutor retrievalExecutor;
     /** 超时调度器：到点触发"取消 + 降级"，与检索任务执行隔离 */
     private final ScheduledExecutorService timeoutScheduler;
@@ -59,17 +70,21 @@ public class HybridRetrievalService {
                                    KeywordRetriever keywordRetriever,
                                    GraphRetriever graphRetriever,
                                    WebRetriever webRetriever,
+                                   WebSearchProperties webSearchProperties,
                                    MeterRegistry meterRegistry,
                                    @Value("${app.retrieval.source-timeout-ms:3000}") long sourceTimeoutMs,
-                                   @Value("${app.retrieval.pool-size:16}") int poolSize) {
+                                   @Value("${app.retrieval.pool-size:16}") int poolSize,
+                                   @Value("${app.retrieval.queue-capacity:64}") int queueCapacity) {
         this.vectorRetriever = vectorRetriever;
         this.keywordRetriever = keywordRetriever;
         this.graphRetriever = graphRetriever;
         this.webRetriever = webRetriever;
+        this.webSearchProperties = webSearchProperties;
         this.meterRegistry = meterRegistry;
         this.sourceTimeoutMs = sourceTimeoutMs;
-        this.retrievalExecutor = new ThreadPoolExecutor(poolSize, poolSize,
-                0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), runnable -> {
+        this.queueCapacity = Math.max(1, queueCapacity);
+        this.retrievalExecutor = new ThreadPoolExecutor(Math.max(1, poolSize), Math.max(1, poolSize),
+                0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(this.queueCapacity), runnable -> {
             Thread thread = new Thread(runnable, "hybrid-retrieval");
             thread.setDaemon(true);
             return thread;
@@ -87,7 +102,10 @@ public class HybridRetrievalService {
                 .register(meterRegistry);
     }
 
-    /** 应用关闭时立即关闭检索线程池与超时调度器，避免残留阻塞中的检索任务 */
+    /**
+     * 应用关闭时立即关闭检索线程池与超时调度器，避免残留阻塞中的检索任务。
+     * 被中断的在途任务由 worker 的 catch(Exception) 兜底完成 promise，调用方 join 不会永挂。
+     */
     @PreDestroy
     void shutdownRetrievalExecutor() {
         retrievalExecutor.shutdownNow();
@@ -144,8 +162,10 @@ public class HybridRetrievalService {
                     () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), normalized.keywordWeight());
             CompletableFuture<RouteResult> graphFuture = retrieveAsync("graph",
                     () -> graphRetriever.retrieve(query, tenantId, topK), normalized.graphWeight());
-            CompletableFuture<RouteResult> webFuture = retrieveAsync("web",
-                    () -> webRetriever.retrieve(query, topK), normalized.webWeight());
+            // web 路禁用时不提交任务：不占线程槽、不产生按路计数（禁用是配置而非故障）
+            CompletableFuture<RouteResult> webFuture = webSearchProperties.isEnabled()
+                    ? retrieveAsync("web", () -> webRetriever.retrieve(query, topK), normalized.webWeight())
+                    : CompletableFuture.completedFuture(new RouteResult("web", List.of(), false));
 
             List<RouteResult> routes = Stream.of(vectorFuture, keywordFuture, graphFuture, webFuture)
                     .map(CompletableFuture::join)
@@ -232,43 +252,65 @@ public class HybridRetrievalService {
     }
 
     /**
-     * 单路检索：跑在专用线程池上，sourceTimeoutMs 内未完成则取消底层任务并降级为空。
+     * 单路检索：跑在专用线程池上，超时从任务真正开始执行起算（排队等待不占预算），
+     * sourceTimeoutMs 内未完成则中断执行线程并降级为空。
      * 不用 completeOnTimeout —— 它只完成 future 不取消任务：web 路读超时 8 秒、
      * 向量路无语句超时，慢依赖会在调用方放弃后继续占用线程，池被拖满后
      * 后续请求"整池 3 秒超时"，单依赖故障升级成系统性空结果。
-     * 真取消 = cancel(true)：排队中的任务直接跳过（立即腾出容量），
-     * 运行中的任务收到中断（HTTP 类 IO 可中断释放）。
+     * 真取消 = 中断运行中线程（HTTP 类 IO 可中断释放）；排队中的任务不调度超时，
+     * 排队多久都不会被误判为慢依赖。
+     * 池/队列打满（或停机中）时提交被拒：立即降级并记 saturated，不无限堆积。
      */
     private CompletableFuture<RouteResult> retrieveAsync(String source,
                                                          Supplier<List<ScoredDocument>> retrieval,
                                                          double weight) {
         CompletableFuture<RouteResult> promise = new CompletableFuture<>();
-        Future<?> worker = retrievalExecutor.submit(() -> {
-            try {
-                List<ScoredDocument> docs = applyWeight(retrieval.get(), weight);
-                if (promise.complete(new RouteResult(source, docs, false))) {
-                    countSource(source, "success");
+        long submittedAtNs = System.nanoTime();
+        try {
+            retrievalExecutor.execute(() -> {
+                Thread workerThread = Thread.currentThread();
+                // 排队时长观测：超时预算从这一刻才起算
+                Timer.builder("retrieval.queue.wait")
+                        .tag("source", source)
+                        .description("Hybrid retrieval per-source queue wait before execution")
+                        .register(meterRegistry)
+                        .record(System.nanoTime() - submittedAtNs, TimeUnit.NANOSECONDS);
+                ScheduledFuture<?> timeoutHandle = timeoutScheduler.schedule(() -> {
+                    // 抢到首次完成 = 正常路径未及完成：中断执行线程，降级为空
+                    if (promise.complete(new RouteResult(source, List.of(), true))) {
+                        workerThread.interrupt();
+                        countSource(source, "timeout");
+                        log.warn("hybrid retrieval source timeout: source={}, timeoutMs={} (task interrupted, degraded to empty)",
+                                source, sourceTimeoutMs);
+                    }
+                }, sourceTimeoutMs, TimeUnit.MILLISECONDS);
+                try {
+                    List<ScoredDocument> docs = applyWeight(retrieval.get(), weight);
+                    if (promise.complete(new RouteResult(source, docs, false))) {
+                        countSource(source, "success");
+                    }
+                } catch (Exception ex) {
+                    // 接住 Exception 而非 RuntimeException：停机中断（InterruptedException 是受检异常）
+                    // 也必须完成 promise，否则调用线程 join 永挂、优雅停机卡死
+                    if (promise.complete(new RouteResult(source, List.of(), true))) {
+                        log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
+                        countSource(source, "error");
+                    }
+                } finally {
+                    timeoutHandle.cancel(false);
                 }
-            } catch (RuntimeException ex) {
-                if (promise.complete(new RouteResult(source, List.of(), true))) {
-                    log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
-                    countSource(source, "error");
-                }
-            }
-        });
-        timeoutScheduler.schedule(() -> {
-            // 抢到首次完成 = 正常路径未及完成：取消底层任务，降级为空
+            });
+        } catch (RejectedExecutionException ex) {
             if (promise.complete(new RouteResult(source, List.of(), true))) {
-                worker.cancel(true);
-                countSource(source, "timeout");
-                log.warn("hybrid retrieval source timeout: source={}, timeoutMs={} (task cancelled, degraded to empty)",
-                        source, sourceTimeoutMs);
+                log.warn("hybrid retrieval saturated, task rejected: source={}, queueCapacity={}",
+                        source, queueCapacity);
+                countSource(source, "saturated");
             }
-        }, sourceTimeoutMs, TimeUnit.MILLISECONDS);
+        }
         return promise;
     }
 
-    /** 按路计数：source × outcome（success / error / timeout），局部故障可观测 */
+    /** 按路计数：source × outcome（success / error / timeout / saturated），局部故障可观测 */
     private void countSource(String source, String outcome) {
         Counter.builder("retrieval.source.requests")
                 .tag("source", source)

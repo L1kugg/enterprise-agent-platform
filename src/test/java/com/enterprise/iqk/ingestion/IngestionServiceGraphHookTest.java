@@ -105,7 +105,7 @@ class IngestionServiceGraphHookTest {
 
         assertThatThrownBy(() -> service.parseAndSplit(job("job-1", "chat-1")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("PDF file missing");
+                .hasMessageContaining("source file missing");
     }
 
     // 成功钩子（processQueuedJob → submitAsync）依赖真实 PDF 解析，单元层不覆盖；

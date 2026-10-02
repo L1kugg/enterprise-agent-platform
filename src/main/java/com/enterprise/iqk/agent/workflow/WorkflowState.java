@@ -3,6 +3,7 @@ package com.enterprise.iqk.agent.workflow;
 /**
  * 工作流状态机枚举：定义任务从创建到终态的全部状态与合法转移。
  * 主线 CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE，
+ * RETRIEVING 亦可直接转 WRITING（深度研究检索完直接成稿，跳过评证/反思），
  * 各非终态均可转 FAILED；REFLECTING 可转 NEED_MORE_EVIDENCE 后回到检索补证。
  * 引擎层零业务智能：本枚举只守卫"怎么转"，不决定"转去哪"（编排层职责）。
  * 已知边界：NEED_MORE_EVIDENCE 转移边已定义但当前编排层零使用。
@@ -40,7 +41,7 @@ public enum WorkflowState {
             case CREATED -> target == PLANNING;
             case PLANNING -> target == SEARCHING || target == RETRIEVING || target == WRITING || target == FAILED;
             case SEARCHING -> target == RETRIEVING || target == JUDGING || target == FAILED;
-            case RETRIEVING -> target == JUDGING || target == REFLECTING || target == FAILED;
+            case RETRIEVING -> target == JUDGING || target == REFLECTING || target == WRITING || target == FAILED;
             case JUDGING -> target == REFLECTING || target == WRITING || target == FAILED;
             case REFLECTING -> target == WRITING || target == NEED_MORE_EVIDENCE || target == FAILED;
             case NEED_MORE_EVIDENCE -> target == SEARCHING || target == RETRIEVING || target == FAILED;

@@ -64,6 +64,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_READ", "PERM_EVAL_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_WRITE", "ROLE_ADMIN")
+                    // 评测集删除是破坏性操作，与写侧同权限，不放开给 OPS 只读角色
+                    .requestMatchers(HttpMethod.DELETE, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_READ", "PERM_CHAT_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")

@@ -3,14 +3,13 @@ package com.enterprise.iqk.evaluation;
 import com.enterprise.iqk.evaluation.vo.EvalCaseCreateVO;
 import com.enterprise.iqk.evaluation.vo.EvalComparisonVO;
 import com.enterprise.iqk.evaluation.vo.EvalDatasetCreateVO;
+import com.enterprise.iqk.evaluation.vo.EvalDatasetDeleteVO;
 import com.enterprise.iqk.evaluation.vo.EvalDatasetVO;
 import com.enterprise.iqk.evaluation.vo.EvalMetricSummaryVO;
 import com.enterprise.iqk.evaluation.vo.EvalResultVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunRequestVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunVO;
 import com.enterprise.iqk.rag.HybridRagAnswerService;
-import com.enterprise.iqk.retrieval.CitationItem;
-import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -18,15 +17,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -109,6 +107,27 @@ public class EvaluationService {
         return evalDatasetMapper.findByTenant(tenant).stream()
                 .map(record -> toDatasetVO(record, evalCaseMapper.findByTenantAndDatasetId(tenant, record.getDatasetId()).size()))
                 .toList();
+    }
+
+    /**
+     * 删除评测数据集：四张表之间没有外键、只有 dataset_id 的逻辑引用，
+     * 在同一事务里按 results → runs → cases → dataset 的顺序清干净，
+     * 避免半删状态留下"幽灵"运行；返回各层清理条数供前端提示。
+     */
+    @Transactional
+    public EvalDatasetDeleteVO deleteDataset(String tenantId, String datasetId) {
+        String tenant = TenantContext.normalize(tenantId);
+        EvalDatasetRecord dataset = requireDataset(tenant, datasetId);
+        int results = evalResultMapper.deleteByTenantAndDatasetId(tenant, dataset.getDatasetId());
+        int runs = evalRunMapper.deleteByTenantAndDatasetId(tenant, dataset.getDatasetId());
+        int cases = evalCaseMapper.deleteByTenantAndDatasetId(tenant, dataset.getDatasetId());
+        evalDatasetMapper.deleteByTenantAndDatasetId(tenant, dataset.getDatasetId());
+        return EvalDatasetDeleteVO.builder()
+                .datasetName(dataset.getName())
+                .cases(cases)
+                .runs(runs)
+                .results(results)
+                .build();
     }
 
     /**
@@ -247,8 +266,8 @@ public class EvaluationService {
                     request == null ? null : request.getModelProfile()
             );
             answer = emptyIfBlank(result.getAnswer());
-            citations = toCitationStrings(result.getCitations());
-            evidence = toEvidenceStrings(result.getEvidence());
+            citations = EvalCitationFormatter.toCitationStrings(result.getCitations());
+            evidence = EvalCitationFormatter.toEvidenceStrings(result.getEvidence());
             if (!StringUtils.hasText(answer)) {
                 status = "FAILED";
                 errorMessage = "empty answer";
@@ -399,41 +418,6 @@ public class EvaluationService {
             return request.getChatIdPrefix().trim() + "-" + String.format(Locale.ROOT, "%03d", index + 1);
         }
         return evalCase.getDatasetId();
-    }
-
-    /** 引用格式化为去重的 sourceType:title:chunkId 字符串列表。 */
-    private List<String> toCitationStrings(List<CitationItem> items) {
-        if (items == null || items.isEmpty()) {
-            return List.of();
-        }
-        Set<String> values = new LinkedHashSet<>();
-        for (CitationItem item : items) {
-            if (item == null) {
-                continue;
-            }
-            String text = "%s:%s:%s".formatted(
-                    emptyIfBlank(item.getSourceType()),
-                    emptyIfBlank(item.getTitle()),
-                    emptyIfBlank(item.getChunkId())
-            );
-            if (StringUtils.hasText(text.replace(":", ""))) {
-                values.add(text);
-            }
-        }
-        return List.copyOf(values);
-    }
-
-    private List<String> toEvidenceStrings(List<EvidenceItem> items) {
-        if (items == null || items.isEmpty()) {
-            return List.of();
-        }
-        List<String> values = new ArrayList<>();
-        for (EvidenceItem item : items) {
-            if (item != null && StringUtils.hasText(item.getSnippet())) {
-                values.add(item.getSnippet());
-            }
-        }
-        return values;
     }
 
     private double avg(List<Double> values) {

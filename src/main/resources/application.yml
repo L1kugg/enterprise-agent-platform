@@ -123,6 +123,17 @@ app:
     max-relations: ${APP_GRAPH_MAX_RELATIONS:20}
     max-facts: ${APP_GRAPH_MAX_FACTS:15}
     max-input-chars: ${APP_GRAPH_MAX_INPUT_CHARS:6000}
+  retrieval:
+    source-timeout-ms: ${APP_RETRIEVAL_SOURCE_TIMEOUT_MS:3000}
+    # 须 ≤ 数据库连接池（DB_POOL_MAX_SIZE，默认 20）：三路检索均直连数据库，扩线程前先扩连接池
+    pool-size: ${APP_RETRIEVAL_POOL_SIZE:16}
+    queue-capacity: ${APP_RETRIEVAL_QUEUE_CAPACITY:64}
+  research:
+    worker-count: ${APP_RESEARCH_WORKER_COUNT:3}
+    queue-capacity: ${APP_RESEARCH_QUEUE_CAPACITY:20}
+  workflow:
+    reclaim-interval-ms: ${APP_WORKFLOW_RECLAIM_INTERVAL_MS:300000}
+    stale-task-minutes: ${APP_WORKFLOW_STALE_TASK_MINUTES:30}
   audit:
     retention-days: ${APP_AUDIT_RETENTION_DAYS:90}
   model-router:

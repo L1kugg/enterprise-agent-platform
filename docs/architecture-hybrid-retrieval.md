@@ -24,20 +24,33 @@ flowchart TD
 
 ## 容错与故障隔离
 
-四路并行跑在专用线程池（默认 16 线程，`app.retrieval.pool-size` 可配），
-单路预算 `app.retrieval.source-timeout-ms`（默认 3000ms）。三个保证：
+四路并行跑在专用线程池（默认 16 线程，`app.retrieval.pool-size` 可配；
+**须 ≤ 数据库连接池 `DB_POOL_MAX_SIZE` 默认 20**——vector/keyword/graph
+三路均直连数据库，扩线程前先扩连接池），单路预算
+`app.retrieval.source-timeout-ms`（默认 3000ms）。五个保证：
 
-1. **超时是真取消**：到点由独立调度器 `cancel(true)` 底层任务 —— 排队中的
-   直接跳过（立即腾出容量）、运行中的收到中断（HTTP 类 IO 可中断释放）。
-   此前用 `completeOnTimeout` 只完成 future 不取消任务：web 路读超时 8s、
+1. **超时从任务真正开始执行起算**：排队等待不占用超时预算。超时调度在任务
+   被 worker 取出执行时才启动，高并发下第 5 个之后的请求在队列里排队，
+   而不是被"从提交起算"的旧语义烧光预算后集体假超时降级成空结果。
+   排队时长由 `retrieval.queue.wait{source}` 观测。
+2. **超时是真取消**：到点中断运行中的执行线程（HTTP 类 IO 可中断释放）。
+   不同于 `completeOnTimeout` 只完成 future 不取消任务：web 路读超时 8s、
    向量路无语句超时，慢依赖在调用方放弃后继续占用线程，一次 pgvector
    抖动就可能拖满整池，后续请求"整池 3 秒超时全空"。
-2. **底层超时对齐预算**：web 路连接/读取超时 1s/2.5s < 3s 预算，
+3. **底层超时对齐预算**：web 路连接/读取超时 1s/2.5s < 3s 预算，
    任务总能自行退出，不依赖中断兜底。
-3. **局部故障显式可见**：按路计数 `retrieval.source.requests{source,
-   outcome=success|error|timeout}`；结果携带 `degradedSources`，
+4. **队列有界，拒绝可见**：单路队列 `app.retrieval.queue-capacity`（默认 64）。
+   池与队列打满时提交被拒（`RejectedExecutionException`），立即降级并计入
+   `retrieval.source.requests{outcome=saturated}`——拒绝可观测，不在调用线程
+   无限堆积；停机期间同样走该路径（retrieve 返回全路降级而非挂死）。
+   worker 收尾是 `catch (Exception)`：停机中断（受检异常）也保证 promise
+   被完成，调用线程 `join` 不会永挂。
+5. **局部故障显式可见**：按路计数 `retrieval.source.requests{source,
+   outcome=success|error|timeout|saturated}`；结果携带 `degradedSources`，
    整体 outcome 标注 `degraded` / `degraded-empty` —— "四路全降级导致的空"
    不会再被当成"知识库为空"。池观测：`retrieval.pool.active` / `retrieval.pool.queued`。
+   web 路禁用（`app.web-search.enabled=false`）时短路：不提交任务、不占线程槽、
+   不产生按路计数（禁用是配置而非故障）。
 
 ## 各检索器说明
 

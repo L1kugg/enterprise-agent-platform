@@ -1,6 +1,7 @@
 package com.enterprise.iqk.evaluation;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -37,4 +38,13 @@ public interface EvalDatasetMapper extends BaseMapper<EvalDatasetRecord> {
     int updateBaselineRunId(@Param("tenantId") String tenantId,
                             @Param("datasetId") String datasetId,
                             @Param("baselineRunId") String baselineRunId);
+
+    /** 删除数据集本身，返回清理条数（0 = 不存在，由服务层先行校验）。 */
+    @Delete("""
+            DELETE FROM eval_dataset
+            WHERE tenant_id = #{tenantId}
+              AND dataset_id = #{datasetId}
+            """)
+    int deleteByTenantAndDatasetId(@Param("tenantId") String tenantId,
+                                   @Param("datasetId") String datasetId);
 }
