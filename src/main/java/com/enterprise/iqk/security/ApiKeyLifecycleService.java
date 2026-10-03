@@ -20,7 +20,7 @@ public class ApiKeyLifecycleService {
         String normalizedTenant = normalizeTenant(tenantId);
         ApiKeyRecord active = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (active != null) {
-            throw new IllegalArgumentException("active api key already exists for keyName");
+            throw new IllegalArgumentException("该 Key 名称已存在且仍在有效期");
         }
         String raw = "ak-" + UUID.randomUUID().toString().replace("-", "");
         return provision(raw, keyName, roleName, normalizedTenant);
@@ -71,7 +71,7 @@ public class ApiKeyLifecycleService {
         String normalizedTenant = normalizeTenant(tenantId);
         ApiKeyRecord old = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (old == null) {
-            throw new IllegalArgumentException("active api key not found");
+            throw new IllegalArgumentException("未找到对应的有效 API Key");
         }
         apiKeyMapper.revoke(old.getId(), LocalDateTime.now(), reason, LocalDateTime.now());
         ApiKeyIssueResult issued = issue(keyName, old.getRoleName(), normalizedTenant);
@@ -88,7 +88,7 @@ public class ApiKeyLifecycleService {
         String normalizedTenant = normalizeTenant(tenantId);
         ApiKeyRecord record = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (record == null) {
-            throw new IllegalArgumentException("active api key not found");
+            throw new IllegalArgumentException("未找到对应的有效 API Key");
         }
         apiKeyMapper.revoke(record.getId(), LocalDateTime.now(), reason, LocalDateTime.now());
     }

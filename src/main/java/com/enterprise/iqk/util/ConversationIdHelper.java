@@ -17,7 +17,7 @@ public final class ConversationIdHelper {
     /** 拼接 type::chatId；任一为空白抛 IllegalArgumentException。 */
     public static String build(String type, String chatId) {
         if (!StringUtils.hasText(type) || !StringUtils.hasText(chatId)) {
-            throw new IllegalArgumentException("type and chatId must not be blank");
+            throw new IllegalArgumentException("type 和 chatId 不能为空");
         }
         return type + SEPARATOR + chatId;
     }

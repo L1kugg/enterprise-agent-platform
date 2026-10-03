@@ -49,7 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (!bucket.tryConsume(1)) {
             response.setStatus(429);
             response.setContentType("application/json");
-            response.getWriter().write("{\"ok\":0,\"msg\":\"rate limit exceeded\"}");
+            response.getWriter().write("{\"ok\":0,\"msg\":\"请求太频繁了，请稍后再试\"}");
             return;
         }
         filterChain.doFilter(request, response);

@@ -7,6 +7,7 @@ import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
+import com.enterprise.iqk.util.AnswerStreamSupport;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.TenantCostService;
@@ -144,7 +145,7 @@ public class WorkflowReactAgentService {
                 })
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage())
-                            ? ex.getMessage() : "stream failed";
+                            ? ex.getMessage() : "回答生成失败，请稍后重试";
                     // 将任务标记为 FAILED，避免失败的流式请求把工作流记录
                     // 遗留在非终态成为孤儿。
                     String failedTaskId = taskIdRef.get();
@@ -216,7 +217,7 @@ public class WorkflowReactAgentService {
         StringBuilder answerBuilder = new StringBuilder();
         return Flux.<String>defer(() -> {
                     String direct = state.directAnswer().get();
-                    return StringUtils.hasText(direct) ? Flux.just(direct)
+                    return StringUtils.hasText(direct) ? AnswerStreamSupport.chunked(direct)
                             : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
                             buildFinalPrompt(state.request(), state.trace(), state.rollingContext().get()),
                             state.routeDecision(), state.tenantId(), "react_final");
@@ -456,9 +457,7 @@ public class WorkflowReactAgentService {
         return sb.toString().trim();
     }
 
-    private String formatSse(String event, String data) {
-        return "event: " + event + "\ndata: " + data + "\n\n";
-    }
+    private String formatSse(String event, String data) { return "event: " + event + "\ndata: " + data + "\n\n"; }
 
     private String toJson(Object value) {
         try { return objectMapper.writeValueAsString(value); }
@@ -490,8 +489,8 @@ public class WorkflowReactAgentService {
     private String emptyIfBlank(String v) { return StringUtils.hasText(v) ? v : ""; }
     private String currentTenantId() { return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE)); }
     private void validateRequest(ReactChatRequestVO r) {
-        if (r == null || !StringUtils.hasText(r.getPrompt())) throw new IllegalArgumentException("prompt is required");
-        if (!StringUtils.hasText(r.getChatId())) throw new IllegalArgumentException("chatId is required");
+        if (r == null || !StringUtils.hasText(r.getPrompt())) throw new IllegalArgumentException("问题内容不能为空");
+        if (!StringUtils.hasText(r.getChatId())) throw new IllegalArgumentException("会话 ID 不能为空");
     }
 
     private record ReasonDecision(String thought, String action,

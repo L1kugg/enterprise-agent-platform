@@ -66,10 +66,10 @@ public class AgentSessionService {
 
     public AgentSessionStateVO upsert(String tenantId, String sessionId, AgentSessionStateVO payload) {
         if (payload == null) {
-            throw new IllegalArgumentException("session payload is required");
+            throw new IllegalArgumentException("会话数据不能为空");
         }
         if (!StringUtils.hasText(sessionId)) {
-            throw new IllegalArgumentException("session id is required");
+            throw new IllegalArgumentException("会话 ID 不能为空");
         }
         String tenant = TenantContext.normalize(tenantId);
         String normalizedSessionId = sessionId.trim();
@@ -99,7 +99,7 @@ public class AgentSessionService {
                 // lock_version 已发生变化：重新读取最新状态后再写入
             }
         }
-        throw new IllegalStateException("session update conflict, please retry: " + normalizedSessionId);
+        throw new IllegalStateException("会话保存冲突，请刷新后重试：" + normalizedSessionId);
     }
 
     private AgentSessionStateRecord buildInsertRecord(String tenant, String sessionId,
@@ -139,7 +139,7 @@ public class AgentSessionService {
         String tenant = TenantContext.normalize(tenantId);
         int updated = agentSessionStateMapper.updatePinned(tenant, sessionId, pinned ? 1 : 0);
         if (updated <= 0) {
-            throw new IllegalArgumentException("session not found");
+            throw new IllegalArgumentException("会话不存在");
         }
         AgentSessionStateVO state = get(tenant, sessionId);
         state.setPinned(pinned);
@@ -150,7 +150,7 @@ public class AgentSessionService {
         String tenant = TenantContext.normalize(tenantId);
         int updated = agentSessionStateMapper.updateArchived(tenant, sessionId, archived ? 1 : 0);
         if (updated <= 0) {
-            throw new IllegalArgumentException("session not found");
+            throw new IllegalArgumentException("会话不存在");
         }
         AgentSessionStateVO state = get(tenant, sessionId);
         state.setArchived(archived);
@@ -237,11 +237,11 @@ public class AgentSessionService {
 
     private AgentSessionStateRecord findRecord(String tenantId, String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
-            throw new IllegalArgumentException("session id is required");
+            throw new IllegalArgumentException("会话 ID 不能为空");
         }
         AgentSessionStateRecord record = agentSessionStateMapper.findByTenantAndSessionId(TenantContext.normalize(tenantId), sessionId.trim());
         if (record == null) {
-            throw new IllegalArgumentException("session not found");
+            throw new IllegalArgumentException("会话不存在");
         }
         return record;
     }

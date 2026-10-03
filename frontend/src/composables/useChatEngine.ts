@@ -297,7 +297,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
 
           if (event === 'error') {
             const err = payload as ReactErrorEvent;
-            streamError = err.message || 'stream error';
+            streamError = err.message || '回答生成失败，请稍后重试';
           }
         },
         controller.signal,

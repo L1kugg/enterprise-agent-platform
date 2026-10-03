@@ -119,14 +119,14 @@ class AuthControllerWebMvcTest {
     @Test
     void shouldRejectDuplicateRegistration() throws Exception {
         when(userAuthService.register("alice", "password123"))
-                .thenThrow(new IllegalArgumentException("username already taken"));
+                .thenThrow(new IllegalArgumentException("用户名已被占用"));
 
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"alice\",\"password\":\"password123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(0))
-                .andExpect(jsonPath("$.msg").value("username already taken"));
+                .andExpect(jsonPath("$.msg").value("用户名已被占用"));
     }
 
     @Test
@@ -136,7 +136,7 @@ class AuthControllerWebMvcTest {
                         .content("{\"username\":\"alice\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(0))
-                .andExpect(jsonPath("$.msg").value("username and password are required"));
+                .andExpect(jsonPath("$.msg").value("请输入用户名和密码"));
     }
 
     @Test
@@ -148,7 +148,7 @@ class AuthControllerWebMvcTest {
                         .content("{\"username\":\"alice\",\"password\":\"wrong-pass\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(0))
-                .andExpect(jsonPath("$.msg").value("invalid username or password"));
+                .andExpect(jsonPath("$.msg").value("用户名或密码不正确"));
     }
 
     @Test

@@ -48,7 +48,7 @@ class UserAuthServiceTest {
     void shouldRejectReservedNames() {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> userAuthService.normalizeUsername("Admin"));
-        assertEquals("username is reserved", ex.getMessage());
+        assertEquals("该用户名为系统保留名，请换一个", ex.getMessage());
     }
 
     @Test
@@ -75,7 +75,7 @@ class UserAuthServiceTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> userAuthService.register("alice", "password123"));
-        assertEquals("username already taken", ex.getMessage());
+        assertEquals("用户名已被占用", ex.getMessage());
         verify(userAccountMapper, never()).insert(any(UserAccount.class));
     }
 
@@ -87,7 +87,7 @@ class UserAuthServiceTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> userAuthService.register("alice", "password123"));
-        assertEquals("username already taken", ex.getMessage());
+        assertEquals("用户名已被占用", ex.getMessage());
     }
 
     @Test

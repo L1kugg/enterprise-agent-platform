@@ -54,7 +54,7 @@ public class DeepResearchController {
     public ResponseEntity<?> getTask(@PathVariable String taskId) {
         WorkflowTaskVO task = workflowEngine.getTask(TenantContext.currentTenantId(), taskId);
         if (task == null) {
-            return ResponseEntity.status(404).body(Map.of("ok", 0, "msg", "task not found"));
+            return ResponseEntity.status(404).body(Map.of("ok", 0, "msg", "任务不存在"));
         }
         return ResponseEntity.ok(task);
     }
@@ -72,7 +72,7 @@ public class DeepResearchController {
     public ResponseEntity<?> getReport(@PathVariable String taskId) {
         WorkflowTaskVO task = workflowEngine.getTask(TenantContext.currentTenantId(), taskId);
         if (task == null) {
-            return ResponseEntity.status(404).body(Map.of("ok", 0, "msg", "task not found"));
+            return ResponseEntity.status(404).body(Map.of("ok", 0, "msg", "任务不存在"));
         }
         return ResponseEntity.ok(Map.of("taskId", task.getTaskId(), "report", task.getFinalOutput()));
     }

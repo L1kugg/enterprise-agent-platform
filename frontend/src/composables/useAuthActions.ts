@@ -52,7 +52,7 @@ export async function handleLogin(): Promise<void> {
     persistState();
     await loadSessionsFromCloud();
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'token exchange failed';
+    const message = error instanceof Error ? error.message : 'API Key 登录失败';
     ElMessage.error(message);
   } finally {
     authLoading.value = false;
@@ -78,7 +78,7 @@ export async function handleRefresh(): Promise<void> {
     persistState();
     await refreshCostSummary();
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'refresh failed';
+    const message = error instanceof Error ? error.message : '登录刷新失败';
     ElMessage.error(message);
   } finally {
     refreshing.value = false;

@@ -50,7 +50,7 @@ public class TenantCostService {
         Integer hardLimitVal = budget.getHardLimitEnabled();
         boolean hardLimit = Integer.valueOf(1).equals(hardLimitVal);
         if (hardLimit && projected.compareTo(defaultDecimal(budget.getMonthlyBudgetUsd())) > 0) {
-            throw new IllegalArgumentException("tenant budget exceeded, request blocked");
+            throw new IllegalArgumentException("预算额度已用完，请求被拦截，请调整预算后再试");
         }
     }
 
@@ -141,13 +141,13 @@ public class TenantCostService {
     /** 更新租户月度预算与硬限制开关（负数预算拒绝）；无预算记录时先按默认值初始化。 */
     public TenantCostSummaryVO updateBudget(TenantBudgetUpdateVO request) {
         if (request == null) {
-            throw new IllegalArgumentException("budget payload is required");
+            throw new IllegalArgumentException("预算设置不能为空");
         }
         String tenant = TenantContext.normalize(request.getTenantId());
         TenantBudget budget = ensureBudget(tenant);
         if (request.getMonthlyBudgetUsd() != null) {
             if (request.getMonthlyBudgetUsd().compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("monthlyBudgetUsd must be non-negative");
+                throw new IllegalArgumentException("预算金额不能为负数");
             }
             budget.setMonthlyBudgetUsd(request.getMonthlyBudgetUsd());
         }

@@ -61,11 +61,11 @@ public class AuthController {
                              HttpServletResponse response) {
         AuthIdentity identity = apiKeyAuthService.authenticate(apiKey);
         if (identity == null) {
-            return AuthTokenVO.builder().ok(0).msg("invalid api key").build();
+            return AuthTokenVO.builder().ok(0).msg("API Key 不正确").build();
         }
         String identityTenant = TenantContext.normalize(identity.getTenantId());
         if (StringUtils.hasText(tenantHeader) && !identityTenant.equals(TenantContext.normalize(tenantHeader))) {
-            return AuthTokenVO.builder().ok(0).msg("tenant mismatch for api key").build();
+            return AuthTokenVO.builder().ok(0).msg("API Key 与租户不匹配").build();
         }
         List<String> permissions = permissionService.permissionsForRoles(identity.getRoles());
         String token = jwtService.issueToken(identity.getPrincipal(), identity.getRoles(), permissions, identityTenant);
@@ -89,7 +89,7 @@ public class AuthController {
         String refreshToken = StringUtils.hasText(refreshTokenHeader) ? refreshTokenHeader : refreshCookie;
         AuthIdentity identity = refreshTokenService.consume(refreshToken);
         if (identity == null) {
-            return AuthTokenVO.builder().ok(0).msg("invalid refresh token").build();
+            return AuthTokenVO.builder().ok(0).msg("登录已过期，请重新登录").build();
         }
         String tenantId = TenantContext.normalize(identity.getTenantId());
         List<String> permissions = permissionService.permissionsForRoles(identity.getRoles());
@@ -105,7 +105,7 @@ public class AuthController {
                                 HttpServletResponse response) {
         if (request == null || !StringUtils.hasText(request.getUsername())
                 || !StringUtils.hasText(request.getPassword())) {
-            return AuthTokenVO.builder().ok(0).msg("username and password are required").build();
+            return AuthTokenVO.builder().ok(0).msg("请输入用户名和密码").build();
         }
         UserAccount user;
         try {
@@ -117,17 +117,17 @@ public class AuthController {
         return issuePasswordSession(user, response);
     }
 
-    /** 密码登录：校验通过即签发会话；失败统一 invalid username or password，防用户名枚举。 */
+    /** 密码登录：校验通过即签发会话；失败统一返回"用户名或密码不正确"，防用户名枚举。 */
     @PostMapping("/login")
     public AuthTokenVO login(@RequestBody(required = false) AuthCredentialsVO request,
                              HttpServletResponse response) {
         if (request == null || !StringUtils.hasText(request.getUsername())
                 || !StringUtils.hasText(request.getPassword())) {
-            return AuthTokenVO.builder().ok(0).msg("username and password are required").build();
+            return AuthTokenVO.builder().ok(0).msg("请输入用户名和密码").build();
         }
         UserAccount user = userAuthService.verify(request.getUsername(), request.getPassword());
         if (user == null) {
-            return AuthTokenVO.builder().ok(0).msg("invalid username or password").build();
+            return AuthTokenVO.builder().ok(0).msg("用户名或密码不正确").build();
         }
         return issuePasswordSession(user, response);
     }

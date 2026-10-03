@@ -74,10 +74,10 @@ public class IngestionService {
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         if (!StringUtils.hasText(chatId)) {
-            throw new IllegalArgumentException("chatId is required");
+            throw new IllegalArgumentException("会话 ID 不能为空");
         }
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("file is required");
+            throw new IllegalArgumentException("请选择要上传的文件");
         }
         fileSafetyScanner.scan(file);
 

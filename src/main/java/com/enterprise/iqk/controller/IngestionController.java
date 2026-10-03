@@ -129,7 +129,7 @@ public class IngestionController {
         List<String> removedFiles = ingestionService.deleteDocumentByChat(currentTenantId(), chatId);
         return Map.of(
                 "ok", 1,
-                "msg", removedFiles.isEmpty() ? "no document deleted" : "deleted: " + String.join(", ", removedFiles)
+                "msg", removedFiles.isEmpty() ? "没有找到可删除的文档" : "已删除：" + String.join(", ", removedFiles)
         );
     }
 

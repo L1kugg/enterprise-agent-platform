@@ -57,7 +57,7 @@ public class EvaluationController {
     @PostMapping("/runs")
     public EvalRunVO triggerRunByContract(@RequestBody EvalRunRequestVO request) {
         if (request == null || !org.springframework.util.StringUtils.hasText(request.getDatasetId())) {
-            throw new IllegalArgumentException("datasetId is required");
+            throw new IllegalArgumentException("评测集 ID 不能为空");
         }
         return evaluationService.triggerRun(TenantContext.currentTenantId(), request.getDatasetId(), request);
     }

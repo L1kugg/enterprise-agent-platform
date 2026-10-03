@@ -6,6 +6,7 @@ import com.enterprise.iqk.agent.harness.AgentObservation;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,10 +87,13 @@ class WorkflowReactAgentServiceStreamTest {
     void emitsTraceTokenDoneInOrderAndCompletesTask() {
         List<String> frames = service.stream(request()).collectList().block();
 
-        assertThat(frames).hasSize(3);
+        // 直答也是切片匀速播放：trace 首帧、done 末帧、中间全是 token 片
         assertThat(frames.get(0)).startsWith("event: trace").contains("finish");
-        assertThat(frames.get(1)).startsWith("event: token").contains("Java并发实战");
-        assertThat(frames.get(2)).startsWith("event: done");
+        assertThat(frames.get(frames.size() - 1)).startsWith("event: done");
+        assertThat(frames.size()).isGreaterThanOrEqualTo(3);
+        assertThat(frames.subList(1, frames.size() - 1))
+                .allSatisfy(frame -> assertThat(frame).startsWith("event: token"));
+        assertThat(joinedTokenText(frames)).isEqualTo("推荐《Java并发实战》");
         verify(workflowEngine).completeTask("task-1", WorkflowState.DONE, "推荐《Java并发实战》");
     }
 
@@ -98,12 +103,13 @@ class WorkflowReactAgentServiceStreamTest {
 
         List<String> frames = service.stream(request()).collectList().block();
 
-        // 两步各发一条 trace 帧，再 token、done —— 帧序不变，只是 trace 不再等整循环跑完
-        assertThat(frames).hasSize(4);
+        // 两步各发一条 trace 帧，再 token 片（匀速播放）、done —— 帧序不变，只是 trace 不再等整循环跑完
         assertThat(frames.get(0)).startsWith("event: trace").contains("rag_search");
         assertThat(frames.get(1)).startsWith("event: trace").contains("finish");
-        assertThat(frames.get(2)).startsWith("event: token");
-        assertThat(frames.get(3)).startsWith("event: done");
+        assertThat(frames.get(frames.size() - 1)).startsWith("event: done");
+        assertThat(frames.subList(2, frames.size() - 1))
+                .allSatisfy(frame -> assertThat(frame).startsWith("event: token"));
+        assertThat(joinedTokenText(frames)).isEqualTo("推荐《Java并发实战》");
         verify(harness).execute(any(AgentAction.class));
         verify(workflowEngine).completeTask(eq("task-1"), eq(WorkflowState.DONE), anyString());
     }
@@ -131,5 +137,23 @@ class WorkflowReactAgentServiceStreamTest {
 
         assertThat(frames).hasSize(1);
         assertThat(frames.get(0)).startsWith("event: error").contains("db down");
+    }
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** 把所有 token 帧携带的增量文本按序拼回，断言切片不丢字、不乱序。 */
+    private static String joinedTokenText(List<String> frames) {
+        return frames.stream()
+                .filter(frame -> frame.startsWith("event: token"))
+                .map(frame -> frame.substring(frame.indexOf("data: ") + "data: ".length()).trim())
+                .map(json -> {
+                    try {
+                        JsonNode node = JSON.readTree(json);
+                        return node.get("token").asText();
+                    } catch (Exception ex) {
+                        throw new IllegalStateException("token 帧数据不是合法 JSON: " + json, ex);
+                    }
+                })
+                .collect(Collectors.joining());
     }
 }

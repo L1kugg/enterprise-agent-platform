@@ -50,13 +50,13 @@ public class UserAuthService {
     public String normalizeUsername(String rawUsername) {
         String username = rawUsername == null ? "" : rawUsername.trim().toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(username)) {
-            throw new IllegalArgumentException("username is required");
+            throw new IllegalArgumentException("请输入用户名");
         }
         if (!USERNAME_PATTERN.matcher(username).matches()) {
-            throw new IllegalArgumentException("username must be 3-32 chars of a-z 0-9 - _");
+            throw new IllegalArgumentException("用户名需为 3-32 位，只能含小写字母、数字、短横线或下划线");
         }
         if (RESERVED_NAMES.contains(username)) {
-            throw new IllegalArgumentException("username is reserved");
+            throw new IllegalArgumentException("该用户名为系统保留名，请换一个");
         }
         return username;
     }
@@ -67,7 +67,7 @@ public class UserAuthService {
         String username = normalizeUsername(rawUsername);
         validatePassword(rawPassword);
         if (userAccountMapper.findByUsername(username) != null) {
-            throw new IllegalArgumentException("username already taken");
+            throw new IllegalArgumentException("用户名已被占用");
         }
         LocalDateTime now = LocalDateTime.now();
         UserAccount user = UserAccount.builder()
@@ -82,7 +82,7 @@ public class UserAuthService {
             userAccountMapper.insert(user);
         } catch (DuplicateKeyException ex) {
             // 并发注册同名：唯一索引兜底，转为与预检查一致的语义
-            throw new IllegalArgumentException("username already taken");
+            throw new IllegalArgumentException("用户名已被占用");
         }
         Long roleId = userAccountMapper.findRoleIdByName(DEFAULT_ROLE);
         if (roleId != null) {
@@ -125,10 +125,10 @@ public class UserAuthService {
 
     private void validatePassword(String rawPassword) {
         if (!StringUtils.hasText(rawPassword) || rawPassword.length() < PASSWORD_MIN_LENGTH) {
-            throw new IllegalArgumentException("password must be at least " + PASSWORD_MIN_LENGTH + " chars");
+            throw new IllegalArgumentException("密码至少需要 " + PASSWORD_MIN_LENGTH + " 位");
         }
         if (rawPassword.length() > PASSWORD_MAX_LENGTH) {
-            throw new IllegalArgumentException("password must be at most " + PASSWORD_MAX_LENGTH + " chars");
+            throw new IllegalArgumentException("密码最多 " + PASSWORD_MAX_LENGTH + " 位");
         }
     }
 }

@@ -46,10 +46,10 @@ class ReactAgentServiceTest {
 
         assertThatThrownBy(() -> service.chat(missingPrompt))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("prompt is required");
+                .hasMessage("问题内容不能为空");
         assertThatThrownBy(() -> service.chat(missingChatId))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("chatId is required");
+                .hasMessage("会话 ID 不能为空");
     }
 
     @Test

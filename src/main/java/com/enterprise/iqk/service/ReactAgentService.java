@@ -5,6 +5,7 @@ import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
+import com.enterprise.iqk.util.AnswerStreamSupport;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryService;
@@ -191,14 +192,10 @@ public class ReactAgentService {
                     StringBuilder answerBuilder = new StringBuilder();
 
                     Flux<String> answerSourceFlux = StringUtils.hasText(directAnswer)
-                            ? Flux.just(directAnswer)
-                            : callModelStream(
-                            "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
-                            buildFinalPrompt(request, trace, rollingContext, memorySnapshot),
-                            routeDecision,
-                            tenantId,
-                            "react_final"
-                    );
+                            ? AnswerStreamSupport.chunked(directAnswer)
+                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                                    buildFinalPrompt(request, trace, rollingContext, memorySnapshot),
+                                    routeDecision, tenantId, "react_final");
 
                     Flux<String> tokenFlux = answerSourceFlux
                             .map(token -> {
@@ -225,7 +222,7 @@ public class ReactAgentService {
                             }));
                 })
                 .onErrorResume(ex -> {
-                    String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "stream failed";
+                    String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "回答生成失败，请稍后重试";
                     return Flux.just(responseFormatter.formatSse("error", responseFormatter.toJson(Map.of("message", message))));
                 })
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenLatencyMsRef.get(), outcomeRef.get()));
@@ -487,10 +484,10 @@ public class ReactAgentService {
     /** 校验 prompt 与 chatId 必填，缺失抛 IllegalArgumentException。 */
     private void validateRequest(ReactChatRequestVO request) {
         if (request == null || !StringUtils.hasText(request.getPrompt())) {
-            throw new IllegalArgumentException("prompt is required");
+            throw new IllegalArgumentException("问题内容不能为空");
         }
         if (!StringUtils.hasText(request.getChatId())) {
-            throw new IllegalArgumentException("chatId is required");
+            throw new IllegalArgumentException("会话 ID 不能为空");
         }
     }
 

@@ -42,7 +42,7 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
         }
         AuthIdentity identity = resolveIdentity(request);
         if (identity == null) {
-            unauthorized(response, "missing or invalid credentials");
+            unauthorized(response, "未登录或登录已过期，请重新登录");
             return;
         }
         String tenantId = TenantContext.normalize(identity.getTenantId());

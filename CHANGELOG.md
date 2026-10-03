@@ -26,11 +26,13 @@
 
 - 前端控制台拆分重构：6552 行的单文件 `App.vue` 拆为「骨架 + 组件 + 组合式函数」——`App.vue` 只剩约 185 行壳（登录门闩 + 页面级 v-if/v-else-if 链 + 定高框架样式），11 个组件（骨架 6 件：AuthGate / IconRail / SessionSidebar / WorkspaceHeader / SettingsDialog / BranchDrawer；页面 5 件：ChatView / KnowledgeView / AdminView / UsageView / EvaluationView），15 个模块级单例组合式函数（`composables/`：模块顶层 ref 即迷你 store，组件直接导入、无 props/emits；watch 与生命周期统一收敛到各模块幂等的 `registerXxxEffects()`，只由 App.vue 按原声明顺序各调一次，杜绝多组件重复注册深度 watch），6 个 `utils/` 纯函数模块，跨组件共享样式独立 `styles/shared.css`（严格保持原级联顺序：`.kb-main-panel` 与 `.eval-main-panel` 同特异性、靠源码顺序决胜，构建产物已按字节偏移复核）。不引入新依赖（无 Pinia/router/KeepAlive），不拆消息行子组件；localStorage 持久化 key 与 JSON 字段逐字段一致（字段顺序按切片注册序，与旧版实现可能不同，JSON.parse 读取不受影响）。
 ### 变更
+- 报错提示全面中文化：用户可见的错误文案（登录/注册校验、权限不足、参数不合法、任务/会话/评测集不存在、文件类型与魔数校验、限流 429、预算拦截等）全部改为中文；401 未登录提示「未登录或登录已过期，请重新登录」，服务器异常统一「服务器内部错误，请稍后重试」。前端 `client.ts` 错误格式同步改为「请求失败（错误码 NNN）：原因」，认证接口的 HTTP 200 + ok=0 业务失败不再显示错误码；约 33 处接口兜底文案改为中文，`isAuthError` 的 401 识别随新格式更新。9 处测试 msg 断言同步改中文，后端 274 个测试全绿。
 - 【破坏性】`POST /ai/research/tasks` 从同步执行改为异步受理：响应从「200 + 完整报告」变为「202 + taskId（report 为空）」。外部脚本需改为轮询 `GET /ai/research/tasks/{taskId}` 至 DONE/FAILED，再从 `GET /ai/research/tasks/{taskId}/report` 取报告；队列满返回 429。控制台前端已同步适配。
 - 聊天主界面布局改版：主聊天区定高、输入区工具按钮图标化，上传入口文案「上传 PDF」改为「上传文档」并提示支持格式。
 - ReAct 规划提示词与兜底文案中文化。
 
 ### 修复
+- 流式对话退化成一次性返回（两层叠加）：① 四个 ChatClient 都挂着 `SimpleLoggerAdvisor`，其流式实现为打完整日志会经 `ChatClientMessageAggregator` 把上游逐字增量聚合成单个响应再吐出——所有流式端点（主聊天 ReAct/工作流、PDF 问答、客服、Agent 内部推理）都变成"长时间无输出、转完一次性出现"。替换为自研 `PassThroughLoggerAdvisor`：保留等价的请求/响应 DEBUG 日志，流式路径逐元素透传、完整内容在流收尾旁路记录（实测上游 32 个增量分片此前只剩 1 个 token 事件）。② ReAct 规划器是阻塞式推理，finish 决策里最终答案已整段生成，直接回答此前用 `Flux.just` 一次性发出——即使①修复后直答路径仍是一坨到达。新增 `AnswerStreamSupport.chunked`：把现成答案切成 6 字小片、每 15ms 发一片匀速播放，直答观感与真流式一致（纯展示层播放，不改变答案内容、不多花模型调用）。
 - 深度研究异步受理的重复落库：`executeResearch` 在后台又自行 `startTask` 一次，导致客户端拿到的 taskId 永远停在 PLANNING、真正的执行与报告挂在另一条重复任务名下（每次受理落库两条任务）。现在任务只在受理时落库一次，`executeResearch` 推进传入的任务记录；新增用例锁定「后台剧本必须在受理返回的 taskId 名下跑完且 startTask 仅一次」。同时补上状态机 `RETRIEVING → WRITING` 合法转移边（深度研究检索完直接成稿，此前被守卫拒绝、写报告期间状态一直停在 RETRIEVING）。
 - 混合检索的停机兜底：单路 worker 的异常收尾从 `catch (RuntimeException)` 放宽到 `catch (Exception)`——停机中断（`InterruptedException` 是受检异常）此前接不住，promise 永不完成，调用线程 `join` 永挂、优雅停机卡死。现在任何非 Error 路径都保证 promise 被完成。
 - Workspace shell 命令在 `waitFor` 被中断时不再泄漏子 `Process`：进程现在总会在 `finally` 块中被销毁（PMD `CloseResource` 此前也标记了该问题，并导致构建失败）。

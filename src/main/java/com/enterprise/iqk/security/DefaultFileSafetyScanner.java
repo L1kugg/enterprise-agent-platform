@@ -29,14 +29,14 @@ public class DefaultFileSafetyScanner implements FileSafetyScanner {
         String filename = originalName == null ? "" : originalName.toLowerCase(Locale.ROOT);
         String extension = extensionOf(filename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new IllegalArgumentException("unsupported file type: only pdf/doc/docx/md are allowed");
+            throw new IllegalArgumentException("不支持的文件类型，仅允许 pdf、doc、docx、md");
         }
         try {
             byte[] head = readHead(file);
             checkMagic(extension, head);
             String body = new String(head, StandardCharsets.ISO_8859_1);
             if (StringUtils.hasText(body) && body.contains("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")) {
-                throw new IllegalArgumentException("file blocked by malware signature");
+                throw new IllegalArgumentException("文件检测到风险特征，已拒绝上传");
             }
         } catch (IOException e) {
             throw new IllegalStateException("file scan failed", e);
@@ -54,17 +54,17 @@ public class DefaultFileSafetyScanner implements FileSafetyScanner {
         switch (extension) {
             case ".pdf" -> {
                 if (!new String(head, StandardCharsets.ISO_8859_1).startsWith("%PDF-")) {
-                    throw new IllegalArgumentException("invalid pdf header");
+                    throw new IllegalArgumentException("文件内容不是有效的 pdf，请勿改名伪造");
                 }
             }
             case ".doc" -> {
                 if (!startsWith(head, OLE2_MAGIC)) {
-                    throw new IllegalArgumentException("invalid doc header");
+                    throw new IllegalArgumentException("文件内容不是有效的 doc，请勿改名伪造");
                 }
             }
             case ".docx" -> {
                 if (!startsWith(head, ZIP_MAGIC)) {
-                    throw new IllegalArgumentException("invalid docx header");
+                    throw new IllegalArgumentException("文件内容不是有效的 docx，请勿改名伪造");
                 }
             }
             default -> {

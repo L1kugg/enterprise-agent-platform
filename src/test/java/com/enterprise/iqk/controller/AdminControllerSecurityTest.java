@@ -75,14 +75,14 @@ class AdminControllerSecurityTest {
     void shouldRejectUserForList() throws Exception {
         mockMvc.perform(get("/admin/documents").with(asUser()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.msg").value("permission denied"));
+                .andExpect(jsonPath("$.msg").value("权限不足"));
     }
 
     @Test
     void shouldRejectUserForDelete() throws Exception {
         mockMvc.perform(delete("/admin/documents/u-alice/doc-1").with(asUser()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.msg").value("permission denied"));
+                .andExpect(jsonPath("$.msg").value("权限不足"));
 
         verifyNoInteractions(ingestionService);
     }

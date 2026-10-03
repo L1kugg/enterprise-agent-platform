@@ -60,7 +60,7 @@ public class AgentSessionController {
     public BranchCompareResultVO compareBranches(@PathVariable("sessionId") String sessionId,
                                                  @RequestBody BranchCompareRequestVO request) {
         if (request == null) {
-            throw new IllegalArgumentException("compare request is required");
+            throw new IllegalArgumentException("对比请求内容不能为空");
         }
         return agentSessionService.compareBranches(TenantContext.currentTenantId(), sessionId,
                 request.getSourceBranchId(), request.getTargetBranchId());
@@ -70,7 +70,7 @@ public class AgentSessionController {
     public BranchMergeResultVO mergeBranches(@PathVariable("sessionId") String sessionId,
                                              @RequestBody BranchMergeRequestVO request) {
         if (request == null) {
-            throw new IllegalArgumentException("merge request is required");
+            throw new IllegalArgumentException("合并请求内容不能为空");
         }
         return agentSessionService.mergeBranches(
                 TenantContext.currentTenantId(),

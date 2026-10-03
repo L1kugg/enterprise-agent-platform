@@ -25,25 +25,25 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Result> handleAccessDenied(AccessDeniedException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Result.fail("permission denied"));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Result.fail("权限不足"));
     }
 
     /** Query/路径参数类型不对（如 ?days=abc）转 400，避免落到兜底 500。 */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Result> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        return ResponseEntity.badRequest().body(Result.fail("invalid parameter: " + e.getName()));
+        return ResponseEntity.badRequest().body(Result.fail("参数不合法：" + e.getName()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result> handleInternal(Exception e) {
         log.error("Unhandled exception", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.fail("internal server error"));
+                .body(Result.fail("服务器内部错误，请稍后重试"));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Result> handleStatusException(ResponseStatusException e) {
         return ResponseEntity.status(e.getStatusCode())
-                .body(Result.fail(e.getReason() == null ? "request failed" : e.getReason()));
+                .body(Result.fail(e.getReason() == null ? "请求失败" : e.getReason()));
     }
 }

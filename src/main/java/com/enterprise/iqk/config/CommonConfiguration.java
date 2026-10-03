@@ -6,7 +6,6 @@ import com.enterprise.iqk.tools.CourseTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
-import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -24,7 +23,7 @@ public class CommonConfiguration {
         return ChatClient
                 .builder(model)
                 .defaultOptions(ChatOptions.builder().model("qwen-omni-turbo").build())
-                .defaultAdvisors(new SimpleLoggerAdvisor())//帮我记录日志
+                .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())//增强器，MessageChatMemoryAdvisor：帮我们存储对话的上下文
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入：传 MEMORY_TENANT/USER 参数的链路在请求组装期插入"已知记忆"system 消息
                 .defaultSystem("你是一个专业、友好、可靠的AI助手，请基于用户问题给出清晰、准确、简洁的回答。")
@@ -40,7 +39,7 @@ public class CommonConfiguration {
                 .builder(model)
                 .defaultSystem(SystemConstants.CUSTOMER_SERVICE_SYSTEM)
                 .defaultTools(courseTools)
-                .defaultAdvisors(new SimpleLoggerAdvisor())//帮我记录日志
+                .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())//增强器，MessageChatMemoryAdvisor：帮我们存储对话的上下文
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入（同 chatClient）
                 .build();
@@ -54,7 +53,7 @@ public class CommonConfiguration {
         return ChatClient
                 .builder(model)
                 .defaultSystem("请严格按照上下文的内容进行回答，如果上下文里面没有类似内容，就回答没匹配到数据库")
-                .defaultAdvisors(new SimpleLoggerAdvisor())//帮我记录日志
+                .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())//增强器，MessageChatMemoryAdvisor：帮我们存储对话的上下文
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入（同 chatClient）
                 .defaultAdvisors(QuestionAnswerAdvisor.builder(vectorStore)
@@ -71,7 +70,7 @@ public class CommonConfiguration {
     public ChatClient agentChatClient(OpenAiChatModel model, MemoryInjectionAdvisor memoryInjectionAdvisor) {
         return ChatClient
                 .builder(model)
-                .defaultAdvisors(new SimpleLoggerAdvisor())//帮我记录日志
+                .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入：仍支持 MEMORY_TENANT/USER 参数
                 .build();
     }

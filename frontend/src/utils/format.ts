@@ -13,7 +13,7 @@ export function shortId(id: string): string {
 }
 
 export function isAuthError(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith('HTTP 401');
+  return error instanceof Error && error.message.includes('错误码 401');
 }
 
 export function statusTagType(

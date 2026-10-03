@@ -64,7 +64,12 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
 }
 
 function formatHttpError(status: number, message: string): Error {
-  return new Error(`HTTP ${status}: ${message || 'request failed'}`);
+  // 认证接口的业务失败走 HTTP 200 + ok=0，直接展示后端 msg；
+  // 真正的 HTTP 错误才在文案里标注错误码，方便排查。
+  if (status >= 200 && status < 300) {
+    return new Error(message || '请求失败，请稍后重试');
+  }
+  return new Error(`请求失败（错误码 ${status}）：${message || '请稍后重试'}`);
 }
 
 function withQuery(
@@ -102,7 +107,7 @@ export async function exchangeApiKey(
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'token exchange failed');
+    throw formatHttpError(response.status, payload?.msg ?? 'API Key 登录失败');
   }
   return payload;
 }
@@ -117,7 +122,7 @@ export async function refreshJwt(refreshToken: string): Promise<AuthTokenRespons
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'refresh token failed');
+    throw formatHttpError(response.status, payload?.msg ?? '登录刷新失败');
   }
   return payload;
 }
@@ -138,7 +143,7 @@ async function postAuthCredentials(
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'auth failed');
+    throw formatHttpError(response.status, payload?.msg ?? '登录失败');
   }
   return payload;
 }
@@ -175,7 +180,7 @@ export async function reactChat(
   });
   const payload = await parseJsonSafely<ReactChatResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'react chat failed');
+    throw formatHttpError(response.status, payload?.msg ?? '消息发送失败');
   }
   return payload;
 }
@@ -283,10 +288,10 @@ export async function streamReactChat(
 
   if (!response.ok) {
     const errPayload = await parseJsonSafely<{ msg?: string }>(response);
-    throw formatHttpError(response.status, errPayload?.msg ?? 'stream init failed');
+    throw formatHttpError(response.status, errPayload?.msg ?? '流式连接建立失败');
   }
   if (!response.body) {
-    throw new Error('SSE stream body is empty');
+    throw new Error('流式响应内容为空');
   }
 
   const reader = response.body.getReader();
@@ -359,7 +364,7 @@ export async function listSessionStates(
   );
   const payload = await parseJsonSafely<PagedResult<SessionState>>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list sessions failed');
+    throw formatHttpError(response.status, '会话列表加载失败');
   }
   return payload;
 }
@@ -379,7 +384,7 @@ export async function saveSessionState(
   });
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'save session failed');
+    throw formatHttpError(response.status, '会话保存失败');
   }
   return payload;
 }
@@ -399,7 +404,7 @@ export async function setSessionPinned(
   );
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'set session pin failed');
+    throw formatHttpError(response.status, '会话置顶设置失败');
   }
   return payload;
 }
@@ -419,7 +424,7 @@ export async function setSessionArchived(
   );
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'set session archive failed');
+    throw formatHttpError(response.status, '会话归档设置失败');
   }
   return payload;
 }
@@ -443,7 +448,7 @@ export async function compareSessionBranches(
   );
   const payload = await parseJsonSafely<BranchCompareResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'compare branches failed');
+    throw formatHttpError(response.status, '分支对比失败');
   }
   return payload;
 }
@@ -467,7 +472,7 @@ export async function mergeSessionBranches(
   );
   const payload = await parseJsonSafely<BranchMergeResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'merge branches failed');
+    throw formatHttpError(response.status, '分支合并失败');
   }
   return payload;
 }
@@ -492,7 +497,7 @@ export async function submitAnswerFeedback(
   });
   const payload = await parseJsonSafely<BasicResult>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'submit feedback failed');
+    throw formatHttpError(response.status, payload?.msg ?? '评价提交失败');
   }
 }
 
@@ -504,7 +509,7 @@ export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCo
   });
   const payload = await parseJsonSafely<TenantCostSummary>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'cost summary failed');
+    throw formatHttpError(response.status, '用量汇总加载失败');
   }
   return payload;
 }
@@ -521,7 +526,7 @@ export async function getTenantCostTrend(
   });
   const payload = await parseJsonSafely<TenantCostTrendPoint[]>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'cost trend failed');
+    throw formatHttpError(response.status, '用量趋势加载失败');
   }
   return payload;
 }
@@ -541,7 +546,7 @@ export async function updateTenantBudget(
   });
   const payload = await parseJsonSafely<TenantCostSummary>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'update budget failed');
+    throw formatHttpError(response.status, '预算更新失败');
   }
   return payload;
 }
@@ -561,7 +566,7 @@ export async function createEvalDataset(
   });
   const payload = await parseJsonSafely<EvalDataset>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'create evaluation dataset failed');
+    throw formatHttpError(response.status, '评测集创建失败');
   }
   return payload;
 }
@@ -574,7 +579,7 @@ export async function listEvalDatasets(auth?: AuthContext): Promise<EvalDataset[
   });
   const payload = await parseJsonSafely<EvalDataset[]>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list evaluation datasets failed');
+    throw formatHttpError(response.status, '评测集列表加载失败');
   }
   return payload;
 }
@@ -594,7 +599,7 @@ export async function deleteEvalDataset(
   );
   const payload = await parseJsonSafely<EvalDatasetDeleteResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'delete evaluation dataset failed');
+    throw formatHttpError(response.status, '评测集删除失败');
   }
   return payload;
 }
@@ -618,7 +623,7 @@ export async function triggerEvalRun(
   );
   const payload = await parseJsonSafely<EvalRun>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'trigger evaluation run failed');
+    throw formatHttpError(response.status, '评测运行失败');
   }
   return payload;
 }
@@ -637,7 +642,7 @@ export async function getEvalComparison(
   );
   const payload = await parseJsonSafely<EvalComparison>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'load evaluation comparison failed');
+    throw formatHttpError(response.status, '评测对比加载失败');
   }
   return payload;
 }
@@ -653,7 +658,7 @@ export async function markEvalRunBaseline(runId: string, auth?: AuthContext): Pr
   );
   const payload = await parseJsonSafely<EvalRun>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'mark evaluation baseline failed');
+    throw formatHttpError(response.status, '基线设置失败');
   }
   return payload;
 }
@@ -669,7 +674,7 @@ export async function exportEvalRunReport(runId: string, auth?: AuthContext): Pr
   );
   const text = await response.text();
   if (!response.ok) {
-    throw formatHttpError(response.status, text || 'export evaluation report failed');
+    throw formatHttpError(response.status, text || '评测报告导出失败');
   }
   return text;
 }
@@ -690,7 +695,7 @@ export async function uploadIngestionDocument(
   });
   const payload = await parseJsonSafely<IngestionSubmitResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'upload document failed');
+    throw formatHttpError(response.status, payload?.msg ?? '文档上传失败');
   }
   return payload;
 }
@@ -706,7 +711,7 @@ export async function listRecentIngestionJobs(
   });
   const payload = await parseJsonSafely<IngestionJob[]>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list ingestion jobs failed');
+    throw formatHttpError(response.status, '解析任务列表加载失败');
   }
   return payload;
 }
@@ -719,7 +724,7 @@ export async function deleteIngestionDocument(chatId: string, auth?: AuthContext
   });
   const payload = await parseJsonSafely<BasicResult>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'delete document failed');
+    throw formatHttpError(response.status, payload?.msg ?? '文档删除失败');
   }
   return payload.msg;
 }
@@ -745,7 +750,7 @@ export async function listIngestionDocuments(
   );
   const payload = await parseJsonSafely<PagedResult<IngestionDocumentSummary>>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list documents failed');
+    throw formatHttpError(response.status, '文档列表加载失败');
   }
   return payload;
 }
@@ -763,7 +768,7 @@ export async function searchIngestionPreview(
   });
   const payload = await parseJsonSafely<RetrievalPreviewResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'search preview failed');
+    throw formatHttpError(response.status, '试搜失败');
   }
   return payload;
 }
@@ -789,7 +794,7 @@ export async function listAdminDocuments(
   );
   const payload = await parseJsonSafely<PagedResult<AdminDocumentSummary>>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list admin documents failed');
+    throw formatHttpError(response.status, '文档总览加载失败');
   }
   return payload;
 }
@@ -810,7 +815,7 @@ export async function deleteAdminDocument(
   );
   const payload = await parseJsonSafely<BasicResult>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'delete document failed');
+    throw formatHttpError(response.status, payload?.msg ?? '文档删除失败');
   }
   return payload.msg;
 }
@@ -828,7 +833,7 @@ export async function listWorkflowTasks(
   });
   const payload = await parseJsonSafely<WorkflowTask[]>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, 'list workflow tasks failed');
+    throw formatHttpError(response.status, '任务列表加载失败');
   }
   return payload;
 }
@@ -853,7 +858,7 @@ export async function createResearchTask(
   // 成功时返回裸 DeepResearchResult（无 ok/msg 包装），错误响应体里才有 msg（429 队列满等）
   const payload = await parseJsonSafely<DeepResearchResult & { msg?: string }>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, payload?.msg ?? 'create research task failed');
+    throw formatHttpError(response.status, payload?.msg ?? '深度研究创建失败');
   }
   return payload;
 }
@@ -867,7 +872,7 @@ export async function getResearchTask(taskId: string, auth?: AuthContext): Promi
   });
   const payload = await parseJsonSafely<WorkflowTask & { msg?: string }>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, payload?.msg ?? 'get research task failed');
+    throw formatHttpError(response.status, payload?.msg ?? '研究任务查询失败');
   }
   return payload;
 }
@@ -889,7 +894,7 @@ export async function getResearchReport(
     response,
   );
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, payload?.msg ?? 'get research report failed');
+    throw formatHttpError(response.status, payload?.msg ?? '研究报告获取失败');
   }
   return payload;
 }

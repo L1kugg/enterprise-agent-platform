@@ -53,13 +53,13 @@ public class EvaluationService {
     /** 创建评测数据集：校验后写 eval_dataset / eval_case，用例缺 caseId 时按序生成 case-###。 */
     public EvalDatasetVO createDataset(String tenantId, EvalDatasetCreateVO request) {
         if (request == null) {
-            throw new IllegalArgumentException("dataset payload is required");
+            throw new IllegalArgumentException("评测集内容不能为空");
         }
         if (!StringUtils.hasText(request.getName())) {
-            throw new IllegalArgumentException("dataset name is required");
+            throw new IllegalArgumentException("评测集名称不能为空");
         }
         if (request.getCases() == null || request.getCases().isEmpty()) {
-            throw new IllegalArgumentException("dataset cases are required");
+            throw new IllegalArgumentException("评测集至少需要一条测试题");
         }
 
         String tenant = TenantContext.normalize(tenantId);
@@ -78,7 +78,7 @@ public class EvaluationService {
         int order = 0;
         for (EvalCaseCreateVO item : request.getCases()) {
             if (item == null || !StringUtils.hasText(item.getQuestion())) {
-                throw new IllegalArgumentException("case question is required");
+                throw new IllegalArgumentException("测试题的问题不能为空");
             }
             String caseId = StringUtils.hasText(item.getCaseId())
                     ? item.getCaseId().trim()
@@ -139,7 +139,7 @@ public class EvaluationService {
         EvalDatasetRecord dataset = requireDataset(tenant, datasetId);
         List<EvalCaseRecord> cases = evalCaseMapper.findByTenantAndDatasetId(tenant, datasetId);
         if (cases.isEmpty()) {
-            throw new IllegalArgumentException("dataset has no cases");
+            throw new IllegalArgumentException("该评测集没有测试题，无法运行");
         }
 
         String runId = "eval-run-" + shortUuid();
@@ -201,7 +201,7 @@ public class EvaluationService {
         EvalRunRecord run = requireRun(tenant, runId);
         int updated = evalDatasetMapper.updateBaselineRunId(tenant, run.getDatasetId(), runId);
         if (updated <= 0) {
-            throw new IllegalArgumentException("dataset not found");
+            throw new IllegalArgumentException("评测集不存在");
         }
         return getRun(tenant, runId);
     }
@@ -331,22 +331,22 @@ public class EvaluationService {
 
     private EvalDatasetRecord requireDataset(String tenant, String datasetId) {
         if (!StringUtils.hasText(datasetId)) {
-            throw new IllegalArgumentException("dataset id is required");
+            throw new IllegalArgumentException("评测集 ID 不能为空");
         }
         EvalDatasetRecord dataset = evalDatasetMapper.findByTenantAndDatasetId(tenant, datasetId.trim());
         if (dataset == null) {
-            throw new IllegalArgumentException("dataset not found");
+            throw new IllegalArgumentException("评测集不存在");
         }
         return dataset;
     }
 
     private EvalRunRecord requireRun(String tenant, String runId) {
         if (!StringUtils.hasText(runId)) {
-            throw new IllegalArgumentException("run id is required");
+            throw new IllegalArgumentException("运行记录 ID 不能为空");
         }
         EvalRunRecord run = evalRunMapper.findByTenantAndRunId(tenant, runId.trim());
         if (run == null) {
-            throw new IllegalArgumentException("run not found");
+            throw new IllegalArgumentException("运行记录不存在");
         }
         return run;
     }
