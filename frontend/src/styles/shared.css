@@ -1,0 +1,194 @@
+/*
+ * 跨页面共享的面板样式（原 App.vue <style> 原文按原顺序拷入）。
+ * 为什么放全局：eval-main-panel / eval-side-panel / eval-panel-head / eval-metric-card
+ * 会被聊天之外的多张页面复用（知识库 / 管理员 / 用量 / 评测），拆成页面组件后
+ * 各自的 scoped 样式互相够不着，这批类必须全局可见。
+ *
+ * ⚠ 顺序敏感，勿重排、勿拆分：.kb-main-panel（flex）与 .eval-main-panel（grid）
+ * 特异性相同，靠"谁写在后面"决胜——知识库主面板两个类同时挂。原文件里 grid 在后、
+ * 实际生效的是三行网格（kb 那条注释描述的 flex 覆盖其实从未赢过）。搬动时保持
+ * 原相对顺序即可零行为变化；调换顺序知识库页布局会变。
+ */
+
+/* 双类选择器提高优先级：压过文件后部的 .eval-main-panel 行高覆盖 */
+.eval-main-panel.admin-docs-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* 头 / 卡片 / 趋势图 / 表格各占一行：头和卡片自适应，其余平分剩余高度，页面不出滚动条 */
+.eval-main-panel.usage-main {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+/* 覆盖 .eval-main-panel 的三行网格：这里只有 alert(可选) + tabs，改用纵向 flex 撑满 */
+.kb-main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eval-side-panel,
+.eval-main-panel {
+  min-height: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
+}
+
+.eval-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.eval-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eval-panel-head strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+}
+
+.eval-main-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+
+.eval-metric-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--ui-panel) 80%, transparent);
+  min-width: 0;
+}
+
+.eval-metric-card span,
+.eval-metric-card small {
+  display: block;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.eval-metric-card strong {
+  display: block;
+  margin: 7px 0 4px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.eval-metric-card .good {
+  color: #047857;
+}
+
+.eval-metric-card .bad {
+  color: #dc2626;
+}
+
+.eval-metric-card .neutral {
+  color: var(--ui-muted);
+}
+
+/*
+ * ↓↓ 以下同样来自 App.vue <style> 原文（4.3 拆 BranchDrawer/SessionSidebar 时搬入），
+ * 面板标题行 / 空态提示 / 会话+分支面板的成对规则被多个骨架组件共用，必须全局。
+ * 保持原相对顺序，追加在后不影响级联（与上方 eval-* 类互不相交）。
+ */
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.section-label {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-muted);
+}
+
+.section-meta {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.session-panel,
+.branch-panel {
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--ui-panel) 84%, transparent);
+}
+
+.session-list,
+.branch-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-actions button,
+.branch-head-actions button {
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 86%, transparent);
+  color: var(--ui-text);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.session-empty {
+  font-size: 12px;
+  color: var(--ui-muted);
+  padding: 6px;
+}
+
+.branch-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * ↓↓ 4.7 拆 UsageView 时搬入：列表头/工具条/登录提示被知识库、管理员、
+ * 用量三张页面同时借用，必须全局。保持原相对顺序。
+ */
+
+.admin-docs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-docs-toolbar .el-input {
+  width: 220px;
+}
+
+.knowledge-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kb-auth-alert {
+  margin: 8px 0;
+}

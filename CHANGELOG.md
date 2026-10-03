@@ -24,6 +24,7 @@
 - MCP HTTP 工具调用的瞬时网络故障在适配层重试，不再把抖动当工具失败喂给模型。
 - 一键发布脚本 `scripts/publish.sh`（SSH 密钥免密：本地打包 → 上传 → 服务器重建容器），Dockerfile 切换为 jar 预构建模式并新增生产部署物料（`deploy/`）。
 
+- 前端控制台拆分重构：6552 行的单文件 `App.vue` 拆为「骨架 + 组件 + 组合式函数」——`App.vue` 只剩约 185 行壳（登录门闩 + 页面级 v-if/v-else-if 链 + 定高框架样式），11 个组件（骨架 6 件：AuthGate / IconRail / SessionSidebar / WorkspaceHeader / SettingsDialog / BranchDrawer；页面 5 件：ChatView / KnowledgeView / AdminView / UsageView / EvaluationView），15 个模块级单例组合式函数（`composables/`：模块顶层 ref 即迷你 store，组件直接导入、无 props/emits；watch 与生命周期统一收敛到各模块幂等的 `registerXxxEffects()`，只由 App.vue 按原声明顺序各调一次，杜绝多组件重复注册深度 watch），6 个 `utils/` 纯函数模块，跨组件共享样式独立 `styles/shared.css`（严格保持原级联顺序：`.kb-main-panel` 与 `.eval-main-panel` 同特异性、靠源码顺序决胜，构建产物已按字节偏移复核）。不引入新依赖（无 Pinia/router/KeepAlive），不拆消息行子组件；localStorage 持久化 key 与 JSON 字段逐字段一致（字段顺序按切片注册序，与旧版实现可能不同，JSON.parse 读取不受影响）。
 ### 变更
 - 【破坏性】`POST /ai/research/tasks` 从同步执行改为异步受理：响应从「200 + 完整报告」变为「202 + taskId（report 为空）」。外部脚本需改为轮询 `GET /ai/research/tasks/{taskId}` 至 DONE/FAILED，再从 `GET /ai/research/tasks/{taskId}/report` 取报告；队列满返回 429。控制台前端已同步适配。
 - 聊天主界面布局改版：主聊天区定高、输入区工具按钮图标化，上传入口文案「上传 PDF」改为「上传文档」并提示支持格式。
