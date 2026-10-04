@@ -1,7 +1,9 @@
 package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.domain.query.CourseQuery;
-import com.enterprise.iqk.rag.RagAnswerService;
+import com.enterprise.iqk.rag.HybridRagAnswerService;
+import com.enterprise.iqk.retrieval.CitationItem;
+import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.tools.CourseTools;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 进程内工具运行时：处理 4 个业务内置动作
  * （query_school / query_course / add_course_reservation / rag_search），
- * 直接复用 CourseTools 与 RagAnswerService，不经过模型工具调用协议。
+ * 直接复用 CourseTools 与 HybridRagAnswerService（四路混合检索），不经过模型工具调用协议。
  */
 @Component
 @RequiredArgsConstructor
@@ -31,7 +33,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
     );
 
     private final CourseTools courseTools;
-    private final RagAnswerService ragAnswerService;
+    private final HybridRagAnswerService hybridRagAnswerService;
 
     @Override
     public String source() {
@@ -94,13 +96,15 @@ public class BuiltinToolRuntime implements AgentRuntime {
     }
 
     /**
-     * RAG 检索动作：query 缺省退回用户原始问题；
+     * RAG 检索动作（四路混合管线）：query 缺省退回用户原始问题；
      * 会话 ID 用 react 前缀派生（与直连聊天链路隔离），chatId 先去单引号防注入。
+     * 载荷形状与旧向量单路一致：query/answer/citations/evidence/weights，
+     * citations 映射回前端可解析的 "source=..., chunk=..." 文本。
      */
     private Map<String, Object> executeRagSearch(AgentAction action) {
         String query = stringVal(action.actionInput(), "query", action.prompt());
         String conversationId = ConversationIdHelper.build("react", action.chatId());
-        RagAnswerService.RagResult result = ragAnswerService.answer(
+        HybridRagAnswerService.HybridRagResult result = hybridRagAnswerService.answer(
                 query,
                 action.tenantId(),
                 sanitizeChatId(action.chatId()),
@@ -110,9 +114,26 @@ public class BuiltinToolRuntime implements AgentRuntime {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("query", query);
         payload.put("answer", result.getAnswer());
-        payload.put("citations", result.getCitations());
-        payload.put("evidence", result.getEvidence());
+        payload.put("citations", result.getCitations().stream()
+                .map(BuiltinToolRuntime::citationText)
+                .toList());
+        payload.put("evidence", result.getEvidence().stream()
+                .map(EvidenceItem::getSnippet)
+                .filter(StringUtils::hasText)
+                .toList());
+        // 当次实际生效的召回路权重（四路归一化值）：前端轨迹条照此绘制
+        payload.put("weights", result.getWeights() == null ? Map.of() : result.getWeights());
         return payload;
+    }
+
+    /**
+     * CitationItem → 前端 parseCitation 可解析的 "source=..., chunk=..." 文本。
+     * 标题里的半角逗号替换为全角，避免正则 source=[^,]+ 提前截断；chunkId 为程序生成无逗号。
+     */
+    private static String citationText(CitationItem item) {
+        String title = StringUtils.hasText(item.getTitle()) ? item.getTitle().replace(',', '，') : "未知来源";
+        String chunk = StringUtils.hasText(item.getChunkId()) ? item.getChunkId() : "?";
+        return "source=" + title + ", chunk=" + chunk;
     }
 
     /** 动作输入 → 课程查询对象：解析 type/edu/sorts（排序字段+升降序），解析不了的字段静默忽略 */

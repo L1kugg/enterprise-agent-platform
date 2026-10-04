@@ -146,20 +146,18 @@
                             }}</pre>
                           </div>
                         </details>
-                        <div v-if="tsIdx === 0" class="trace-retrieval-lanes">
-                          <span class="trace-field-label">检索四路召回</span>
+                        <!-- 检索召回路色条：照后端观测里当次实际生效的权重绘制（无 weights 数据不画） -->
+                        <div v-if="retrievalLanes(ts)" class="trace-retrieval-lanes">
+                          <span class="trace-field-label">检索召回路（当次实际）</span>
                           <div class="retrieval-bar">
-                            <div class="retrieval-lane vector" style="width: 40%">
-                              <span>Vector 40%</span>
-                            </div>
-                            <div class="retrieval-lane keyword" style="width: 25%">
-                              <span>Keyword 25%</span>
-                            </div>
-                            <div class="retrieval-lane graph" style="width: 20%">
-                              <span>Graph 20%</span>
-                            </div>
-                            <div class="retrieval-lane web" style="width: 15%">
-                              <span>Web 15%</span>
+                            <div
+                              v-for="lane in retrievalLanes(ts)"
+                              :key="lane.key"
+                              class="retrieval-lane"
+                              :class="lane.cls"
+                              :style="{ width: lane.percent + '%' }"
+                            >
+                              <span>{{ lane.label }} {{ lane.percent }}%</span>
                             </div>
                           </div>
                         </div>
@@ -342,6 +340,7 @@ import {
 import { welcomeSuggestions } from '../../utils/constants';
 import { renderMarkdown } from '../../utils/markdown';
 import { formatTime } from '../../utils/format';
+import { retrievalLanes } from '../../utils/retrieval';
 import {
   answerFeedbackLoading,
   answerFeedbackMap,

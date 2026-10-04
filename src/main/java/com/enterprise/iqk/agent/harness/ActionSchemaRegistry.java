@@ -12,6 +12,8 @@ import java.util.Set;
  * 动作 schema 注册表：集中声明全部 11 个动作（builtin 4 + mcp_call 1 + workspace 6）。
  * 构造器一次性注册、之后只读（LinkedHashMap + 读取时不可变拷贝），
  * 线程安全依赖"构造期写完、运行期只读"的单例初始化语义。
+ * 两条 ReAct 链路的规划器提示词动作列表与解析白名单均由 {@link PlannerActionCatalog}
+ * 从本注册表生成——新增动作在这里登记一次即可，不要在引擎/解析器里再手抄名单。
  */
 @Component
 public class ActionSchemaRegistry {
@@ -29,9 +31,15 @@ public class ActionSchemaRegistry {
         register(new ActionSchema("rag_search", "builtin",
                 Set.of(), Set.of("query"), Set.of(), "read", false));
 
+        // mcp_call 不设 trustedOnly：外部只读查询（如天气）要能在聊天 ReAct 循环里直接用，
+        // 风险由适配器的 SSRF 校验 + allowed-hosts 白名单 + 2MiB 响应上限兜住，
+        // 还可被 disabled-actions / 租户白名单随时熔断；
+        // workspace 写/壳动作保持 trustedOnly（一次性令牌确认流程专属）。
         register(new ActionSchema("mcp_call", "mcp",
                 Set.of("server", "tool", "arguments"), Set.of(),
-                Set.of("arguments"), "external", true));
+                Set.of("arguments"), "external", false,
+                "查询外部工具；当前提供天气查询，action_input 固定为 "
+                        + "{\"server\":\"weather\",\"tool\":\"get_weather\",\"arguments\":{\"city\":\"城市中文名\"}}"));
 
         register(new ActionSchema("workspace_list_files", "workspace",
                 Set.of(), Set.of("path", "maxDepth"), Set.of(), "read", true));

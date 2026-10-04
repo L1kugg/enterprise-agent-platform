@@ -39,10 +39,41 @@ class HybridRetrievalServiceTest {
     /** 统一构造入口：webEnabled 控制网络路是否启用（禁用时不提交任务、不占线程槽）。 */
     private HybridRetrievalService service(SimpleMeterRegistry registry, long timeoutMs,
                                            int poolSize, int queueCapacity, boolean webEnabled) {
+        return service(registry, timeoutMs, poolSize, queueCapacity, webEnabled, HybridWeights.DEFAULT);
+    }
+
+    /** 带自定义来源权重的构造入口（权重归一化后参与打分，并回带在检索结果上）。 */
+    private HybridRetrievalService service(SimpleMeterRegistry registry, long timeoutMs,
+                                           int poolSize, int queueCapacity, boolean webEnabled,
+                                           HybridWeights weights) {
         WebSearchProperties webSearchProperties = new WebSearchProperties();
         webSearchProperties.setEnabled(webEnabled);
         return new HybridRetrievalService(vectorRetriever, keywordRetriever, graphRetriever, webRetriever,
-                webSearchProperties, registry, timeoutMs, poolSize, queueCapacity);
+                webSearchProperties, registry, timeoutMs, poolSize, queueCapacity,
+                weights.vectorWeight(), weights.keywordWeight(), weights.graphWeight(), weights.webWeight());
+    }
+
+    @Test
+    void configuredWeightsNormalizeFlowIntoResultAndScoring() {
+        HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true,
+                new HybridWeights(0.7, 0.1, 0.1, 0.1));
+
+        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+                .thenReturn(List.of(doc("vec-1", "vector", "vector lane content", 0.5)));
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of(doc("kw-1", "keyword", "keyword lane content", 0.5)));
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt()))
+                .thenReturn(List.of(doc("graph-1", "graph", "graph lane content", 0.5)));
+        when(webRetriever.retrieve(anyString(), anyInt()))
+                .thenReturn(List.of(doc("web-1", "web", "web lane content", 0.5)));
+
+        HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 4);
+
+        // 配置权重（总和恰为 1，归一化保持原值）回带在结果上，供前端如实绘制
+        assertThat(result.weights()).isEqualTo(new HybridWeights(0.7, 0.1, 0.1, 0.1));
+        // 同分文档按配置权重排序：向量 0.35 > 其余 0.05
+        assertThat(result.documents()).extracting(ScoredDocument::getDocId)
+                .containsExactly("vec-1", "kw-1", "graph-1", "web-1");
     }
 
     @Test

@@ -141,6 +141,32 @@ services:
       timeout: 5s
       retries: 5
 
+  # 天气 MCP 翻译壳：把 app 的 JSON-RPC tools/call 桥接到 Open-Meteo 免费天气 API。
+  # 仅标准库、无自定义镜像；端口只绑回环（与其它基础组件同姿势），
+  # app 经 compose 内网以 http://mcp-weather:9101 访问（SSRF 白名单放行容器名）。
+  mcp-weather:
+    image: python:3.12-slim
+    container_name: knowledgeops-agent-mcp-weather
+    restart: unless-stopped
+    command: ["python", "/srv/mcp_weather.py"]
+    volumes:
+      - ../mcp-weather/mcp_weather.py:/srv/mcp_weather.py:ro
+    ports:
+      - "127.0.0.1:9101:9101"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9101/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+
 volumes:
   mysql-data:
   redis-data:

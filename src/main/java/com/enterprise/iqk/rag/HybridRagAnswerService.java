@@ -11,7 +11,9 @@ import com.enterprise.iqk.retrieval.CitationService;
 import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.retrieval.EvidenceJudgeService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
+import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
+import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.Counter;
@@ -23,11 +25,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,8 +40,10 @@ import java.util.UUID;
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
- * 完整版混合 RAG 管线，评测链路专用（唯一调用方 EvaluationService）。
- * 步骤：1 混合检索 → 2 证据判分 → 2.5 高置信事实沉淀（置信度门槛由 recorder 控制）
+ * 完整版混合 RAG 管线，主聊天 rag_search（BuiltinToolRuntime）与评测链路（EvaluationService）共用。
+ * 步骤：1 混合检索 → 1.5 无关线兜底（低于 rag.fallback-score-floor 的原始分整批作废时，
+ * 向量路放宽阈值重试一次；仍无过线文档则不调模型直接返回固定话术）
+ * → 2 证据判分 → 2.5 高置信事实沉淀（置信度门槛由 recorder 控制）
  * → 3 引用构建 → 4 判分结果消费（按综合分降序组织上下文、剔除低分、截断 rerankTopK）
  * → 4.5 记忆召回注入（失败降级为无记忆，不中断管线）→ 5 生成 → 6 引用脚注。
  * user prompt 为三段式：用户问题 / 检索上下文 / "已知记忆" 段；memoryUsed 上报实际注入的记忆标签。
@@ -48,6 +55,7 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 public class HybridRagAnswerService {
 
     private final HybridRetrievalService hybridRetrievalService;
+    private final VectorRetriever vectorRetriever;
     private final EvidenceJudgeService evidenceJudgeService;
     private final CitationService citationService;
     private final ChatClient chatClient;
@@ -74,19 +82,44 @@ public class HybridRagAnswerService {
                             ragProperties.getRetrieveTopK());
 
             List<ScoredDocument> retrievedDocs = retrievalResult.documents();
+            // 当次实际生效的归一化召回路权重，随结果回传（前端轨迹色条按此绘制，空结果也带）
+            Map<String, Double> laneWeights = laneWeights(retrievalResult.weights());
             if (retrievedDocs.isEmpty()) {
                 pipelineOutcome = "empty";
                 return HybridRagResult.builder()
-                        .answer("没有在当前知识库中检索到可用内容。")
+                        .answer(EMPTY_ANSWER)
                         .citations(List.of())
                         .evidence(List.of())
                         .traceId(traceId)
                         .memoryUsed(List.of())
+                        .weights(laneWeights)
+                        .build();
+            }
+
+            // 第 1.5 步：无关线兜底——原始检索分低于线的文档不进判分、事实沉淀与生成；
+            // 整批低于线时走向量放宽重试，仍无过线文档则不调模型直接返回固定话术
+            List<ScoredDocument> usableDocs = filterUsable(retrievedDocs);
+            if (usableDocs.isEmpty()) {
+                usableDocs = relaxedVectorRetry(prompt, normalizedTenantId, chatId, retrievalResult.weights());
+            }
+            if (usableDocs.isEmpty()) {
+                pipelineOutcome = "empty";
+                log.warn("混合检索全部命中低于无关线（floor={}），不调模型直接返回空话术: chatId={}, query={}",
+                        ragProperties.getFallbackScoreFloor(), chatId, prompt);
+                return HybridRagResult.builder()
+                        .answer(EMPTY_ANSWER)
+                        .citations(List.of())
+                        // 提示行借 EvidenceItem.snippet 装载（映射观测载荷时以 snippet 文本呈现，
+                        // 与主聊天旧单路的空结果提示行同句）
+                        .evidence(List.of(EvidenceItem.builder().snippet(EMPTY_EVIDENCE_HINT).build()))
+                        .traceId(traceId)
+                        .memoryUsed(List.of())
+                        .weights(laneWeights)
                         .build();
             }
 
             // 第 2 步：证据评审
-            List<EvidenceItem> evidence = evidenceJudgeService.judge(retrievedDocs, prompt);
+            List<EvidenceItem> evidence = evidenceJudgeService.judge(usableDocs, prompt);
 
             // Step 2.5：把高置信证据写入租户级 fact 记忆
             //（尽力而为；recorder 内部做了置信度门槛与条数上限，
@@ -98,7 +131,7 @@ public class HybridRagAnswerService {
 
             // 第 4 步：消费判分结果——评审不再只喂展示层：
             // 按综合分降序组织上下文、剔除低于垃圾线的证据、截断到 rerankTopK 条进入 prompt
-            List<ScoredDocument> contextDocs = selectContextDocs(retrievedDocs, evidence);
+            List<ScoredDocument> contextDocs = selectContextDocs(usableDocs, evidence);
             String context = buildContext(contextDocs);
 
             // Step 4.5: 召回记忆（用户画像 / 近期会话要点 / 高置信事实）
@@ -138,6 +171,7 @@ public class HybridRagAnswerService {
                     .evidence(evidence)
                     .traceId(traceId)
                     .memoryUsed(memoryUsedLabels(memorySnapshot))
+                    .weights(laneWeights)
                     .retrievalStats(HybridRagResult.RetrievalStats.builder()
                             .totalRetrieved(retrievalResult.totalBeforeDedup())
                             .afterDedup(retrievalResult.totalAfterDedup())
@@ -157,6 +191,64 @@ public class HybridRagAnswerService {
                     .register(meterRegistry)
                     .increment();
         }
+    }
+
+    /** 检索为空/全部无关时的统一话术（与 RagAnswerService 空路径同句）与提示行。 */
+    private static final String EMPTY_ANSWER = "没有在当前知识库中检索到可用内容。";
+    private static final String EMPTY_EVIDENCE_HINT = "未检索到匹配文档，请先上传资料或调整检索词。";
+
+    /**
+     * 无关线兜底：原始检索分（向量路为余弦相似度，含同会话有界加分 +0.05，
+     * 与 RagAnswerService 的 dropCompletelyIrrelevant 相比门槛略松但方向保守）
+     * 低于 rag.fallback-score-floor 的文档不进判分、事实沉淀与生成。
+     */
+    private List<ScoredDocument> filterUsable(List<ScoredDocument> docs) {
+        return docs.stream().filter(this::usable).toList();
+    }
+
+    /** 单条文档是否过无关线。 */
+    private boolean usable(ScoredDocument doc) {
+        return doc.getRetrievalScore() >= ragProperties.getFallbackScoreFloor();
+    }
+
+    /**
+     * 向量放宽重试：四路严格结果全部低于无关线时，按 accept-all 阈值把向量路再查一次
+     * （与 RagAnswerService 的泛问兜底同款），捞回结果重新过线后单独使用——
+     * 能触发重试即说明其他路没有任何过线文档，无需合并。
+     * 判分相关度以 finalScore 为基底，重试文档不经 HybridRetrievalService 加权，在此按向量权重补齐。
+     * 任何异常降级为空列表：兜底通道的故障不升级成整次回答 error。
+     */
+    private List<ScoredDocument> relaxedVectorRetry(String query, String tenantId, String chatId,
+                                                    HybridWeights weights) {
+        try {
+            List<ScoredDocument> docs = vectorRetriever.retrieve(query, tenantId, chatId,
+                    SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL);
+            double vectorWeight = weights != null ? weights.vectorWeight() : HybridWeights.DEFAULT.vectorWeight();
+            for (ScoredDocument d : docs) {
+                d.setFinalScore(d.getRetrievalScore() * vectorWeight);
+            }
+            return docs.stream()
+                    .filter(this::usable)
+                    .sorted(Comparator.comparingDouble(ScoredDocument::getRetrievalScore).reversed())
+                    .toList();
+        } catch (Exception ex) {
+            log.warn("向量放宽重试失败（按无可用内容处理）: chatId={}, query={}, reason={}",
+                    chatId, query, ex.toString());
+            return List.of();
+        }
+    }
+
+    /** 归一化召回路权重 → 固定 vector/keyword/graph/web 顺序的有序 Map（前端按插入序绘制色条）。 */
+    private Map<String, Double> laneWeights(HybridWeights weights) {
+        if (weights == null) {
+            return Map.of();
+        }
+        Map<String, Double> ordered = new LinkedHashMap<>();
+        ordered.put("vector", weights.vectorWeight());
+        ordered.put("keyword", weights.keywordWeight());
+        ordered.put("graph", weights.graphWeight());
+        ordered.put("web", weights.webWeight());
+        return ordered;
     }
 
     /** 记忆召回：任何失败都返回 null，按"无记忆可用"降级。 */
@@ -205,14 +297,14 @@ public class HybridRagAnswerService {
         }
         Map<String, ScoredDocument> byKey = new HashMap<>();
         for (ScoredDocument d : retrievedDocs) {
-            byKey.put(contextKey(d.getSourceType(), d.getChunkId()), d);
+            byKey.put(contextKey(d.getSourceType(), d.getTitle(), d.getChunkId()), d);
         }
         List<ScoredDocument> selected = new ArrayList<>();
         for (EvidenceItem item : evidence) {
             if (item.getScore() < CONTEXT_SCORE_FLOOR) {
                 continue;
             }
-            ScoredDocument doc = byKey.get(contextKey(item.getSourceType(), item.getChunkId()));
+            ScoredDocument doc = byKey.get(contextKey(item.getSourceType(), item.getTitle(), item.getChunkId()));
             if (doc != null) {
                 selected.add(doc);
             }
@@ -223,9 +315,14 @@ public class HybridRagAnswerService {
         return selected.isEmpty() ? retrievedDocs.stream().limit(limit).toList() : selected;
     }
 
-    /** 证据与原文档的关联键（EvidenceItem 是对外契约结构，不加内部字段） */
-    private String contextKey(String sourceType, String chunkId) {
-        return sourceType + "|" + chunkId;
+    /**
+     * 证据与原文档的关联键（EvidenceItem 是对外契约结构，不加内部字段）。
+     * 必须携带 title：各文档入库时切片号独立从 0 编起，仅 sourceType|chunkId
+     * 会让不同文件的同号切片在 map 里互相覆盖——引用标的是 B 文档，
+     * 进 prompt 的正文却被换成 A 文档，模型凭空"丢"了整份文档的内容。
+     */
+    private String contextKey(String sourceType, String title, String chunkId) {
+        return sourceType + "|" + (title == null ? "" : title) + "|" + chunkId;
     }
 
     /** 把检索文档拼成 "[n] source=..., title=..., chunk=..." 编号上下文块，供 prompt 引用。 */
@@ -258,6 +355,9 @@ public class HybridRagAnswerService {
         private String traceId;
         /** 实际注入上下文的记忆标签（type + 内容摘要） */
         private List<String> memoryUsed;
+        /** 本次检索实际生效的归一化召回路权重（vector/keyword/graph/web 固定顺序，前端轨迹条照此绘制） */
+        @Builder.Default
+        private Map<String, Double> weights = Map.of();
         /** 检索去重前后的数量统计 */
         private RetrievalStats retrievalStats;
 

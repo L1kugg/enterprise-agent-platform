@@ -30,7 +30,7 @@ class HarnessEvaluationTest {
         AgentObservation builtin = service.execute(action("query_school", Map.of(), false));
         AgentObservation invalid = service.execute(action("add_course_reservation", Map.of("course", "Java"), false));
         AgentObservation mcp = service.execute(action("mcp_call",
-                Map.of("server", "demo", "tool", "echo", "arguments", Map.of("text", "ok")), true));
+                Map.of("server", "demo", "tool", "echo", "arguments", Map.of("text", "ok")), false));
         AgentObservation workspaceDenied = service.execute(action("workspace_read_file",
                 Map.of("path", "README.md"), false));
         AgentObservation workspaceRead = service.execute(action("workspace_read_file",

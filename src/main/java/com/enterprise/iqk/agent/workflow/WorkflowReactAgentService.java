@@ -2,6 +2,7 @@ package com.enterprise.iqk.agent.workflow;
 
 import com.enterprise.iqk.agent.harness.AgentAction;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
@@ -46,6 +47,7 @@ public class WorkflowReactAgentService {
 
     private final AgentWorkflowEngine workflowEngine;
     private final AgentHarnessService agentHarnessService;
+    private final PlannerActionCatalog plannerActionCatalog;
     /** 内部推理专用客户端（无对话记忆组件），避免未设 CONVERSATION_ID 时记忆断言失败 */
     private final ChatClient agentChatClient;
     private final ModelRouter modelRouter;
@@ -262,13 +264,13 @@ public class WorkflowReactAgentService {
         String planningPrompt = """
                 你是一个教育助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
-                可选动作：query_school / query_course / add_course_reservation / rag_search / finish
+                %s
                 只返回 JSON：{"thought": "简短的中文推理", "action": "动作名", "action_input": {"key":"value"}, "answer": "仅 finish 时提供，用中文作答"}
                 用户问题：
                 %s
                 滚动上下文：
                 %s
-                已有轨迹：%s""".formatted(request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
+                已有轨迹：%s""".formatted(plannerActionCatalog.workflowActionsSection(), request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
 
         try {
             String raw = callModel("你是严格的 JSON ReAct 规划器，只输出合法 JSON，thought 与 answer 用简体中文。",
@@ -410,8 +412,7 @@ public class WorkflowReactAgentService {
             if (input == null) {
                 input = Collections.emptyMap();
             }
-            if (!List.of("query_school", "query_course", "add_course_reservation", "rag_search", "finish")
-                    .contains(action)) {
+            if (!plannerActionCatalog.isPlannerAction(action)) {
                 action = "finish";
             }
             return new ReasonDecision(node.path("thought").asText(""),

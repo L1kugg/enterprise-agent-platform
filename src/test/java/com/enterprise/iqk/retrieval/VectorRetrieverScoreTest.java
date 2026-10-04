@@ -7,6 +7,7 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -93,5 +94,27 @@ class VectorRetrieverScoreTest {
         // 词面/语义得分相同的两条，同会话一条 +0.05——会话相关性是加分项而不是硬边界
         assertThat(docs.get(0).getRetrievalScore()).isCloseTo(0.85, within(1e-9));
         assertThat(docs.get(1).getRetrievalScore()).isCloseTo(0.80, within(1e-9));
+    }
+
+    @Test
+    void thresholdOverloadPassesExplicitValueAndThreeArgDelegatesToConfig() {
+        VectorStore vectorStore = mock(VectorStore.class);
+        List<SearchRequest> captured = new ArrayList<>();
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenAnswer(invocation -> {
+            captured.add(invocation.getArgument(0));
+            return List.of();
+        });
+        VectorRetriever retriever = new VectorRetriever(vectorStore, new RagProperties(), new SimpleMeterRegistry());
+
+        // 4 参重载：显式阈值透传（无关线兜底的放宽重试传 accept-all）
+        retriever.retrieve("q", "tenant", "chat", SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL);
+        // 3 参委托：阈值取 rag.similarity-threshold 配置（默认 0.45）
+        retriever.retrieve("q", "tenant", "chat");
+
+        assertThat(captured).hasSize(2);
+        assertThat(captured.get(0).getSimilarityThreshold())
+                .isEqualTo(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL);
+        assertThat(captured.get(1).getSimilarityThreshold())
+                .isEqualTo(new RagProperties().getSimilarityThreshold());
     }
 }

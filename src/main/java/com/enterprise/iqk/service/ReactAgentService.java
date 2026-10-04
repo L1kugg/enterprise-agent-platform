@@ -2,6 +2,7 @@ package com.enterprise.iqk.service;
 
 import com.enterprise.iqk.agent.harness.AgentAction;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
@@ -34,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
 
 /**
- * ReAct 主循环服务：reason() 规划（动作白名单硬编码，不含 mcp_call）
+ * ReAct 主循环服务：reason() 规划（动作白名单与提示词动作列表由 PlannerActionCatalog 从注册表生成）
  * → executeAction() 经 AgentHarnessService 执行 → 观测滚动拼接回上下文，最多 MAX_STEPS 步。
  * finish 时优先取决策自带答案，否则 summarizeAnswer() 用轨迹汇总生成；
  * 规划调用/解析失败走 decisionParser.fallback() 规则兜底；
@@ -54,6 +55,7 @@ public class ReactAgentService {
     private final TenantCostService tenantCostService;
     private final MeterRegistry meterRegistry;
     private final ReactDecisionParser decisionParser;
+    private final PlannerActionCatalog plannerActionCatalog;
     private final ReactResponseFormatter responseFormatter;
     /** 记忆子系统：召回 short/long/fact 注入规划与成稿（读侧闭环）。 */
     private final MemoryService memoryService;
@@ -271,12 +273,7 @@ public class ReactAgentService {
                 你是一个教育助手场景的 ReAct 规划器，负责为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
                 %n
-                可选动作（只能从列表中选）：
-                - query_school
-                - query_course
-                - add_course_reservation
-                - rag_search
-                - finish
+                %s
                 %n
                 只返回 JSON，格式如下：
                 {
@@ -297,6 +294,7 @@ public class ReactAgentService {
                 %n
                 已有轨迹：
                 %s%n""".formatted(
+                plannerActionCatalog.standardActionsBlock(),
                 request.getPrompt(),
                 memoryBlock(memorySnapshot),
                 emptyIfBlank(rollingContext),

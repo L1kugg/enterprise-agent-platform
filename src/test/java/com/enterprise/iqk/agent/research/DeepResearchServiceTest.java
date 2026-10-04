@@ -7,6 +7,7 @@ import com.enterprise.iqk.agent.workflow.WorkflowState;
 import com.enterprise.iqk.memory.MemoryItemRecord;
 import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
+import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -123,7 +124,8 @@ class DeepResearchServiceTest {
     }
 
     private HybridRetrievalService.HybridRetrievalResult retrieval(List<ScoredDocument> docs) {
-        return new HybridRetrievalService.HybridRetrievalResult(docs, docs.size(), docs.size(), List.of());
+        return new HybridRetrievalService.HybridRetrievalResult(docs, docs.size(), docs.size(), List.of(),
+                HybridWeights.DEFAULT);
     }
 
     private ScoredDocument doc(String id, String sourceType, String content, double score) {

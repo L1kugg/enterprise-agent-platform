@@ -1,5 +1,7 @@
 package com.enterprise.iqk.service;
 
+import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -8,7 +10,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ReactDecisionParserTest {
-    private final ReactDecisionParser parser = new ReactDecisionParser(new ObjectMapper());
+    private final ReactDecisionParser parser = new ReactDecisionParser(
+            new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper());
 
     @Test
     void parsesAllowedActionAndInputFromModelJson() {
@@ -19,6 +22,19 @@ class ReactDecisionParserTest {
         assertThat(decision.action()).isEqualTo("rag_search");
         assertThat(decision.thought()).isEqualTo("look up documents");
         assertThat(decision.actionInput()).isEqualTo(Map.of("query", "RAG"));
+    }
+
+    @Test
+    void parsesMcpCallActionWithinWhitelist() {
+        // mcp_call 在白名单内：模型规划查天气时不被强制归为 finish
+        ReactDecisionParser.ReasonDecision decision = parser.parse("""
+                {"thought":"用户想查天气","action":"mcp_call",
+                 "action_input":{"server":"weather","tool":"get_weather","arguments":{"city":"长春"}}}
+                """);
+
+        assertThat(decision.action()).isEqualTo("mcp_call");
+        assertThat(decision.actionInput()).containsEntry("server", "weather")
+                .containsEntry("tool", "get_weather");
     }
 
     @Test

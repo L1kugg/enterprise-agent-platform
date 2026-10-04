@@ -1,8 +1,10 @@
 package com.enterprise.iqk.agent.workflow;
 
+import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
 import com.enterprise.iqk.agent.harness.AgentAction;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.agent.harness.AgentObservation;
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
@@ -71,7 +73,8 @@ class WorkflowReactAgentServiceStreamTest {
         when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false,
                         "profile_match", "", "", null));
-        service = new WorkflowReactAgentService(workflowEngine, harness, chatClient,
+        service = new WorkflowReactAgentService(workflowEngine, harness,
+                new PlannerActionCatalog(new ActionSchemaRegistry()), chatClient,
                 modelRouter, mock(TenantCostService.class), new ObjectMapper(), new SimpleMeterRegistry());
     }
 

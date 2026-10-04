@@ -1,5 +1,6 @@
 package com.enterprise.iqk.service;
 
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,10 +22,8 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class ReactDecisionParser {
-    /** 动作白名单（硬编码，不含 mcp_call），白名单外动作强制归为 finish */
-    private static final List<String> ALLOWED_ACTIONS = List.of(
-            "query_school", "query_course", "add_course_reservation", "rag_search", "finish"
-    );
+    /** 动作白名单由 PlannerActionCatalog 从动作注册表生成，白名单外动作强制归为 finish */
+    private final PlannerActionCatalog plannerActionCatalog;
 
     private final ObjectMapper objectMapper;
 
@@ -37,7 +36,7 @@ public class ReactDecisionParser {
         try {
             JsonNode node = objectMapper.readTree(json);
             String action = normalizeAction(node.path("action").asText("finish"));
-            if (!ALLOWED_ACTIONS.contains(action)) {
+            if (!plannerActionCatalog.isPlannerAction(action)) {
                 action = "finish";
             }
             Map<String, Object> actionInput = objectMapper.convertValue(

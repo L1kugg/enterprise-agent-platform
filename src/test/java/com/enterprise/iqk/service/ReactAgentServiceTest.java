@@ -1,6 +1,8 @@
 package com.enterprise.iqk.service;
 
+import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
+import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
@@ -34,7 +36,8 @@ class ReactAgentServiceTest {
                 mock(ModelRouter.class),
                 mock(TenantCostService.class),
                 mock(MeterRegistry.class),
-                new ReactDecisionParser(new ObjectMapper()),
+                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper()),
+                new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 mock(MemoryService.class),
                 mock(ChatTurnMemoryRecorder.class)
@@ -67,7 +70,8 @@ class ReactAgentServiceTest {
                 modelRouter,
                 mock(TenantCostService.class),
                 mock(MeterRegistry.class),
-                new ReactDecisionParser(new ObjectMapper()),
+                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper()),
+                new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 mock(MemoryService.class),
                 mock(ChatTurnMemoryRecorder.class)
@@ -109,7 +113,8 @@ class ReactAgentServiceTest {
                 modelRouter,
                 mock(TenantCostService.class),
                 mock(MeterRegistry.class),
-                new ReactDecisionParser(new ObjectMapper()),
+                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper()),
+                new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 memoryService,
                 recorder
@@ -121,12 +126,14 @@ class ReactAgentServiceTest {
 
         var response = service.chat(request);
 
-        // 记忆进入 planner 的提示词（读侧闭环）
+        // 记忆进入 planner 的提示词（读侧闭环）；动作列表由 PlannerActionCatalog 从注册表生成
         ArgumentCaptor<String> plannerPrompt = ArgumentCaptor.forClass(String.class);
         verify(requestSpec).user(plannerPrompt.capture());
         assertThat(plannerPrompt.getValue())
                 .contains("已知记忆")
-                .contains("用户是 Java 后端开发者");
+                .contains("用户是 Java 后端开发者")
+                .contains("可选动作（只能从列表中选）")
+                .contains("- mcp_call（查询外部工具；当前提供天气查询");
         // memoryUsed 上报实际注入的记忆
         assertThat(response.getMemoryUsed()).contains("long: 画像: 用户是 Java 后端开发者");
         // 成稿写回 short 记忆（写侧闭环）：user 键（匿名回落 chatId）+ 用户原始问题与最终答案
@@ -157,7 +164,8 @@ class ReactAgentServiceTest {
                 modelRouter,
                 mock(TenantCostService.class),
                 mock(MeterRegistry.class),
-                new ReactDecisionParser(new ObjectMapper()),
+                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper()),
+                new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 memoryService,
                 mock(ChatTurnMemoryRecorder.class)

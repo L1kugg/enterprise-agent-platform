@@ -41,16 +41,37 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `AgentHarnessService.java` | 动作执行入口 `execute(AgentAction)`：校验 schema → 策略守卫 → 分发 runtime → 记录观测 |
 | `ActionPolicyGuard.java` / `ActionPolicyDecision.java` | 调用前策略判定（允许/拒绝/需受信确认） |
 | `TrustedActionService.java` | 受信动作：高危操作（如写库）先出预览，确认后执行，token 清理 |
-| `BuiltinToolRuntime.java` | 内置动作执行：query_school/query_course/add_course_reservation/rag_search（rag_search 内部调 `rag/RagAnswerService`） |
+| `BuiltinToolRuntime.java` | 内置动作执行：query_school/query_course/add_course_reservation/rag_search（rag_search 内部调 `rag/HybridRagAnswerService` 四路混合，citations 映射回 `source=..., chunk=...` 文本、载荷键 query/answer/citations/evidence/weights 与旧单路一致） |
 | `WorkspaceRuntime.java` | 工作区动作：文件读写/搜索/受限 shell，mvn/git/ripgrep 白名单，文件大小与搜索结果截断 |
-| `McpToolAdapter.java` / `HttpMcpToolAdapter.java` / `McpToolRuntime.java` | MCP 出站桥接：手拼 JSON-RPC 2.0 `tools/call`，JDK HttpClient 直连；SSRF 防护（拒绝 RFC1918/回环/云元数据地址 + allowedHosts 白名单）、响应体 2 MiB 上限 |
+| `McpToolAdapter.java` / `HttpMcpToolAdapter.java` / `McpToolRuntime.java` | MCP 出站桥接：手拼 JSON-RPC 2.0 `tools/call`，JDK HttpClient 直连；SSRF 防护（拒绝 RFC1918/回环/云元数据地址 + allowedHosts 白名单）、响应体 2 MiB 上限、瞬时故障退避重试（重试不过模型、不烧 token）。已接首个真实工具：天气（详见下方"MCP 工具调用全链路"） |
 | `HarnessPayloadSanitizer.java` | 观测载荷消毒裁剪（防工具返回值撑爆上下文） |
 | `HarnessEventRecorder.java` / `AgentObservation.java` | 执行留痕与观测结构 |
 | `UnifiedDiffService.java` | 结构化 diff 输出（受信动作预览用） |
 
-**调用链**：`ReactAgentService.executeAction()`（`service/ReactAgentService.java:280-294`）→ `AgentHarnessService.execute()` → 策略守卫 → 按 schema 分发到对应 Runtime → `AgentObservation` 回填 ReAct 轨迹。
+**调用链**：`ReactAgentService.executeAction()`（`service/ReactAgentService.java:319`）→ `AgentHarnessService.execute()` → 策略守卫 → 按 schema 分发到对应 Runtime → `AgentObservation` 回填 ReAct 轨迹。
 
-**已知边界**：ReAct planner 动作白名单硬编码 5 个动作，不含 mcp_call（harness 层就绪、编排层未开放）。
+### MCP 工具调用全链路（当前工具：天气查询）
+
+**出站方向**：主应用 → 翻译壳容器 → Open-Meteo（免费天气 API，无需钥匙）。壳是独立单文件 Python 服务（仅标准库），按本项目的 JSON-RPC 桥接形状收发 `tools/call`——自研简版桥，不握手、不列工具，接新工具需按此形状写壳。
+
+| 环节 | 代码位置 |
+|---|---|
+| ① 规划提示词（教模型何时调、参数怎么填） | 由 `agent/harness/PlannerActionCatalog` 从动作注册表生成：standard 引擎取整段 bullet 列表（`standardActionsBlock`）、workflow 引擎取 slash 行 + hint 说明行（`workflowActionsSection`）；带 `plannerHint` 的动作（mcp_call）自动附用法 `{"server":"weather","tool":"get_weather","arguments":{"city":"城市中文名"}}`，无 hint 只出裸动作名 |
+| ② 决策解析白名单 | `agent/harness/PlannerActionCatalog.isPlannerAction()`：两引擎共用同一名单，从注册表派生（trustedOnly=false 的动作 + finish，与策略守卫"聊天循环只能执行非受信动作"口径一致）——白名单外动作强制归 finish |
+| ③ schema 注册（mcp_call 非 trustedOnly） | `agent/harness/ActionSchemaRegistry.java`：required=server/tool/arguments、riskLevel=external、trustedOnly=false、plannerHint=天气用法（①②均由本表单一来源生成，受信边界见下） |
+| ④ 统一入口 + 策略守卫 | `agent/harness/AgentHarnessService.execute()` → `ActionPolicyGuard.evaluate()`（六道检验：schema 存在 / disabled-actions 熔断 / 租户动作白名单 / 受信要求 / 必填字段 / schema 外未知字段） |
+| ⑤ 运行时分发 | `agent/harness/McpToolRuntime.execute()`：从 actionInput 取 server/tool/arguments → 按 supports(server,tool) 选适配器 → 壳返回 status=error 即转错误观测，成功包成 `{"server","tool","result"}` 观测 |
+| ⑥ HTTP 桥接 | `agent/harness/HttpMcpToolAdapter.execute()`：组 JSON-RPC `tools/call` → SSRF 复检（`isSafeBaseUrl`，拼 URI 前后再查一次）→ 按工具超时请求（瞬时故障本层线性退避重试）→ 2 MiB 上限 → 解析回执 |
+| ⑦ 翻译壳（部署物） | `mcp-weather/mcp_weather.py`：`POST /mcp/tools/call` → Open-Meteo geocode（城市名→经纬度，中文可查）+ forecast（实况 + 当日温度/天气码中文化）→ 含 summary 的中文摘要；查无城市/上游故障回 `{"status":"error","message":...}`（HTTP 恒 200，避免被当网络故障重试）。`deploy/docker-compose.prod.yml` 的 `mcp-weather` 服务（python:3.12-slim，端口 127.0.0.1:9101 仅回环，脚本卷挂载免自定义镜像） |
+| ⑧ 配置 | `application.yml` `app.agent-harness.mcp.servers.weather`：base-url 指容器名 `http://mcp-weather:9101`（本地无此容器时 supports() 判未注册、不影响其它功能）+ `allowed-hosts` 放行容器名（否则 SSRF 护栏拒一切私有地址）+ 工具超时 8s（覆盖壳内 geocode+forecast 串行） |
+
+**完整调用链**：用户问天气 → 规划器输出 mcp_call JSON → ② 白名单放行 → ④ 守卫放行 → ⑤ McpToolRuntime 选适配器 → ⑥ HttpMcpToolAdapter 发 JSON-RPC → ⑦ 壳查 Open-Meteo → 观测回填 ReAct 轨迹 → 模型 finish 作答。standard 与 workflow 两条 ReAct 引擎均可用。
+
+**受信边界**：mcp_call 与 workspace 写/壳动作不同——只读外部查询，风险由 SSRF 校验、allowed-hosts、2 MiB 上限、按工具超时兜底，故 trustedOnly=false、聊天循环直接调用；`TrustedActionService` 的 preview/execute 两段式流程依旧只收 trustedOnly 动作（对 mcp_call 报 "action does not require trusted runtime"，属设计使然）。运维熔断开关：`app.agent-harness.disabled-actions`、租户动作白名单。
+
+**测试**：`agent/harness/HttpMcpToolAdapterTest`（SSRF/重试/上限）、`McpToolRuntimeTest`（分发与错误转换）、`ActionPolicyGuardTest`（mcp_call 无受信标记可调）、`HarnessEvaluationTest`（harness 全链）、`service/ReactDecisionParserTest`（mcp_call 解析放行）、`PlannerActionCatalogTest`（注册表 → 提示词/白名单生成）。
+
+**新增动作只登记一处**：在 `ActionSchemaRegistry` 注册（必填/可选/敏感字段 + riskLevel + trustedOnly + plannerHint）后，①提示词与②白名单自动跟上；执行侧仍按工具逐个实现（builtin 加 `BuiltinToolRuntime` 分支、mcp 加 `application.yml` servers 配置 + 翻译壳、workspace 加 `WorkspaceRuntime` 分支）。
 
 ---
 
@@ -58,13 +79,15 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 **职责**：四路并行召回 → 加权融合 → 去重 → 证据判分 → 引用构建；另有文档入库（PDF/Word/Markdown）与知识图谱两路数据供给。
 
+**链路分工（重要）**：主聊天两条 ReAct 引擎的 `rag_search` 与评测共用 `rag/HybridRagAnswerService`（**四路混合 + 证据判分 + 无关线兜底**：全路原始分低于 `rag.fallback-score-floor` 时向量放宽阈值重试一次，仍无过线文档则不调模型返回固定话术）；`rag/RagAnswerService`（向量单路 + 放宽阈值兜底）只剩 PDF 文档问答 `/ai/pdf/chat`；深度研究仍直用 `HybridRetrievalService`。前端轨迹的「检索召回路」色条按观测载荷 `weights` 实况绘制：四路链路回归一化后的配置权重（vector/keyword/graph/web 固定顺序），无 `weights` 的旧消息不画条。
+
 ### 混合检索（`retrieval/`）
 
 | 类 | 职责 |
 |---|---|
-| `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，`app.retrieval.pool-size` 默认 16，**须 ≤ DB 连接池 `DB_POOL_MAX_SIZE` 默认 20**——三路直连数据库）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路**超时从任务真正开始执行起算**（排队不占预算，高并发排队不再集体假超时），到点中断运行线程**真取消**；队列有界（`app.retrieval.queue-capacity` 默认 64），池/队列打满提交被拒 → 立即降级并记 `saturated`；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout/saturated}` + 排队时长 `retrieval.queue.wait{source}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued）；web 路禁用（`app.web-search.enabled=false`）时短路不提交任务、不占槽；worker `catch (Exception)` 保证停机中断也完成 promise（join 不永挂） |
-| `HybridWeights.java` | 权重配置：DEFAULT 0.40/0.25/0.20/0.15（向量/关键词/图谱/网络），预置 SEMANTIC/KEYWORD/BALANCED 档位，`normalize()` 归一化 |
-| `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；向量/关键词路均为租户级过滤 + 会话软作用域（chat_id 不硬过滤，同会话命中 +0.05 有界加分）；keyword 路在向量候选池（阈值 0、池 max(topK×4,40)）上做 CJK 2-gram 词法重排；web 默认关闭（`app.web-search.enabled`） |
+| `HybridRetrievalService.java` | 核心：`retrieve()` 四路并行（CompletableFuture + 专用线程池，`app.retrieval.pool-size` 默认 16，**须 ≤ DB 连接池 `DB_POOL_MAX_SIZE` 默认 20**——三路直连数据库）→ `applyWeight()` 加权（finalScore = retrievalScore × 权重，权重来自 `app.retrieval.weights.vector/keyword/graph/web` 配置、默认 0.40/0.25/0.20/0.15，**结果回带归一化后的实际权重**）→ `deduplicate()` 去重（内容前 200 字符规范化指纹，同指纹保留分高者）→ 按 finalScore 排序取 topK；单路**超时从任务真正开始执行起算**（排队不占预算，高并发排队不再集体假超时），到点中断运行线程**真取消**；队列有界（`app.retrieval.queue-capacity` 默认 64），池/队列打满提交被拒 → 立即降级并记 `saturated`；按路计数 `retrieval.source.requests{source,outcome=success/error/timeout/saturated}` + 排队时长 `retrieval.queue.wait{source}`，结果携带 `degradedSources`、整体 outcome 标 `degraded`/`degraded-empty`（局部故障不伪装成"知识库为空"），池活跃/队列数 gauge（retrieval.pool.active/queued）；web 路禁用（`app.web-search.enabled=false`）时短路不提交任务、不占槽；worker `catch (Exception)` 保证停机中断也完成 promise（join 不永挂） |
+| `HybridWeights.java` | 权重值对象：默认档 DEFAULT（与 application.yml 默认一致）、预置 SEMANTIC/KEYWORD/BALANCED 档位，`normalize()` 归一化；运行时默认权重以 `app.retrieval.weights.*` 配置为准 |
+| `VectorRetriever.java` / `KeywordRetriever.java` / `GraphRetriever.java` / `WebRetriever.java` | 四路各自实现；向量/关键词路均为租户级过滤 + 会话软作用域（chat_id 不硬过滤，同会话命中 +0.05 有界加分）；向量路支持显式阈值重载（`HybridRagAnswerService` 无关线兜底放宽重试用 accept-all 走它）；keyword 路在向量候选池（阈值 0、池 max(topK×4,40)）上做 CJK 2-gram 词法重排；web 默认关闭（`app.web-search.enabled`） |
 | `ChatScope.java` | 会话软作用域：租户共享知识库，chat_id 只作有界加分不作硬边界（防跨会话割裂与临时 chatId 必空） |
 | `LexicalMatcher.java` | 词面匹配共用工具：CJK 感知切词（中文段 2-gram、拉丁段整token）+ 查询召回分（分母=查询 token 数），keyword 路/线上重排/证据判分三处共用 |
 | `RetrievalPreviewService.java` + `RetrievalPreviewItem/Result` | 知识库「试搜」：只走向量/关键词/图谱三条本地路返回原始命中（不调 LLM、不出答案），单路失败降级并记 `degradedSources` + `log.warn` 留痕，供 `GET /ingestion/search` |
@@ -84,7 +107,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `ingestion/DocumentGraphBackfillService.java` | 存量文档补图谱：重解析磁盘文档重建该 chat 的实体/关系/事实，`POST /ingestion/documents/{chatId}/graph/build` 触发 |
 | `config/VectorStoreConfiguration.java` | pgvector VectorStore 装配（`OpenAiEmbeddingModel`） |
 
-**调用链**：`HybridRagAnswerService.answer()` 第 1 步（`rag/HybridRagAnswerService.java:61`）→ `HybridRetrievalService.retrieve()` → 第 2 步证据判分（:78）→ 第 3 步引用（:86）。
+**调用链**：`HybridRagAnswerService.answer()` 第 1 步四路检索（`rag/HybridRagAnswerService.java:79`）→ 第 1.5 步无关线兜底（:99-119；全低于线时向量放宽重试 `relaxedVectorRetry()` :221）→ 第 2 步证据判分（:122）→ 第 3 步引用（:130）。
 
 ---
 
@@ -116,7 +139,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 |---|---|
 | `controller/ChatController.java` | `trackedChatStream` 的 `doFinally`（ON_COMPLETE）→ `ChatTurnMemoryRecorder.recordTurn` + `MemoryExtractionService.submitAsync`；生成调用带 `memory.tenantId`/`memory.userId` advisor 参数（user 键 = 认证主体，匿名回落 chatId），记忆由 MemoryInjectionAdvisor 注入 |
 | `agent/workflow/AgentWorkflowEngine.java` | `completeTask`（finalStatus==DONE）→ `TaskConclusionMemoryRecorder.recordConclusion`；FAILED 不写 |
-| `rag/HybridRagAnswerService.java` | Step 2.5 事实沉淀（:83）+ Step 4.5 召回注入（:93-97）；`recallMemory()` 失败降级 null（:150-157） |
+| `rag/HybridRagAnswerService.java` | Step 2.5 事实沉淀（:127）+ Step 4.5 召回注入（:139-143）；`recallMemory()` 失败降级 null（:255-262） |
 
 **API**：`controller/MemoryController.java` — `GET /ai/memory/query`（聚合查询）、`GET /ai/memory/{id}/events`（事件链，租户隔离）、`POST /ai/memory/save`（手动写入）。
 
@@ -168,7 +191,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 
 | 主题 | 代码位置 |
 |---|---|
-| 生成 prompt 三段式拼装 | `rag/HybridRagAnswerService.java:109`：`"用户问题:%n%s%n%n上下文:%n%s%s%s%n"`（问题 → 检索证据 → 记忆段）；`buildContext()`（:176）证据 `[n] source=... chunk=...` 格式化 |
+| 生成 prompt 三段式拼装 | `rag/HybridRagAnswerService.java:155`：`"用户问题:%n%s%n%n上下文:%n%s%s%n"`（问题 → 检索证据 → 记忆段）；`buildContext()`（:329）证据 `[n] source=... chunk=...` 格式化 |
 | 记忆注入 | 两种方式：**advisor 注入**（`memory/MemoryInjectionAdvisor`，chat/客服/PDF RAG/工作流 ReAct 四链路 —— SystemMessage 首插不落 ChatMemory、不逐轮累积）与**手工拼段**（评测 HybridRagAnswerService / react ReactAgentService —— 无 ChatMemory 的链路拼 user prompt 无重放问题）。user 键 = `security/UserContext.currentUserId(fallback)` 认证主体（匿名回落 chatId），画像跨会话可召回；注入预算：short 5 / long 10 / fact 5 条 |
 | System prompt | `constants/SystemConstants.java`：CUSTOMER_SERVICE_SYSTEM（客服小星）、RAG_ANSWER_SYSTEM、HYBRID_RAG_ANSWER_SYSTEM |
 | 会话内记忆 | `config/MysqlChatMemory.java` + `repository/`（ChatHistoryRepository 的 InMemory/Mysql 实现）+ `util/ConversationIdHelper`（会话 ID 派生：prefix+chatId） |
@@ -177,9 +200,9 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 隔离 | tenant_id 贯穿检索与记忆（`security/TenantContext`）；画像提取独立会话 ID（memory-extract:{chatId}）防上下文角色互串 |
 | 衰减 | short 24h / task 30d TTL + `cleanExpiredMemories()`（每天 3 点）；EXPIRE/USE 事件留痕 |
 | Token 记账 | `service/TenantCostService.java`：`estimateTokens/assertBudget/recordUsage`；模型分档 `llm/ModelRouter.java`（economy/balanced，按场景路由） |
-| 使用审计 | `HybridRagResult.memoryUsed`（实际注入的记忆标签，:160-174） |
+| 使用审计 | `HybridRagResult.memoryUsed`（实际注入的记忆标签，`memoryUsedLabels()` :265 组装、字段 :357）；用量记账端点 `rag_hybrid`（:162，聊天 RAG 与评测共用，PDF 问答仍记 `rag`） |
 
-**已知瑕疵**：token 估算未把 memorySection 计入（`HybridRagAnswerService.java:102`），记账略低估。
+**已知瑕疵**：token 估算未把 memorySection 计入（`HybridRagAnswerService.java:148`），记账略低估。
 
 ---
 
@@ -215,7 +238,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `service/AnswerFeedbackService.java` | 答案反馈采集，追加写 `evaluation/feedback_dataset.jsonl`（数据集轮转） |
 | `controller/FeedbackController.java` + `domain/AnswerFeedback*` | 反馈提交接口与模型 |
 
-### 测试清单（63 个文件、251 个测试，全 mock 无外部依赖）
+### 测试清单（69 个文件、295 个测试，全 mock 无外部依赖）
 
 | 包 | 测试类 | 覆盖点 |
 |---|---|---|
@@ -223,7 +246,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `agent/workflow/`（4 个） | AgentWorkflowEngineTenantIsolationTest、WorkflowReactAgentServiceStreamTest、WorkflowTaskReclaimerTest、WorkflowTaskStartupSweeperTest | 引擎租户隔离 + DONE 才写任务记忆；SSE 流式；孤儿任务回收；启动清扫（守卫输家不计数、故障不阻断启动） |
 | `agent/research/`（1 个） | DeepResearchServiceTest | 剧本状态迁移与失败重抛；异步受理形状、后台在受理 taskId 名下跑完（防重复落库回归）、队列满拒绝、shutdown 幂等 |
 | `memory/`（6 个） | MemoryServiceTenantIsolationTest、MemoryInjectionAdvisorTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离；advisor 注入契约（system 首插/user 原文不动/未传参透传/召回失败降级） |
-| `rag/`（4 个） | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、RagAnswerServiceRerankTest、RagAnswerServiceRetrieveFallbackTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；重排分母 + 会话加成；检索异常兜底 |
+| `rag/`（5 个） | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、HybridRagAnswerServiceIrrelevanceTest、RagAnswerServiceRerankTest、RagAnswerServiceRetrieveFallbackTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；无关线兜底闭环（全低于线不调模型回固定话术 / 放宽重试捞回走全管线且补向量权重 / 重试故障降级不炸 / 重试仍低线拒答）；重排分母 + 会话加成；检索异常兜底 |
 | `retrieval/`（9 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest、KeywordRetrieverTest、GraphRetrieverTest、EvidenceJudgeServiceTest、LexicalMatcherTest、ChatScopeTest、RetrievalPreviewServiceTest | 加权融合、去重计数、分数下限、租户级过滤断言；真取消超时与按路计数（error/timeout 断言轮询等落表）、排队不烧超时预算、队列满 saturated、web 禁用短路、停机中断兜底完成 promise、排队时长指标；中文 bigram 命中、长文档不稀释、会话加成；时效度激活；切词/召回分契约；软作用域加成封顶；图谱路与试搜降级 |
 | `ingestion/`（3 个） | IngestionServiceTest、IngestionServiceGraphHookTest、DocumentGraphBackfillServiceTest | 入库解析/文档删除级联；图谱抽取钩子与存量回填 |
 | `service/`（4 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest、TenantCostServiceTrendTest | ReAct 决策解析与格式化；用量趋势缺天补零 |
@@ -234,7 +257,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `config/`（4 个） | FlywayMigrationVersionTest、MysqlChatMemoryTest、ProdProfileConfigTest、SecurityDefaultsTest | 迁移版本、配置安全默认值 |
 | 其他 | ModelRouterTest、HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
 
-**运行**：`mvn test`（当前基线 274 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
+**运行**：`mvn test`（当前基线 292 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
 
 ---
 
@@ -245,6 +268,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `POST /ai/pdf/chat` | PdfController → RagAnswerService（向量检索 + 本地重排 + 引用） |
 | 评测 API | EvaluationController → EvaluationService → HybridRagAnswerService（四路混合 + 证据判分 + 记忆注入 + 引用） |
 | React SSE | ReactController → ReactAgentService（reason/execute/summarize 循环）→ AgentHarnessService → 各 Runtime |
+| MCP 天气查询 | React/WorkflowController → ReactAgentService / WorkflowReactAgentService（规划器选 mcp_call，白名单放行）→ AgentHarnessService → McpToolRuntime → HttpMcpToolAdapter（JSON-RPC over HTTP）→ mcp-weather 壳容器 → Open-Meteo |
 | 深度研究 | DeepResearchController → DeepResearchService.createResearch（异步受理 202）→ researchExecutor 后台池 → executeResearch（剧本）→ AgentWorkflowEngine（状态机落库）→ Planner/Writer Agent；前端按 taskId 轮询 GET /tasks/{id}，DONE 后 GET /tasks/{id}/report |
 | 记忆管理 | MemoryController → MemoryService（按 userId 查询/任务结论查询 /task/{taskId}/事件链/写入） |
 | 文档入库 | IngestionController → IngestionService → 队列（RabbitMQ/Redis Stream/DB 轮询）→ IngestionWorker |

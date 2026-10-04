@@ -45,6 +45,6 @@ public interface SystemConstants {
     /** 简单版 RAG（RagAnswerService）系统提示词：仅依据上下文作答并附引用编号 */
     String RAG_ANSWER_SYSTEM = "你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。";
 
-    /** 混合 RAG（HybridRagAnswerService，评测链路）系统提示词：企业级问答，同样仅依据上下文作答 */
+    /** 混合 RAG（HybridRagAnswerService，主聊天 rag_search 与评测链路）系统提示词：企业级问答，同样仅依据上下文作答 */
     String HYBRID_RAG_ANSWER_SYSTEM = "你是一个企业级RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。";
 }

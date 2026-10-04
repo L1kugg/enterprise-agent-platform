@@ -28,11 +28,18 @@ public class VectorRetriever {
     private final RagProperties ragProperties;
     private final MeterRegistry meterRegistry;
 
+    /** 按配置阈值（rag.similarity-threshold）检索；四路混合检索的常规入口。 */
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId) {
+        return retrieve(query, tenantId, chatId, ragProperties.getSimilarityThreshold());
+    }
+
     /**
-     * 向量相似度检索并映射为 ScoredDocument（docId 形如 vec-0，sourceType=vector）。
+     * 向量相似度检索并映射为 ScoredDocument（docId 形如 vec-0，sourceType=vector），
+     * 相似度阈值由调用方显式给定——HybridRagAnswerService 的无关线兜底用
+     * SIMILARITY_THRESHOLD_ACCEPT_ALL 放宽重试就走这个重载。
      * 记录延迟指标；异常不在此捕获、直接上抛，由 HybridRetrievalService 统一降级为空结果。
      */
-    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId) {
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, double similarityThreshold) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
@@ -40,7 +47,7 @@ public class VectorRetriever {
             SearchRequest request = SearchRequest.builder()
                     .query(query)
                     .topK(ragProperties.getRetrieveTopK())
-                    .similarityThreshold(ragProperties.getSimilarityThreshold())
+                    .similarityThreshold(similarityThreshold)
                     .filterExpression(filter)
                     .build();
             List<Document> docs = vectorStore.similaritySearch(request);

@@ -8,7 +8,9 @@ import com.enterprise.iqk.retrieval.CitationService;
 import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.retrieval.EvidenceJudgeService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
+import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
+import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -60,7 +62,7 @@ class HybridRagAnswerServiceJudgingTest {
                 .retrievalScore(0.5).metadata(Map.of()).build();
         when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
                 .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
-                        List.of(docA, docB), 2, 2, List.of()));
+                        List.of(docA, docB), 2, 2, List.of(), HybridWeights.DEFAULT));
         when(evidenceJudgeService.judge(any(), anyString())).thenReturn(judgedEvidence);
         when(citationService.buildCitations(any())).thenReturn(List.of());
         when(citationService.formatCitationFooter(any())).thenReturn("");
@@ -70,6 +72,8 @@ class HybridRagAnswerServiceJudgingTest {
         when(ragProperties.getRetrieveTopK()).thenReturn(5);
         when(ragProperties.getRerankTopK()).thenReturn(6);
         when(ragProperties.getTemperature()).thenReturn(0.7);
+        // 无关线兜底：不桩则为 0.0，门槛静默失效——必须与生产语义一致
+        when(ragProperties.getFallbackScoreFloor()).thenReturn(0.30);
 
         ChatClient chatClient = mock(ChatClient.class);
         requestSpec = mock(ChatClient.ChatClientRequestSpec.class, RETURNS_SELF);
@@ -78,8 +82,8 @@ class HybridRagAnswerServiceJudgingTest {
         when(requestSpec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn("答案");
 
-        service = new HybridRagAnswerService(retrievalService, evidenceJudgeService,
-                citationService, chatClient, modelRouter, ragProperties,
+        service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
+                evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
                 mock(RagFactMemoryRecorder.class), mock(MemoryService.class));
     }
@@ -137,5 +141,67 @@ class HybridRagAnswerServiceJudgingTest {
         verify(requestSpec).user(userPrompt.capture());
         assertThat(userPrompt.getValue()).contains("甲文档内容").contains("乙文档内容");
         assertThat(result.getRetrievalStats().getFinalCount()).isEqualTo(2);
+    }
+
+    @Test
+    void sameChunkIdAcrossFilesMustNotCollapseOntoOneDocument() {
+        // 回归：各文档切片号独立从 0 编起，两份文件的同号切片此前在
+        // sourceType|chunkId 关联键上互相覆盖——引用标的是 B 文档，
+        // 进 prompt 的正文却被换成 A 文档（多文档评测 0.875 分的根因）。
+        HybridRetrievalService retrievalService = mock(HybridRetrievalService.class);
+        EvidenceJudgeService evidenceJudgeService = mock(EvidenceJudgeService.class);
+        CitationService citationService = mock(CitationService.class);
+        ModelRouter modelRouter = mock(ModelRouter.class);
+        TenantCostService tenantCostService = mock(TenantCostService.class);
+        RagProperties ragProperties = mock(RagProperties.class);
+
+        ScoredDocument consumerDoc = ScoredDocument.builder()
+                .docId("doc-b").sourceType("vector").title("消费级调研.md")
+                .chunkId("chunk-0").content("消费级正文：青藤阅读助手幻觉率7.3%")
+                .retrievalScore(0.9).metadata(Map.of()).build();
+        ScoredDocument enterpriseDoc = ScoredDocument.builder()
+                .docId("doc-a").sourceType("vector").title("企业选型.md")
+                .chunkId("chunk-0").content("企业级正文：Keystone幻觉率6.5%")
+                .retrievalScore(0.8).metadata(Map.of()).build();
+        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
+                        List.of(consumerDoc, enterpriseDoc), 2, 2, List.of(), HybridWeights.DEFAULT));
+        // 判分把消费级排前、企业级排后——两份都必须按各自的正文进上下文
+        when(evidenceJudgeService.judge(any(), anyString())).thenReturn(List.of(
+                EvidenceItem.builder().sourceType("vector").title("消费级调研.md")
+                        .chunkId("chunk-0").score(0.85).snippet("摘要").build(),
+                EvidenceItem.builder().sourceType("vector").title("企业选型.md")
+                        .chunkId("chunk-0").score(0.70).snippet("摘要").build()));
+        when(citationService.buildCitations(any())).thenReturn(List.of());
+        when(citationService.formatCitationFooter(any())).thenReturn("");
+        when(modelRouter.resolve(nullable(String.class), anyString(), anyString(), anyString()))
+                .thenReturn(DECISION);
+        when(tenantCostService.estimateTokens(anyString())).thenReturn(10L);
+        when(ragProperties.getRetrieveTopK()).thenReturn(5);
+        when(ragProperties.getRerankTopK()).thenReturn(6);
+        when(ragProperties.getTemperature()).thenReturn(0.7);
+        when(ragProperties.getFallbackScoreFloor()).thenReturn(0.30);
+
+        ChatClient chatClient = mock(ChatClient.class);
+        ChatClient.ChatClientRequestSpec spec = mock(ChatClient.ChatClientRequestSpec.class, RETURNS_SELF);
+        ChatClient.CallResponseSpec callSpec = mock(ChatClient.CallResponseSpec.class);
+        when(chatClient.prompt()).thenReturn(spec);
+        when(spec.call()).thenReturn(callSpec);
+        when(callSpec.content()).thenReturn("答案");
+
+        HybridRagAnswerService multiDocService = new HybridRagAnswerService(retrievalService,
+                mock(VectorRetriever.class), evidenceJudgeService, citationService, chatClient,
+                modelRouter, ragProperties, new SimpleMeterRegistry(), tenantCostService,
+                mock(RagFactMemoryRecorder.class), mock(MemoryService.class));
+
+        multiDocService.answer("两份报告各测得多少", "tenant-1", "chat-1", "conv-1", null);
+
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        verify(spec).user(userPrompt.capture());
+        String prompt = userPrompt.getValue();
+        // 两份文档的正文各自出现、互不顶替，且消费级（判分胜者）在前
+        assertThat(prompt).contains("消费级正文：青藤阅读助手幻觉率7.3%");
+        assertThat(prompt).contains("企业级正文：Keystone幻觉率6.5%");
+        assertThat(prompt.indexOf("消费级正文")).isLessThan(prompt.indexOf("企业级正文"));
     }
 }

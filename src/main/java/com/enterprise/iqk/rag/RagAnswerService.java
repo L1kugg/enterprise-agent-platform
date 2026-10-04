@@ -24,13 +24,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 /**
- * 简单版 RAG 问答链路：向量检索（租户过滤，会话软作用域，空结果放宽阈值重试一次）
+ * 简单版 RAG 问答链路：向量检索（租户过滤，会话软作用域，空结果放宽阈值重试一次，
+ * 兜底捞回按绝对相似度剔除完全无关结果）
  * → 本地词面重排 → 引用化生成。
  * 既是用户可见 /ai/pdf/chat 的后端，也被 BuiltinToolRuntime 的 rag_search 动作复用；
  * 兜底重试仍为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
@@ -46,6 +48,9 @@ public class RagAnswerService {
     private final RagProperties ragProperties;
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
+
+    /** 本链路为向量单路检索：权重固定 {vector:1.0}，随结果回传供前端轨迹条如实绘制 */
+    private static final Map<String, Double> VECTOR_ONLY_WEIGHTS = Map.of("vector", 1.0);
 
     /** 执行完整问答：检索为空返回固定话术，否则重排选优、预算断言后生成并追加引用脚注。 */
     public RagResult answer(String prompt, String tenantId, String chatId, String conversationId, String modelProfile) {
@@ -73,6 +78,7 @@ public class RagAnswerService {
                         .answer("没有在当前知识库中检索到可用内容。")
                         .citations(List.of())
                         .evidence(List.of("未检索到匹配文档，请先上传资料或调整检索词。"))
+                        .weights(VECTOR_ONLY_WEIGHTS)
                         .build();
             }
 
@@ -114,6 +120,7 @@ public class RagAnswerService {
                     .answer(answerWithFooter)
                     .citations(citations)
                     .evidence(evidence)
+                    .weights(VECTOR_ONLY_WEIGHTS)
                     .build();
         } finally {
             pipelineSample.stop(Timer.builder("rag.pipeline.latency")
@@ -130,7 +137,8 @@ public class RagAnswerService {
     }
 
     /**
-     * 相似度检索 + 空结果兜底：先按配置阈值检索；为空则放宽阈值按最近邻重试一次。
+     * 相似度检索 + 空结果兜底：先按配置阈值检索；为空则放宽阈值按最近邻重试一次，
+     * 兜底捞回的结果再按绝对相似度剔除完全无关的（见 {@link #dropCompletelyIrrelevant}）。
      * 泛问（如"这份文档讲了什么"）与具体切片的向量相似度天然偏低，严格阈值下会被
      * 全部刷掉导致"明明有文档却检索为空"；放宽后捞回的仍是过滤范围内的最相似切片。
      */
@@ -144,12 +152,61 @@ public class RagAnswerService {
         if (retrieved != null && !retrieved.isEmpty()) {
             return retrieved;
         }
-        return similaritySearchWithMetrics(SearchRequest.builder()
+        List<Document> relaxed = similaritySearchWithMetrics(SearchRequest.builder()
                 .query(prompt)
                 .topK(ragProperties.getRetrieveTopK())
                 .similarityThreshold(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL)
                 .filterExpression(filterExpression)
                 .build());
+        return dropCompletelyIrrelevant(relaxed);
+    }
+
+    /**
+     * 兜底捞回结果的"无关线"：放宽阈值是给泛问留的通道，但完全无关的问题（问美食、
+     * 库里是 Java 面试题）在阈值机制下与泛问长得一样——最近邻照样被捞回，引用脚注
+     * 还照拼，用户看到"答非所问还带引用"。这里按绝对相似度再卡一条线（低于
+     * fallbackScoreFloor 视为完全无关），全部低于线即整批作废，走"没检索到"话术；
+     * 分数读不出来时保守保留（兜底通道不因元数据缺失而失效）。
+     */
+    private List<Document> dropCompletelyIrrelevant(List<Document> docs) {
+        if (docs == null || docs.isEmpty()) {
+            return docs;
+        }
+        return docs.stream()
+                .filter(d -> {
+                    Double score = extractSimilarity(d);
+                    return score == null || score >= ragProperties.getFallbackScoreFloor();
+                })
+                .toList();
+    }
+
+    /** 与 VectorRetriever 同口径读相似度：优先 score 元数据，退回 1-distance；读不出返回 null。 */
+    private Double extractSimilarity(Document d) {
+        Double score = readScoreValue(d.getMetadata(), "score");
+        if (score != null) {
+            return score;
+        }
+        Double distance = readScoreValue(d.getMetadata(), "distance");
+        return distance == null ? null : 1.0 - distance;
+    }
+
+    /** 从元数据读数值（接受 Number 或可解析的字符串），读不出返回 null。 */
+    private Double readScoreValue(java.util.Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object v = metadata.get(key);
+        if (v instanceof Number n) {
+            return n.doubleValue();
+        }
+        if (v instanceof String s) {
+            try {
+                return Double.parseDouble(s.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     /** 带指标包装的向量相似度检索，结果可能为空，由调用方判断走空话术分支。 */
@@ -280,5 +337,7 @@ public class RagAnswerService {
         private List<String> citations;
         /** 证据摘要列表（正文压缩截断，与选中文档一一对应） */
         private List<String> evidence;
+        /** 本次检索实际生效的召回路权重（本链路为向量单路：{vector:1.0}） */
+        private Map<String, Double> weights;
     }
 }

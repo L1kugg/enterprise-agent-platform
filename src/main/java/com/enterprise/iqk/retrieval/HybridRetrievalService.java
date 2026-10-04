@@ -29,8 +29,9 @@ import java.util.stream.Stream;
 /**
  * 混合检索核心服务：向量 / 关键词 / 图谱 / 网络四路并行召回，
  * 各路结果按来源权重加权（finalScore = retrievalScore × 权重），再按内容指纹去重、
- * 取 topK。topK 截断按来源轮转配额：每轮各健康路出一条本路最高分，避免低权重路
- * （如图谱 0.20）的证据被高权重路整体挤出、永远不可见。
+ * 取 topK。权重来自 app.retrieval.weights.* 配置（结果回带归一化后的实际权重）。
+ * topK 截断按来源轮转配额：每轮各健康路出一条本路最高分，避免低权重路
+ * （如图谱）的证据被高权重路整体挤出、永远不可见。
  * 设计要点：各源均为阻塞 IO，跑在专用线程池上以免拖垮公共 ForkJoinPool；
  * 单路故障（异常/超时/被拒）降级返回空列表并计入按路指标（retrieval.source.requests），
  * 结果携带 degradedSources、整体 outcome 标注 degraded / degraded-empty，
@@ -74,7 +75,11 @@ public class HybridRetrievalService {
                                    MeterRegistry meterRegistry,
                                    @Value("${app.retrieval.source-timeout-ms:3000}") long sourceTimeoutMs,
                                    @Value("${app.retrieval.pool-size:16}") int poolSize,
-                                   @Value("${app.retrieval.queue-capacity:64}") int queueCapacity) {
+                                   @Value("${app.retrieval.queue-capacity:64}") int queueCapacity,
+                                   @Value("${app.retrieval.weights.vector:0.40}") double vectorWeight,
+                                   @Value("${app.retrieval.weights.keyword:0.25}") double keywordWeight,
+                                   @Value("${app.retrieval.weights.graph:0.20}") double graphWeight,
+                                   @Value("${app.retrieval.weights.web:0.15}") double webWeight) {
         this.vectorRetriever = vectorRetriever;
         this.keywordRetriever = keywordRetriever;
         this.graphRetriever = graphRetriever;
@@ -83,6 +88,7 @@ public class HybridRetrievalService {
         this.meterRegistry = meterRegistry;
         this.sourceTimeoutMs = sourceTimeoutMs;
         this.queueCapacity = Math.max(1, queueCapacity);
+        this.configuredWeights = new HybridWeights(vectorWeight, keywordWeight, graphWeight, webWeight);
         this.retrievalExecutor = new ThreadPoolExecutor(Math.max(1, poolSize), Math.max(1, poolSize),
                 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(this.queueCapacity), runnable -> {
             Thread thread = new Thread(runnable, "hybrid-retrieval");
@@ -112,25 +118,22 @@ public class HybridRetrievalService {
         timeoutScheduler.shutdownNow();
     }
 
-    /** 默认来源权重（向量/关键词/图谱/网络），与 HybridWeights.DEFAULT 保持一致 */
-    private static final double VECTOR_WEIGHT = 0.40;
-    private static final double KEYWORD_WEIGHT = 0.25;
-    private static final double GRAPH_WEIGHT = 0.20;
-    private static final double WEB_WEIGHT = 0.15;
+    /** 配置的来源权重（app.retrieval.weights.*），四参 retrieve 的默认权重；归一化在 retrieve 内进行 */
+    private final HybridWeights configuredWeights;
 
     /**
-     * 使用默认来源权重的混合检索获取文档。
-     * 等价于以默认权重（vector=0.40、keyword=0.25、graph=0.20、web=0.15）调用
-     * {@link #retrieve(String, String, String, int, HybridWeights)}。
+     * 使用配置来源权重的混合检索获取文档。
+     * 权重来自 app.retrieval.weights.vector/keyword/graph/web 配置（默认 0.40/0.25/0.20/0.15），
+     * 等价于以配置权重调用 {@link #retrieve(String, String, String, int, HybridWeights)}。
      *
      * @param query    搜索查询
      * @param tenantId 用于过滤的租户标识
      * @param chatId   用于过滤的会话标识
      * @param topK     返回的头部结果数量
-     * @return 混合检索结果，包含去重且已评分的文档
+     * @return 混合检索结果，包含去重且已评分的文档与本次实际生效的权重
      */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
-        return retrieve(query, tenantId, chatId, topK, HybridWeights.DEFAULT);
+        return retrieve(query, tenantId, chatId, topK, configuredWeights);
     }
 
     /**
@@ -192,7 +195,7 @@ public class HybridRetrievalService {
                 log.warn("hybrid retrieval degraded routes: {}, query='{}'",
                         degradedSources, query);
             }
-            return new HybridRetrievalResult(top, allDocs.size(), deduped.size(), degradedSources);
+            return new HybridRetrievalResult(top, allDocs.size(), deduped.size(), degradedSources, normalized);
         } finally {
             sample.stop(Timer.builder("retrieval.hybrid.latency")
                     .tag("outcome", outcome)
@@ -220,7 +223,7 @@ public class HybridRetrievalService {
     /**
      * topK 截断按来源轮转配额：把去重后的候选（已按 finalScore 降序）按来源分桶，
      * 每轮各来源出一条本路最高分，直到取满 topK 或无候选；最终仍按 finalScore 降序返回。
-     * 若不做配额，低权重路（图谱 0.20）即使有高分证据也会被高权重路（向量 0.40）
+     * 若不做配额，低权重路（如图谱）即使有高分证据也会被高权重路（如向量）
      * 整体挤出 topK，四路融合退化为"只有向量"。
      */
     private List<ScoredDocument> selectTopAcrossSources(List<ScoredDocument> sorted, int topK) {
@@ -345,7 +348,8 @@ public class HybridRetrievalService {
     private record RouteResult(String source, List<ScoredDocument> docs, boolean degraded) {
     }
 
-    /** 混合检索结果：topK 文档 + 去重前/后的总条数 + 降级路清单（空 = 四路全部健康） */
+    /** 混合检索结果：topK 文档 + 去重前/后的总条数 + 降级路清单（空 = 四路全部健康）+ 本次实际生效的权重（归一化后） */
     public record HybridRetrievalResult(List<ScoredDocument> documents, int totalBeforeDedup,
-                                         int totalAfterDedup, List<String> degradedSources) {}
+                                         int totalAfterDedup, List<String> degradedSources,
+                                         HybridWeights weights) {}
 }

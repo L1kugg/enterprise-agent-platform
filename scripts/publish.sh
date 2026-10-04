@@ -23,6 +23,7 @@ tar czf "$PKG" \
   target/knowledgeops-agent-1.0-SNAPSHOT.jar \
   Dockerfile .dockerignore \
   deploy/docker-compose.prod.yml \
+  mcp-weather/mcp_weather.py \
   frontend/Dockerfile frontend/nginx.conf frontend/index.html \
   frontend/package.json frontend/package-lock.json \
   frontend/tsconfig.json frontend/tsconfig.node.json frontend/vite.config.ts \
@@ -37,7 +38,7 @@ ssh "$SERVER" "set -e; \
   sudo mkdir -p $APP_DIR/target; \
   sudo tar xzf /tmp/$PKG_NAME -C $APP_DIR; \
   sudo rm /tmp/$PKG_NAME; \
-  cd $APP_DIR/deploy && sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build app web"
+  cd $APP_DIR/deploy && sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build app web mcp-weather"
 
 echo ""
 echo "✅ 发布完成：http://82.157.60.115:8088 （浏览器 Ctrl+F5 强制刷新看新页面）"

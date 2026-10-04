@@ -36,10 +36,12 @@ class ActionPolicyGuardTest {
     }
 
     @Test
-    void allowsTrustedRuntimeActionsWithValidInput() {
+    void mcpCallAllowedFromOrdinaryChatLoopWithoutTrustedFlag() {
+        // mcp_call 不设 trustedOnly：外部只读查询（天气等）在普通 ReAct 循环可直接调，
+        // 风险由适配器 SSRF 校验 + allowed-hosts 白名单兜住（workspace 写/壳动作仍是 trustedOnly）
         AgentAction action = new AgentAction("mcp_call",
                 Map.of("server", "demo", "tool", "echo", "arguments", Map.of("text", "hi")),
-                "prompt", "tenant", "chat", "balanced", "task-1", "step-1", true);
+                "prompt", "tenant", "chat", "balanced", "task-1", "step-1", false);
 
         ActionPolicyDecision decision = guard.evaluate(action);
 

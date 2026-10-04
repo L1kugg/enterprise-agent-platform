@@ -20,8 +20,16 @@ public record ActionSchema(
         /** 风险等级（read / write / write_preview / shell / external） */
         String riskLevel,
         /** 是否仅允许受信运行时执行（需走 token 预览确认流程） */
-        boolean trustedOnly
+        boolean trustedOnly,
+        /** 给 ReAct 规划器提示词的动作说明（含参数示例），空 = 提示词里只出现裸动作名 */
+        String plannerHint
 ) {
+    /** 7 参便利构造器：plannerHint 置空（提示词里只出现裸动作名） */
+    public ActionSchema(String action, String runtime, Set<String> requiredFields, Set<String> optionalFields,
+                        Set<String> sensitiveFields, String riskLevel, boolean trustedOnly) {
+        this(action, runtime, requiredFields, optionalFields, sensitiveFields, riskLevel, trustedOnly, null);
+    }
+
     /** 字段是否在 schema 声明的必填或可选范围内 */
     public boolean knowsField(String field) {
         return requiredFields.contains(field) || optionalFields.contains(field);

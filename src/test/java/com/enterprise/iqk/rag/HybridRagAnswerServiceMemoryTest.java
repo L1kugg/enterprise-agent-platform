@@ -8,7 +8,9 @@ import com.enterprise.iqk.memory.RagFactMemoryRecorder;
 import com.enterprise.iqk.retrieval.CitationService;
 import com.enterprise.iqk.retrieval.EvidenceJudgeService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
+import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
+import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -57,7 +59,8 @@ class HybridRagAnswerServiceMemoryTest {
                 .content("缓存穿透的解决方案").retrievalScore(0.9)
                 .metadata(Map.of()).build();
         when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
-                .thenReturn(new HybridRetrievalService.HybridRetrievalResult(List.of(doc), 1, 1, List.of()));
+                .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
+                        List.of(doc), 1, 1, List.of(), HybridWeights.DEFAULT));
         when(evidenceJudgeService.judge(any(), anyString())).thenReturn(List.of());
         when(citationService.buildCitations(any())).thenReturn(List.of());
         when(citationService.formatCitationFooter(any())).thenReturn("");
@@ -66,6 +69,8 @@ class HybridRagAnswerServiceMemoryTest {
         when(tenantCostService.estimateTokens(anyString())).thenReturn(10L);
         when(ragProperties.getRetrieveTopK()).thenReturn(5);
         when(ragProperties.getTemperature()).thenReturn(0.7);
+        // 无关线兜底：不桩则为 0.0，门槛静默失效——必须与生产语义一致
+        when(ragProperties.getFallbackScoreFloor()).thenReturn(0.30);
         when(memoryService.buildContext("tenant-1", "chat-1")).thenReturn(snapshot);
 
         ChatClient chatClient = mock(ChatClient.class);
@@ -75,8 +80,8 @@ class HybridRagAnswerServiceMemoryTest {
         when(requestSpec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn(llmContent);
 
-        service = new HybridRagAnswerService(retrievalService, evidenceJudgeService,
-                citationService, chatClient, modelRouter, ragProperties,
+        service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
+                evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
                 mock(RagFactMemoryRecorder.class), memoryService);
     }
