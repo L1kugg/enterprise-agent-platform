@@ -6,8 +6,18 @@
 |---|---|---|
 | `dataset.json` | 4 cases | Lightweight live API quality gate |
 | `dataset.large.json` | Auto-generated | Evaluator contract and optional live regression set |
+| `dataset.deepresearch-doc.json` | 9 cases | DeepResearch test-doc 4-tier difficulty set (driven by `scripts/eval_deepresearch_doc.py`) |
 
 Each case includes `expected_keywords`, `forbidden_keywords`, `category`, and optional `expected_citations`.
+
+## Run Result Archive
+
+`results/` holds JSON snapshots of Evaluation Studio runs produced by the
+driven scripts (`scripts/eval-run.py`, `scripts/eval-run-fuzzy.py`,
+`scripts/eval_deepresearch_doc.py`, `scripts/eval_multidoc_interference.py`).
+Each file wraps `{datasetId, run}` exactly as the run API returns it;
+`*.baseline.json` files are pre-change comparison snapshots. Scripts write
+here by default (paths relative to the repository root).
 
 ## Prediction Files
 

@@ -1,0 +1,260 @@
+{
+  "datasetId": "eval-ds-5abcb8e849fe",
+  "run": {
+    "runId": "eval-run-5f80c113cec1",
+    "datasetId": "eval-ds-5abcb8e849fe",
+    "tenantId": "u-selftest02",
+    "status": "SUCCESS",
+    "modelProfile": "balanced",
+    "metrics": {
+      "totalCases": 7,
+      "passedCases": 7,
+      "runScore": 0.9643,
+      "retrievalHitRate": 1.0,
+      "citationCoverageRate": 1.0,
+      "answerFaithfulnessScore": 1.0,
+      "avgLatencyMs": 7405.7143,
+      "failureRate": 0.0
+    },
+    "results": [
+      {
+        "resultId": "eval-result-46990d082ba7",
+        "caseId": "md-001",
+        "status": "SUCCESS",
+        "question": "在公司内部的企业级RAG选型评估中，哪个方案幻觉率最高？",
+        "answer": "在公司内部的企业级RAG选型评估中，幻觉率最高的方案是 **Forge（自研最小内核）**，其幻觉率为 **24.0%**。\n\n依据来自企业级实测基准数据表（见[2][5]），四款参评方案的幻觉率明确列出：\n- Keystone：6.5%  \n- Compass：12.0%  \n- Atlas：7.8%  \n- **Forge：24.0%**  \n\n该结果在多处上下文中一致确认：  \n- 文本段落明确指出：“Forge … 实测命中率为 71%，幻觉率高达 24%，无引用溯源。评估结论为仅适合原型验证” [2][5]；  \n- 基准对比表格中“幻觉率”行清晰显示 Forge 以 24.0% 远超其余方案 [2][5]；  \n- 评估结论部分再次将 Forge 定位为“原型工具”，与高幻觉率、低命中率、零引用覆盖率等缺陷直接关联 [4]。\n\n需强调：消费级产品（如问问盒子幻觉率22.1%）虽数值接近，但其评测报告**明确声明“本报告与任何企业内部技术选型评估无关”** [1][3]，且测试场景、数据分布、合规约束、部署模式均不具可比性，故**不得纳入企业级选型评估范围**。\n\n因此，答案唯一且确定：**Forge** 是本次企业级RAG选型中幻觉率最高的方案。\n\n[2][5]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 72%\n[2] interference-consumer-rag.md (vector) 可信度: 71%\n[3] interference-consumer-rag.md (vector) 可信度: 71%\n[4] deepresearch-test-knowledge.md (vector) 可信度: 71%\n[5] deepresearch-test-knowledge.md (vector) 可信度: 70%\n[6] RAG 平台 (CONCEPT) (graph) 可信度: 52%\n[7] Atlas 为 云厂商全托管 RAG 服务 (graph) 可信度: 52%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:interference-consumer-rag.md:chunk-1",
+          "vector:interference-consumer-rag.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "graph:RAG 平台 (CONCEPT):kg-ent-fe600fba-7727-4558-96bf-2b19a91cd8e8",
+          "graph:Atlas 为 云厂商全托管 RAG 服务:kg-fact-2d7fb1fb-46e1-4e3a-be00-506fe9f3bab4"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.2542962 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.30593392 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.3069731 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 source...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.34825847 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.38448137 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "RAG 平台: 检索增强生成平台",
+          "Atlas 为 云厂商全托管 RAG 服务"
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 8604,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-ddca5822f4a1",
+        "caseId": "md-002",
+        "status": "SUCCESS",
+        "question": "公司内部评估推荐的Keystone方案三年TCO是多少？由哪些技术组件构成？",
+        "answer": "公司内部评估推荐的 Keystone 方案三年 TCO 为 **约 102 万元** [1]。\n\n该方案由以下技术组件构成：  \n- **应用框架**：Java 17 + Spring Boot 3.4 + Spring AI 1.1（单体架构）[2]；  \n- **向量存储**：pgvector（基于 PostgreSQL 扩展）[2][4]；  \n- **关系型数据库**：MySQL 8（用于元数据管理、租户信息、审计日志等）[2][4]；  \n- **消息中间件**：RabbitMQ（支撑异步文档解析、切片入库与事件驱动流程）[2][4]。\n\n所有组件均部署于公司私有云环境，满足金融级合规要求，支持租户隔离、本地化审计日志留存及全链路引用溯源 [1][2][4]。\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 71%\n[2] deepresearch-test-knowledge.md (vector) 可信度: 70%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 64%\n[4] Keystone (TECHNOLOGY) (graph) 可信度: 55%\n[5] interference-consumer-rag.md (keyword) 可信度: 53%\n[6] interference-consumer-rag.md (keyword) 可信度: 53%\n[7] Keystone 引用覆盖率 93.5% (graph) 可信度: 52%\n[8] Keystone 检索命中率 96.0% (graph) 可信度: 52%\n[9] Keystone 使用 RabbitMQ 作为消息队列 (graph) 可信度: 52%\n[10] Keystone 使用 MySQL 8 作为关系数据存储 (graph) 可信度: 52%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[12] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "graph:Keystone (TECHNOLOGY):kg-ent-836108c6-7406-487c-9e89-885f8328f325",
+          "keyword:interference-consumer-rag.md:chunk-0",
+          "keyword:interference-consumer-rag.md:chunk-1",
+          "graph:Keystone 引用覆盖率 93.5%:kg-fact-bfb02b5a-028a-40da-b225-67670d0594ad",
+          "graph:Keystone 检索命中率 96.0%:kg-fact-58b17976-3cd8-4db5-a92c-7b2fdd50e8ca",
+          "graph:Keystone 使用 RabbitMQ 作为消息队列:kg-fact-00c54cea-40a8-4604-8349-6a6fe0a504ac",
+          "graph:Keystone 使用 MySQL 8 作为关系数据存储:kg-fact-2a1e9170-afd5-4d7f-8b8c-31df809b8e21",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-134",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-0"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.32774916 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.3962647 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.41163364 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "Keystone: Spring AI 单体 RAG 方案 | USES → Spring Boot; USES → pgvector; USES → MySQL; USES → RabbitMQ",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.62215346 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.6338406 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 source...",
+          "Keystone 引用覆盖率 93.5%",
+          "Keystone 检索命中率 96.0%",
+          "Keystone 使用 RabbitMQ 作为消息队列",
+          "Keystone 使用 MySQL 8 作为关系数据存储",
+          "tenant_id: u-selftest02 chunk_index: 134 page_number: 84 distance: 0.631117 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 0 page_number: 1 distance: 0.63461477 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pd..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 5422,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-3002bcb5d051",
+        "caseId": "md-003",
+        "status": "SUCCESS",
+        "question": "消费级RAG助手的实测调研中，哪款产品幻觉率最低？是多少？",
+        "answer": "上下文明确指出本次调研为**企业级 RAG 平台技术选型评估**（见文档标题及“评估目标”），所测试的四款产品均为企业级方案：Keystone、Compass、Atlas、Forge。其幻觉率数据（6.5%、12.0%、7.8%、24.0%）均出自该企业级评估报告[1][2][3][4][5]。\n\n虽然知识图谱节点[6]列出了“灵犀文档”“青藤阅读助手”“智问 Pro”“问问盒子”“FileChat”等名称，并标注其与“幻觉率”概念存在关联（HAS → …），但该节点**未提供任何实测数据、数值、测试方法或来源说明**，仅为概念性关系声明，不具备实证支撑。\n\n此外，用户问题明确限定于“**消费级RAG助手的实测调研**”，而上下文中：\n- 无任何段落描述对上述消费级产品开展过实测；\n- 无任何表格、指标或结论提及这些产品的幻觉率数值；\n- 所有性能基准数据（含幻觉率）均严格对应企业级方案，且环境、数据集、评估标准均面向企业场景（如金融合规、多租户隔离、日均5万咨询量等）。\n\n因此，根据给定上下文，**无法确定哪款消费级RAG助手幻觉率最低，也无法给出具体数值**。问题所要求的信息在当前上下文中不存在。\n\n[6]\n\n---\n引用来源:\n[1] interference-consumer-rag.md (vector) 可信度: 73%\n[2] interference-consumer-rag.md (vector) 可信度: 73%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 64%\n[4] deepresearch-test-knowledge.md (vector) 可信度: 64%\n[5] deepresearch-test-knowledge.md (vector) 可信度: 60%\n[6] 幻觉率 (CONCEPT) (graph) 可信度: 57%\n[7] RAG 平台 (CONCEPT) (graph) 可信度: 52%\n[8] Atlas 为 云厂商全托管 RAG 服务 (graph) 可信度: 52%\n",
+        "citations": [
+          "vector:interference-consumer-rag.md:chunk-0",
+          "vector:interference-consumer-rag.md:chunk-1",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "graph:幻觉率 (CONCEPT):kg-ent-bbbfeeff-596d-43f1-ae0c-9d7407405478",
+          "graph:RAG 平台 (CONCEPT):kg-ent-fe600fba-7727-4558-96bf-2b19a91cd8e8",
+          "graph:Atlas 为 云厂商全托管 RAG 服务:kg-fact-2d7fb1fb-46e1-4e3a-be00-506fe9f3bab4"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.20602652 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.21599908 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.40085566 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.42227924 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.36559856 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "幻觉率: 系统生成答案的错误率 | HAS → 灵犀文档; HAS → 青藤阅读助手; HAS → 智问 Pro; HAS → 问问盒子; HAS → FileChat",
+          "RAG 平台: 检索增强生成平台",
+          "Atlas 为 云厂商全托管 RAG 服务"
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 0.5,
+        "answerFaithfulness": 1.0,
+        "score": 0.875,
+        "latencyMs": 8440,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-3467ffdad428",
+        "caseId": "md-004",
+        "status": "SUCCESS",
+        "question": "市场调研报告里用户抱怨哪款产品最爱一本正经地胡说八道？编造了什么内容？",
+        "answer": "用户抱怨**问问盒子**最爱“一本正经地胡说八道”[1]。\n\n其编造的具体内容是：在用户上传真实产品说明书的前提下，当被询问保修政策时，错误回答“**整机保修五年**”，而说明书原文明确写的是“**主要部件保修两年**”[1]。\n\n该行为与问问盒子高达22.1%的幻觉率（五款受测产品中最高）直接相关，报告亦指出其广告位推荐干扰答案客观性[2]。\n\n[1][2]\n\n---\n引用来源:\n[1] interference-consumer-rag.md (vector) 可信度: 69%\n[2] interference-consumer-rag.md (vector) 可信度: 68%\n[3] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n",
+        "citations": [
+          "vector:interference-consumer-rag.md:chunk-1",
+          "vector:interference-consumer-rag.md:chunk-0",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-31"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.40885532 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.48666206 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 31 page_number: 23 distance: 0.61199725 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 3165,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-892218676e93",
+        "caseId": "md-005",
+        "status": "SUCCESS",
+        "question": "企业级评估和消费级调研里各自测得的最低幻觉率分别是多少？分别属于哪个方案或产品？",
+        "answer": "根据所提供的全部上下文，可明确回答如下：\n\n✅ **企业级评估中测得的最低幻觉率是 6.5%，属于方案 A — Keystone（Spring AI 单体 RAG）**。  \n该数据出自“性能基准详细数据”表格，明确标注为在企业级评估基准环境下（16核32GB×3节点等）实测所得，且报告标题、背景、目标均统一定义为《企业级 RAG 平台技术选型评估报告（2026 内部版）》[1][2][3][4][5]。\n\n⚠️ **消费级调研的最低幻觉率 —— 上下文中未提供任何相关信息**。  \n尽管已知记忆中提及文件名 `interference-consumer-rag.md`（含 “consumer” 字样），且其 `job_id`（`job-0a2d6e41-2150-4034-8ce1-f66f90b8355b`）与主评估报告 `job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d` 不同，但**所有提供的文本块 [1]–[5] 均未包含该文件的内容**，也未在任何地方定义、描述或引用“消费级调研”的指标、方案、结果或幻觉率数据。因此，无法从中提取或推断消费级调研的最低幻觉率及其归属方案。\n\n结论：  \n- 企业级评估最低幻觉率：**6.5%，Keystone 方案** [1][3]；  \n- 消费级调研最低幻觉率：**未在给定上下文中出现，信息缺失，无法作答**。\n\n[1][3]\n\n---\n引用来源:\n[1] interference-consumer-rag.md (vector) 可信度: 71%\n[2] interference-consumer-rag.md (vector) 可信度: 71%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 68%\n[4] deepresearch-test-knowledge.md (vector) 可信度: 65%\n[5] deepresearch-test-knowledge.md (vector) 可信度: 64%\n",
+        "citations": [
+          "vector:interference-consumer-rag.md:chunk-1",
+          "vector:interference-consumer-rag.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-0"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.34494027 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.3451511 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 source...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.46947438 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.47671485 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.44629806 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 0.5,
+        "answerFaithfulness": 1.0,
+        "score": 0.875,
+        "latencyMs": 9814,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-61a02012570c",
+        "caseId": "md-006",
+        "status": "SUCCESS",
+        "question": "在公司企业级RAG选型评估的语境下，哪个平台最容易一本正经地胡说八道？",
+        "answer": "在公司企业级 RAG 选型评估语境下，**自研最小内核（代号 Forge）** 是最容易“一本正经地胡说八道”的平台。\n\n理由如下（严格基于上下文）：\n\n- **幻觉率最高（24.0%）**：在全部四款企业级候选方案（Keystone、Compass、Atlas、Forge）中，Forge 的幻觉率显著高于其他三者（Keystone 6.5%、Compass 12.0%、Atlas 7.8%），是唯一突破 20% 的方案 [2][5]；\n- **完全缺乏可信支撑机制**：引用覆盖率为 **0%**，即生成答案时**不提供任何来源引用**，用户无法核查依据，答案看似专业严谨，实则无根无据，完美契合“一本正经地胡说八道”的特征 [2][5]；\n- **设计定位即为低可靠性原型**：明确被评估结论定性为“仅适合原型验证”，且实测命中率最低（71.0%），无租户隔离、无审计日志、无重排校验等企业级保障能力 [2][5]；\n- **消费级产品（如问问盒子，幻觉率22.1%）明确被排除在企业选型范围之外**——上下文反复强调该报告“与任何企业内部技术选型评估无关”[1][3]，因此不构成有效选项。\n\n综上，在限定“企业级RAG选型评估”这一严肃治理场景中，Forge 是唯一同时具备**最高幻觉率 + 零溯源能力 + 非生产级定位**三重属性的平台，其输出最可能以高度流畅、结构完整、逻辑自洽的形式呈现错误或虚构内容，符合问题所指的讽刺性描述。\n\n[2][5]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 72%\n[2] interference-consumer-rag.md (vector) 可信度: 70%\n[3] interference-consumer-rag.md (vector) 可信度: 70%\n[4] deepresearch-test-knowledge.md (vector) 可信度: 66%\n[5] deepresearch-test-knowledge.md (vector) 可信度: 62%\n[6] RAG 平台 (CONCEPT) (graph) 可信度: 55%\n[7] Atlas 为 云厂商全托管 RAG 服务 (graph) 可信度: 52%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:interference-consumer-rag.md:chunk-1",
+          "vector:interference-consumer-rag.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "graph:RAG 平台 (CONCEPT):kg-ent-fe600fba-7727-4558-96bf-2b19a91cd8e8",
+          "graph:Atlas 为 云厂商全托管 RAG 服务:kg-fact-2d7fb1fb-46e1-4e3a-be00-506fe9f3bab4"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.27081212 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.36224174 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.39453426 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.34096572 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.40383163 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "RAG 平台: 检索增强生成平台",
+          "Atlas 为 云厂商全托管 RAG 服务"
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 10040,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-07857f6f7d97",
+        "caseId": "md-007",
+        "status": "SUCCESS",
+        "question": "企业内部评估中Atlas方案为什么被否决？",
+        "answer": "Atlas方案在企业内部评估中被否决，主要原因如下：\n\n1. **合规性不达标**：Atlas要求知识库数据上传至云厂商服务器，但公司金融行业合规政策明确要求审计日志必须本地化留存，而Atlas无法满足该强制性条款[2]；  \n2. **缺乏私有化部署能力**：方案不支持私有化部署，被合规部门“一票否决”[2]；  \n3. **多租户隔离不足**：其租户权限粒度仅到应用级，未达到企业级数据级隔离要求，无法保障智能客服与内部知识库共用平台时的数据隔离安全[4]；  \n4. **总拥有成本（TCO）过高**：三年TCO约232万元，显著高于Keystone（102万元）和Compass（121万元），主要源于高昂的年基础设施成本（76.6万元）[2][5]。\n\n综上，Atlas因**违反核心合规要求**、**安全架构不满足企业标准**及**经济性差**被正式淘汰[2][4]。\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 66%\n[2] deepresearch-test-knowledge.md (vector) 可信度: 64%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 61%\n[4] Atlas (TECHNOLOGY) (graph) 可信度: 55%\n[5] interference-consumer-rag.md (keyword) 可信度: 54%\n[6] interference-consumer-rag.md (keyword) 可信度: 54%\n[7] Atlas 检索命中率 92.3% (graph) 可信度: 52%\n[8] Atlas 为 云厂商全托管 RAG 服务 (graph) 可信度: 52%\n[9] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[10] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[12] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 45%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "graph:Atlas (TECHNOLOGY):kg-ent-f4857e3c-2443-4c2d-a839-e2e690ad7e4a",
+          "keyword:interference-consumer-rag.md:chunk-1",
+          "keyword:interference-consumer-rag.md:chunk-0",
+          "graph:Atlas 检索命中率 92.3%:kg-fact-f3d6c1a9-d1c8-4eaf-b801-167805771f87",
+          "graph:Atlas 为 云厂商全托管 RAG 服务:kg-fact-2d7fb1fb-46e1-4e3a-be00-506fe9f3bab4",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-212",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-167",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-35",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-0"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.46467933 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.44939324 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.44194683 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "Atlas: 云厂商托管 RAG 方案",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.58158135 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.60288656 job_id: job-0a2d6e41-2150-4034-8ce1-f66f90b8355b file_name: interference-consumer-rag.md created_at: 1790952889074 sourc...",
+          "Atlas 检索命中率 92.3%",
+          "Atlas 为 云厂商全托管 RAG 服务",
+          "tenant_id: u-selftest02 chunk_index: 212 page_number: 128 distance: 0.65775836 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 167 page_number: 104 distance: 0.67654216 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 35 page_number: 25 distance: 0.68703866 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 0 page_number: 1 distance: 0.6590263 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 6355,
+        "errorMessage": ""
+      }
+    ],
+    "errorMessage": null,
+    "startedAt": "2026-10-02T14:57:26.935128234",
+    "finishedAt": "2026-10-02T14:58:18.836570446",
+    "createdAt": "2026-10-02T14:57:26.935128234"
+  }
+}

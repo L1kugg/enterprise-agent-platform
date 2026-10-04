@@ -1,0 +1,74 @@
+[
+  {
+    "id": "dr_l1_001",
+    "category": "rag_recall",
+    "chatId": "eval-deepresearch-doc",
+    "question": "对比评估中各RAG候选方案的检索命中率、幻觉率和三年TCO，哪个方案综合表现最好？",
+    "expected_keywords": ["keystone", "96.0%", "6.5%", "102"],
+    "forbidden_keywords": ["藏语", "准确率91", "编造"]
+  },
+  {
+    "id": "dr_l1_002",
+    "category": "rag_recall",
+    "chatId": "eval-deepresearch-doc",
+    "question": "Keystone 方案采用了哪些技术组件构建？性能表现如何？",
+    "expected_keywords": ["spring", "pgvector", "rabbitmq", "240"],
+    "forbidden_keywords": ["milvus 集群", "一票否决"]
+  },
+  {
+    "id": "dr_l2_001",
+    "category": "rag_precision",
+    "chatId": "eval-deepresearch-doc",
+    "question": "哪个平台最容易一本正经地胡说八道？",
+    "expected_keywords": ["forge", "24%"],
+    "forbidden_keywords": ["keystone 最容易", "hallucination rate 6.5% 最高"]
+  },
+  {
+    "id": "dr_l2_002",
+    "category": "rag_precision",
+    "chatId": "eval-deepresearch-doc",
+    "question": "有没有方案因为数据不能放在自己手里而被毙掉？",
+    "expected_keywords": ["atlas", "合规", "一票否决"],
+    "forbidden_keywords": ["forge 合规", "keystone 被毙"]
+  },
+  {
+    "id": "dr_l2_003",
+    "category": "rag_precision",
+    "chatId": "eval-deepresearch-doc",
+    "question": "公司最后选中的方案，养它三年总共要花多少钱？",
+    "expected_keywords": ["keystone", "102"],
+    "forbidden_keywords": ["232", "76.6万三年"]
+  },
+  {
+    "id": "dr_l3_001",
+    "category": "rag_multi_hop",
+    "chatId": "eval-deepresearch-doc",
+    "question": "如果公司规定每年基础设施预算不得超过25万元，哪些方案直接出局，为什么？",
+    "expected_keywords": ["atlas", "76.6", "keystone", "19"],
+    "forbidden_keywords": ["34万", "40.3万", "三个方案直接出局", "全部出局"]
+  },
+  {
+    "id": "dr_l3_002",
+    "category": "rag_multi_hop",
+    "chatId": "eval-deepresearch-doc",
+    "question": "按端到端P95延迟衡量，响应速度最快的方案为什么最后没有被选上？",
+    "expected_keywords": ["atlas", "420", "合规", "一票否决"],
+    "forbidden_keywords": ["延迟最高的是atlas", "响应速度最慢的是compass", "keystone响应最快"]
+  },
+  {
+    "id": "dr_l4_001",
+    "category": "hallucination_guard",
+    "chatId": "eval-deepresearch-doc",
+    "question": "文档评估了哪些少数民族语言的检索效果，结果如何？",
+    "expected_keywords": ["未测试", "二期"],
+    "forbidden_keywords": ["准确率", "藏语检索", "覆盖率", "%的准确"]
+  },
+  {
+    "id": "dr_l4_002",
+    "category": "hallucination_guard",
+    "chatId": "eval-deepresearch-doc",
+    "question": "评估报告里四套方案在评估期间分别暴露过什么问题？哪个性质最严重？",
+    "expected_keywords": ["脑裂", "跨租户", "噪声"],
+    "forbidden_keywords": ["零缺陷", "无任何问题"]
+  }
+]

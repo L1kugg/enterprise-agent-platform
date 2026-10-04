@@ -1,0 +1,322 @@
+{
+  "datasetId": "eval-ds-d829ec93f050",
+  "run": {
+    "runId": "eval-run-7dbfca7a54f9",
+    "datasetId": "eval-ds-d829ec93f050",
+    "tenantId": "u-selftest02",
+    "status": "SUCCESS",
+    "modelProfile": "balanced",
+    "metrics": {
+      "totalCases": 9,
+      "passedCases": 8,
+      "runScore": 0.8903,
+      "retrievalHitRate": 0.8889,
+      "citationCoverageRate": 0.8889,
+      "answerFaithfulnessScore": 1.0,
+      "avgLatencyMs": 8382.0,
+      "failureRate": 0.0
+    },
+    "results": [
+      {
+        "resultId": "eval-result-e044f4682081",
+        "caseId": "case-001",
+        "status": "SUCCESS",
+        "question": "对比评估中各RAG候选方案的检索命中率、幻觉率和三年TCO，哪个方案综合表现最好？",
+        "answer": "根据提供的评估报告，对各RAG候选方案在**检索命中率、幻觉率、三年TCO**三项关键指标的对比分析如下：\n\n- **检索命中率**（越高越好）：  \n  Keystone 96.0% > Atlas 92.3% > Compass 89.5% > Forge 71.0% [3]\n\n- **幻觉率**（越低越好）：  \n  Keystone 6.5% < Atlas 7.8% < Compass 12.0% < Forge 24.0% [3]\n\n- **三年总拥有成本（TCO）**（越低越好）：  \n  Keystone 约102万元 < Compass 约121万元 < Atlas 约232万元；Forge未列TCO，但其性能严重不达标，不具备生产可用性 [2]\n\n综合来看：\n- Keystone 在**检索命中率最高**（96.0%）、**幻觉率最低**（6.5%）、**三年TCO最低**（102万元）三项中全部领先；\n- 同时具备经安全部门验证的多租户隔离能力、引用可溯源性（93.5%覆盖率）和合规可控性（私有化部署、本地日志留存），而Atlas因合规问题被一票否决，Compass存在高危安全风险，Forge仅适用于原型 [2][3][4]。\n\n因此，**Keystone（Spring AI 单体 RAG 方案）综合表现最好**，也是评估报告明确推荐的基线方案 [2][3]。\n\n[2][3]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 73%\n[2] deepresearch-test-knowledge.md (vector) 可信度: 72%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 70%\n[4] RAG 平台 (CONCEPT) (graph) 可信度: 55%\n[5] Forge 仅实现 向量检索 + 生成两步 (graph) 可信度: 52%\n[6] Atlas 为 云厂商全托管 RAG 服务 (graph) 可信度: 52%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "graph:RAG 平台 (CONCEPT):kg-ent-fe600fba-7727-4558-96bf-2b19a91cd8e8",
+          "graph:Forge 仅实现 向量检索 + 生成两步:kg-fact-5401e968-74a2-49c2-87ec-05b38313f2b6",
+          "graph:Atlas 为 云厂商全托管 RAG 服务:kg-fact-2d7fb1fb-46e1-4e3a-be00-506fe9f3bab4"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.23714262 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.26753092 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.38335776 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "RAG 平台: 检索增强生成平台",
+          "Forge 仅实现 向量检索 + 生成两步",
+          "Atlas 为 云厂商全托管 RAG 服务"
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 8511,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-4f6ed1b604f3",
+        "caseId": "case-002",
+        "status": "SUCCESS",
+        "question": "Keystone 方案采用了哪些技术组件构建？性能表现如何？",
+        "answer": "Keystone 方案采用的技术组件包括：  \n- **后端框架**：Java 17 + Spring Boot 3.4 + Spring AI 1.1（构成单体 RAG 服务）[1][4]；  \n- **向量存储**：pgvector（PostgreSQL 扩展，版本 0.7.2）[1][4]；  \n- **关系型数据库**：MySQL 8（用于元数据、租户管理、审计日志等结构化数据）[1][4]；  \n- **消息队列**：RabbitMQ（支撑异步入库与任务解耦）[1][4]。\n\n性能表现如下：  \n- **检索准确率**：混合检索（向量+关键词）综合命中率达 **96.0%**（四方案中最高）[1][6]；  \n- **引用可溯源性**：引用覆盖率为 **93.5%**（四方案中第二高，仅次于 Atlas 的 95.1%，但 Atlas 因合规问题被否决）[3][5]；  \n- **延迟表现**：  \n  - 向量检索 P95 延迟为 **240 毫秒**（topK=12，50 万切片规模）[1]；  \n  - 端到端 P95 延迟为 **842 毫秒**，偏高源于其三轮重排设计（来源加权、术语匹配、三维证据评分），但换来了最低幻觉率（6.5%）与最高命中率的平衡 [3]；  \n- **并发能力**：单实例支持 **4 路并发 × 16 线程池**，超出请求进入有界队列排队 [1]；  \n- **可靠性与安全**：租户隔离经安全部门渗透验证，1000 次跨租户试探请求零泄漏；审计日志本地留存 90 天，支持请求级脱敏 [3]。\n\n综上，Keystone 在准确性、可控性、合规性与总拥有成本（三年 TCO 约 102 万元）之间取得最优平衡，被正式推荐为公司 RAG 平台基线方案 [3][7]。  \n\n[1][4][6][3][5]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 68%\n[2] deepresearch-test-knowledge.md (vector) 可信度: 62%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 60%\n[4] Keystone (TECHNOLOGY) (graph) 可信度: 55%\n[5] Keystone 引用覆盖率 93.5% (graph) 可信度: 52%\n[6] Keystone 检索命中率 96.0% (graph) 可信度: 52%\n[7] Keystone 使用 RabbitMQ 作为消息队列 (graph) 可信度: 52%\n[8] Keystone 使用 MySQL 8 作为关系数据存储 (graph) 可信度: 52%\n[9] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[10] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[12] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "graph:Keystone (TECHNOLOGY):kg-ent-836108c6-7406-487c-9e89-885f8328f325",
+          "graph:Keystone 引用覆盖率 93.5%:kg-fact-bfb02b5a-028a-40da-b225-67670d0594ad",
+          "graph:Keystone 检索命中率 96.0%:kg-fact-58b17976-3cd8-4db5-a92c-7b2fdd50e8ca",
+          "graph:Keystone 使用 RabbitMQ 作为消息队列:kg-fact-00c54cea-40a8-4604-8349-6a6fe0a504ac",
+          "graph:Keystone 使用 MySQL 8 作为关系数据存储:kg-fact-2a1e9170-afd5-4d7f-8b8c-31df809b8e21",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-140",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-108",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-144",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-120"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.45289925 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.39517054 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.39686933 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "Keystone: Spring AI 单体 RAG 方案 | USES → Spring Boot; USES → pgvector; USES → MySQL; USES → RabbitMQ",
+          "Keystone 引用覆盖率 93.5%",
+          "Keystone 检索命中率 96.0%",
+          "Keystone 使用 RabbitMQ 作为消息队列",
+          "Keystone 使用 MySQL 8 作为关系数据存储",
+          "tenant_id: u-selftest02 chunk_index: 140 page_number: 87 distance: 0.665865 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 108 page_number: 68 distance: 0.6475252 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 144 page_number: 89 distance: 0.65813255 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 120 page_number: 75 distance: 0.6635225 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 11847,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-a2e52cce9abc",
+        "caseId": "case-003",
+        "status": "SUCCESS",
+        "question": "哪个平台最容易一本正经地胡说八道？",
+        "answer": "根据提供的上下文，没有任何信息指出某个平台“最容易一本正经地胡说八道”。所有引用内容均为技术性描述：\n\n- [1] 仅定义 RAG 平台为“检索增强生成平台”，属中性术语，无价值判断；\n- [2][3] 是 Java/MySQL 面试题 PDF 的片段，内容严谨、符合数据库原理（如事务隔离级别、B+树查询机制），无主观讽刺或戏谑表述。\n\n“一本正经地胡说八道”属于带有修辞色彩的主观评价，通常指向某些表面专业实则缺乏依据的表达行为，但当前上下文未涉及任何平台的行为分析、可信度评估或反讽案例，也未提及如社交媒体、自媒体、AI幻觉高发场景等可能关联该表述的语境。\n\n因此，**无法从给定上下文得出哪个平台最容易一本正经地胡说八道**。该问题超出已有知识范围，且上下文不支持此类推断 [1][2][3]。\n\n---\n引用来源:\n[1] RAG 平台 (CONCEPT) (graph) 可信度: 52%\n[2] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[3] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 45%\n",
+        "citations": [
+          "graph:RAG 平台 (CONCEPT):kg-ent-fe600fba-7727-4558-96bf-2b19a91cd8e8",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-5",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-200"
+        ],
+        "evidence": [
+          "RAG 平台: 检索增强生成平台",
+          "tenant_id: u-selftest02 chunk_index: 5 page_number: 4 distance: 0.68817997 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pd...",
+          "tenant_id: u-selftest02 chunk_index: 200 page_number: 122 distance: 0.6888467 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com..."
+        ],
+        "retrievalHit": 0.0,
+        "citationCoverage": 0.0,
+        "keywordScore": 0.0,
+        "answerFaithfulness": 1.0,
+        "score": 0.2,
+        "latencyMs": 5375,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-791b603e5783",
+        "caseId": "case-004",
+        "status": "SUCCESS",
+        "question": "有没有方案因为数据不能放在自己手里而被毙掉？",
+        "answer": "是的，有方案因数据不能放在自己手里而被毙掉。\n\n具体来说，**方案 C（云厂商托管方案，代号 Atlas）** 虽未在上下文中完整展开其“被毙”原因，但结合明确提及的 **方案 A（Keystone）** 和 **方案 B（Compass）** 的对比描述，以及关键线索：\n\n- 在[1]中明确指出：“**Atlas 的租户模型由云厂商托管，权限粒度到应用级而非数据级，不满足客服与知识库共用平台的数据隔离要求**”；\n- 更重要的是，同一段落中直接说明：**“方案 D：自研最小内核（Forge）……不支持私有化部署，被合规部门一票否决”** [1]；\n- 同时，对 Atlas 的描述虽未直说“不支持私有化”，但强调其为“**云厂商全托管 RAG 服务，按调用量计费**”，且与 Keystone（自建 MySQL+pgvector）、Compass（自建 Milvus+Redis）形成鲜明对比——后两者均基于企业可自主掌控的基础设施；\n- 最关键证据来自[1]对另一方案的定性：“**不支持私有化部署，被合规部门一票否决**”——该描述紧接在 Atlas 介绍之后、Forge 之前，但根据上下文结构和逻辑主语，“不支持私有化部署”的主语实际指向 Atlas（因 Forge 是自研方案，理应可私有化；而 Atlas 明确为“云厂商托管”，天然无法私有化）。此处文本排版可能存在歧义，但结合“Atlas 权限粒度不足”“Keystone/Compass 均为自建”“Forge 被否决理由明确写为‘不支持私有化’却与 Atlas 特性一致”，可合理推断：**Atlas 因依赖云厂商托管、数据无法本地留存、不满足金融合规对数据主权和审计日志本地化的要求，实质上已被合规部门否决**。\n\n此外，[1]开篇即点明核心合规痛点：“**知识库数据需要上传到云端，审计日志不满足公司金融合规要求的本地化留存条款**”，并紧接着指出“**不支持私有化部署，被合规部门一票否决**”——该句虽未标注归属方案，但语义上承接前文对 Atlas 类方案的批评，构成完整因果链。\n\n因此，**Atlas（方案 C）因数据必须存放于云厂商环境、无法满足数据本地化与审计日志本地留存的金融合规要求，被合规部门否决** [1]。\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 57%\n[2] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[3] Keystone 使用 MySQL 8 作为关系数据存储 (graph) 可信度: 52%\n[4] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[5] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[6] deepresearch-test-knowledge.md (keyword) 可信度: 48%\n[7] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[8] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[9] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[10] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n[12] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-169",
+          "graph:Keystone 使用 MySQL 8 作为关系数据存储:kg-fact-2a1e9170-afd5-4d7f-8b8c-31df809b8e21",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-212",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-80",
+          "keyword:deepresearch-test-knowledge.md:chunk-0",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-117",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-115",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-114",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-118",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-84",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-100"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.5018321 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 169 page_number: 105 distance: 0.63550687 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "Keystone 使用 MySQL 8 作为关系数据存储",
+          "tenant_id: u-selftest02 chunk_index: 212 page_number: 128 distance: 0.62306106 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 80 page_number: 52 distance: 0.6398788 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.58248687 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 117 page_number: 73 distance: 0.59495866 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 115 page_number: 72 distance: 0.595549 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 114 page_number: 71 distance: 0.6203232 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 118 page_number: 73 distance: 0.62393665 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 84 page_number: 54 distance: 0.62652016 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 100 page_number: 64 distance: 0.6281544 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 13690,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-31fc057883f0",
+        "caseId": "case-005",
+        "status": "SUCCESS",
+        "question": "公司最后选中的方案，养它三年总共要花多少钱？",
+        "answer": "根据上下文，公司最后选中的方案是 **Keystone（Spring AI 方案）**，其三年总拥有成本（TCO）为 **约 102 万元** [1]。\n\n该数据直接来自“五、成本测算（三年 TCO）”表格中 Keystone 对应的“三年 TCO”行，且在“七、评估结论”中明确指出：“推荐 Keystone……三年 TCO 约 102 万元为自研路线最低”。\n\n因此，养它三年总共要花 **约 102 万元**。\n\n[1]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 59%\n[2] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-206"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.5434054 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 206 page_number: 125 distance: 0.6256572 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 3339,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-8e0c9fd8d5e1",
+        "caseId": "case-006",
+        "status": "SUCCESS",
+        "question": "如果公司规定每年基础设施预算不得超过25万元，哪些方案直接出局，为什么？",
+        "answer": "根据上下文中的成本测算数据（见[1]），各方案的**年度基础设施费用**如下：\n\n- Keystone：21 万元  \n- Compass：19 万元  \n- Atlas：76.6 万元  \n\n公司规定**每年基础设施预算不得超过 25 万元**。因此，需筛选出年度基础设施费用 **> 25 万元** 的方案。\n\n对比可知：\n- Keystone（21 万元）≤ 25 万元 → **符合预算要求**\n- Compass（19 万元）≤ 25 万元 → **符合预算要求**\n- Atlas（76.6 万元）> 25 万元 → **直接出局**\n\n此外，上下文[6]中明确指出 Atlas “不支持私有化部署，被合规部门一票否决”，且[1]中“七、评估结论”也说明“Atlas 因合规问题出局”。虽然合规性是独立于预算的否决项，但其基础设施费用远超限额，**双重不满足要求**。\n\n其他方案中，Forge（自研最小内核）虽未在[1]的成本表中列出年度基础设施费用，但在[6]中描述为“由公司基础架构组两人维护”，结合其极简定位（仅向量检索+生成）、低人力投入（2人）及无云服务依赖，可合理推断其基础设施成本显著低于25万元；且评估结论仅为“适合原型验证”，未提及其因成本超标被排除，故**不因预算出局**。\n\n综上，**仅 Atlas 方案因年度基础设施费用（76.6 万元）远超 25 万元限额而直接出局**[1]。\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (keyword) 可信度: 56%\n[2] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[3] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[4] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[5] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[6] deepresearch-test-knowledge.md (keyword) 可信度: 50%\n[7] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[8] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[9] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[10] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n",
+        "citations": [
+          "keyword:deepresearch-test-knowledge.md:chunk-2",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-80",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-117",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-199",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-93",
+          "keyword:deepresearch-test-knowledge.md:chunk-1",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-165",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-100",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-84",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-134",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-167"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.5547659 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 80 page_number: 52 distance: 0.64231884 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 117 page_number: 73 distance: 0.64363265 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 199 page_number: 121 distance: 0.64678156 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 93 page_number: 60 distance: 0.65021837 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.5864012 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 165 page_number: 103 distance: 0.61388093 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 100 page_number: 64 distance: 0.63689005 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 84 page_number: 54 distance: 0.63785636 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 134 page_number: 84 distance: 0.65566915 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 167 page_number: 104 distance: 0.6574389 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 8743,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-6b584b1fbf19",
+        "caseId": "case-007",
+        "status": "SUCCESS",
+        "question": "响应速度最快的方案为什么最后没有被选上？",
+        "answer": "根据提供的上下文，唯一提及“响应速度最快的方案”及其未被选中的原因的材料是 **[5]《企业级 RAG 平台技术选型评估报告（2026 内部版）》**。\n\n在该报告中：\n\n- **方案 B（Compass，Python LangChain 编排）** 的向量检索 P95 延迟为 **180 毫秒**，低于方案 A（Keystone）的 **240 毫秒**，是四个候选方案中实测**响应速度最快**的（文档明确列出其延迟最低，且未提及其他方案更低值）。\n- 但报告同时指出：  \n  > “但缺少租户隔离的原生支持，需要自行在检索过滤层补齐，开发量估算 6 人周”  \n  > “引用溯源需要额外引入自研组件，覆盖率实测仅 88%”\n\n而评估的核心维度明确包括：  \n> “检索准确率、引用可溯源性、**多租户隔离能力**、异步入库吞吐、可观测性完备度、总拥有成本（TCO）”\n\n可见，尽管方案 B 响应最快，但它在**关键架构能力（多租户隔离）和核心质量指标（引用可溯源性）上存在严重短板**，需大量额外开发且效果不达预期（溯源覆盖率仅 88%，低于方案 A 的隐含高标准），不符合企业级 RAG 平台对**安全性、合规性与可维护性**的要求。\n\n因此，响应速度最快的方案（B）因**牺牲了关键的企业级能力（租户隔离、溯源可靠性），导致综合评估不达标**，最终未被选用 [5]。\n\n---\n引用来源:\n[1] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (vector) 可信度: 65%\n[2] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (vector) 可信度: 60%\n[3] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (vector) 可信度: 60%\n[4] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (vector) 可信度: 57%\n[5] deepresearch-test-knowledge.md (vector) 可信度: 54%\n[6] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 53%\n[7] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (vector) 可信度: 52%\n[8] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[9] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[10] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[11] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 51%\n[12] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "vector:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-95",
+          "vector:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-93",
+          "vector:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-206",
+          "vector:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-214",
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-73",
+          "vector:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-122",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-212",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-165",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-204",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-182",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-82"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 95 page_number: 61 distance: 0.5070795 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 93 page_number: 60 distance: 0.49763227 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com....",
+          "tenant_id: u-selftest02 chunk_index: 206 page_number: 125 distance: 0.51565176 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 214 page_number: 129 distance: 0.52733636 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.5290988 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 73 page_number: 48 distance: 0.5633718 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 122 page_number: 76 distance: 0.52700317 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 212 page_number: 128 distance: 0.5487758 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 165 page_number: 103 distance: 0.5633644 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 204 page_number: 124 distance: 0.56359875 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.co...",
+          "tenant_id: u-selftest02 chunk_index: 182 page_number: 112 distance: 0.5713991 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 82 page_number: 53 distance: 0.5518955 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 0.25,
+        "answerFaithfulness": 1.0,
+        "score": 0.8125,
+        "latencyMs": 8973,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-060e8e886014",
+        "caseId": "case-008",
+        "status": "SUCCESS",
+        "question": "文档评估了哪些少数民族语言的检索效果，结果如何？",
+        "answer": "文档中明确指出：“方言与少数民族语言文档的检索质量未测试，需要二期补充评估”[4]。  \n因此，本次评估**并未评估任何少数民族语言的检索效果**，相关结果尚无数据。\n\n（注：上下文中未提供编号为[4]的原始引用块，但根据内容逻辑和已有引用编号连续性，该结论出自[1]中“六、风险与遗留问题”第4条，应标记为[1]。）\n\n[1]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (keyword) 可信度: 57%\n[2] deepresearch-test-knowledge.md (keyword) 可信度: 48%\n[3] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 48%\n",
+        "citations": [
+          "keyword:deepresearch-test-knowledge.md:chunk-2",
+          "keyword:deepresearch-test-knowledge.md:chunk-0",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-80"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.57449174 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.56108046 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 80 page_number: 52 distance: 0.6168069 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 2864,
+        "errorMessage": ""
+      },
+      {
+        "resultId": "eval-result-9a8273357410",
+        "caseId": "case-009",
+        "status": "SUCCESS",
+        "question": "评估报告里四套方案在评估期间分别暴露过什么问题？哪个性质最严重？",
+        "answer": "根据评估报告内容，四套方案在评估期间暴露的问题如下：\n\n- **Keystone（方案A）**：知识图谱检索路径依赖实体抽取质量，低质量文档可能产生噪声实体，被评定为**中风险** [1]。  \n- **Compass（方案B）**：Milvus 集群在评估期间发生过**一次脑裂（split-brain）故障，恢复耗时 40 分钟**，被标注为“**低频高危**” [1]；此外，安全部门在评估中发现**两次因租户过滤配置错误导致的跨租户数据可见事件**，记为**高危发现** [3]。  \n- **Atlas（方案C）**：未在评估期间暴露运行时问题，但因**不满足金融合规要求（知识数据需本地化留存、审计日志不可控）被合规部门一票否决**，属**战略/合规性致命缺陷** [2][3]。  \n- **Forge（方案D）**：未提及具体运行期暴露的问题，但实测指标极差（命中率71%、幻觉率24%、无引用溯源），评估结论明确其仅适用于原型验证，本质是**能力缺失型方案，不具备生产可用性** [3]。\n\n关于“哪个性质最严重”：  \n虽然 Compass 出现了两次高危安全事件和一次高危可用性事件（脑裂），Keystone 存在中风险质量隐患，Forge 全面不达标，但 **Atlas 被合规部门一票否决**，意味着其**根本无法进入生产环境部署**，属于**准入性质的否决性风险**，直接影响方案存续，其性质最为严重——不是“出了问题”，而是“不具备合法上线资格”。该结论在报告第七节“评估结论”中被明确重申：“Atlas 因合规问题出局” [1]。\n\n综上：  \n- 暴露问题：Keystone（噪声实体，中风险）、Compass（脑裂+跨租户泄漏，高危）、Atlas（合规不满足，否决性）、Forge（能力不足，原型级）；  \n- 性质最严重的是 **Atlas 的合规性缺陷**，因其直接导致方案出局，不可缓解、不可妥协 [1][2][3]。\n\n[1][2][3]\n\n---\n引用来源:\n[1] deepresearch-test-knowledge.md (vector) 可信度: 67%\n[2] deepresearch-test-knowledge.md (vector) 可信度: 65%\n[3] deepresearch-test-knowledge.md (vector) 可信度: 62%\n[4] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[5] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n[6] Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf (keyword) 可信度: 50%\n",
+        "citations": [
+          "vector:deepresearch-test-knowledge.md:chunk-2",
+          "vector:deepresearch-test-knowledge.md:chunk-0",
+          "vector:deepresearch-test-knowledge.md:chunk-1",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-84",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-198",
+          "keyword:Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pdf:chunk-5"
+        ],
+        "evidence": [
+          "tenant_id: u-selftest02 chunk_index: 2 distance: 0.51335704 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sou...",
+          "tenant_id: u-selftest02 chunk_index: 0 distance: 0.5145464 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 1 distance: 0.5368805 job_id: job-8e5bb519-f9c4-4563-ba77-e6d62c439b4d file_name: deepresearch-test-knowledge.md created_at: 1790950995477 sour...",
+          "tenant_id: u-selftest02 chunk_index: 84 page_number: 54 distance: 0.6595928 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.p...",
+          "tenant_id: u-selftest02 chunk_index: 198 page_number: 121 distance: 0.6887828 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com...",
+          "tenant_id: u-selftest02 chunk_index: 5 page_number: 4 distance: 0.69409925 job_id: job-5c6b48d9-fa1d-4f2d-9b57-78f45a60e220 file_name: Java 热门面试题 200 道速记通关版 _ 面试刷题 mianshiya.com.pd..."
+        ],
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+        "latencyMs": 12096,
+        "errorMessage": ""
+      }
+    ],
+    "errorMessage": null,
+    "startedAt": "2026-10-02T14:46:22.559216347",
+    "finishedAt": "2026-10-02T14:47:38.066154288",
+    "createdAt": "2026-10-02T14:46:22.559216347"
+  }
+}
