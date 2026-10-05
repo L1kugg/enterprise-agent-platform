@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.micrometer.tagged.TaggedCircuitBreakerMetrics;
+import io.github.resilience4j.micrometer.tagged.TaggedRetryMetrics;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import org.junit.jupiter.api.Test;
@@ -131,5 +133,27 @@ class ModelCallGuardTest {
         assertThat(counter("react", "error")).isEqualTo(1.0);
         CircuitBreaker breaker = circuitBreakerRegistry.circuitBreaker("llm.react");
         assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isEqualTo(1);
+    }
+
+    @Test
+    void taggedMetricsPublishForLazilyCreatedBreakerAndRetry() {
+        // 生产装配方式：MeterBinder Bean 由 Spring Boot bindTo(MeterRegistry)，
+        // 惰性创建的熔断器/重试器经 onEntryAdded 自动挂上 tagged 指标
+        TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(circuitBreakerRegistry).bindTo(meterRegistry);
+        TaggedRetryMetrics.ofRetryRegistry(retryRegistry).bindTo(meterRegistry);
+
+        AtomicInteger attempts = new AtomicInteger();
+        newGuard().call("research-plan", () -> {
+            if (attempts.incrementAndGet() < 2) {
+                throw new TransientAiException("upstream busy");
+            }
+            return "第二次成功";
+        });
+
+        assertThat(meterRegistry.get("resilience4j.circuitbreaker.state")
+                .tag("name", "llm.research-plan").gauge().value()).isEqualTo(0.0); // 0 = closed
+        assertThat(meterRegistry.get("resilience4j.retry.calls")
+                .tag("name", "llm.research-plan")
+                .tag("kind", "successful_with_retry").functionCounter().count()).isEqualTo(1.0);
     }
 }

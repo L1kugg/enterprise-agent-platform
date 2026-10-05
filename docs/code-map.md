@@ -262,7 +262,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `llm/`（1 个） | ModelCallGuardTest | 同步透传与计数、瞬时异常白名单重试、非白名单不重试、熔断打开快速失败（同步+流式）、流式超时按失败回写熔断器 |
 | 其他 | HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
 
-**运行**：`mvn test`（当前基线 334 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
+**运行**：`mvn test`（当前基线 335 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
 
 ---
 

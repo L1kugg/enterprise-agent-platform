@@ -427,7 +427,7 @@ API Key（X-API-Key）
 | Retry | 仅同步调用（流式不重试，避免重复吐字） | 最多 3 次，间隔 2s，仅对瞬时异常重试（`RestClientException` / `WebClientException` / `TimeoutException` / `TransientAiException`）；熔断器异常不重试 |
 | TimeLimiter | 流式以 Reactor `timeout` 实现基线兜底 | 30 秒无任何新帧 → 按失败回写熔断器并中断流 |
 
-装饰顺序：同步 `Retry(CircuitBreaker(调用))`——熔断器记录每次尝试，重试由瞬时异常白名单驱动。观测：resilience4j starter 自动发布的 `resilience4j_circuitbreaker_*` tagged 指标（按 `llm.<场景>` 实例区分）+ 自定义计数器 `llm.call.outcome{scenario, outcome=success/error/not_permitted}`。RAG 两条链的生成步骤捕获熔断异常返回固定兜底文案（`generation_fallback`），ReAct / Workflow / DeepResearch 由既有场景兜底承接（见 10.3）。模型路由 fallback 链（10.3 末行）是路由层的独立降级，与本节熔断互补。
+装饰顺序：同步 `Retry(CircuitBreaker(调用))`——熔断器记录每次尝试，重试由瞬时异常白名单驱动。观测：`ResilienceConfiguration` 显式定义的 `TaggedCircuitBreakerMetrics` / `TaggedRetryMetrics` Binder Bean 发布 `resilience4j_circuitbreaker_*` / `resilience4j_retry_*` tagged 指标（按 `llm.<场景>` 实例区分；starter 默认发布路径被自定义注册表 Bean 顶掉，故显式定义）+ 自定义计数器 `llm.call.outcome{scenario, outcome=success/error/not_permitted}`。RAG 两条链的生成步骤捕获熔断异常返回固定兜底文案（`generation_fallback`），ReAct / Workflow / DeepResearch 由既有场景兜底承接（见 10.3）。模型路由 fallback 链（10.3 末行）是路由层的独立降级，与本节熔断互补。
 
 ### 10.3 各场景兜底行为
 
@@ -662,7 +662,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 16.3 Resilience4j 接入确认
 
-**已解决**：`llm.ModelCallGuard` 已编程式织入全部 LLM 调用链（`ReactAgentService` / `WorkflowReactAgentService` / `RagAnswerService` / `HybridRagAnswerService` / `ResearchPlannerAgent` / `ReportWriterAgent`），同步调用走 Retry+熔断、流式走订阅前快速失败+30s 超时基线；resilience4j starter 自动发布 `resilience4j_circuitbreaker_*` 指标（懒创建实例也能挂上），另有 `llm.call.outcome` 自定义计数器。参数与织入明细见 10.2。
+**已解决**：`llm.ModelCallGuard` 已编程式织入全部 LLM 调用链（`ReactAgentService` / `WorkflowReactAgentService` / `RagAnswerService` / `HybridRagAnswerService` / `ResearchPlannerAgent` / `ReportWriterAgent`），同步调用走 Retry+熔断、流式走订阅前快速失败+30s 超时基线；`ResilienceConfiguration` 显式定义 Tagged Binder Bean 发布 `resilience4j_circuitbreaker_*` 指标（懒创建实例经 onEntryAdded 挂上），另有 `llm.call.outcome` 自定义计数器。参数与织入明细见 10.2。
 
 ### 16.4 记忆系统与主管线的集成
 
