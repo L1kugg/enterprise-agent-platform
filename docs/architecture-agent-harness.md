@@ -24,7 +24,7 @@ model decision
 | `ActionPolicyGuard` | 对模型请求的 action 做白名单、schema、trusted runtime 校验 |
 | `AgentHarnessService` | 选择 runtime、执行 action、生成 observation、写入 action 事件 |
 | `AgentRuntime` | runtime 扩展接口 |
-| `BuiltinToolRuntime` | 执行当前内置工具：课程、预约、RAG 检索 |
+| `BuiltinToolRuntime` | 执行当前内置工具：课程、预约、RAG 检索、主库只读查询 |
 | `McpToolRuntime` | 通过 `McpToolAdapter` 白名单适配器调用 MCP 工具 |
 | `WorkspaceRuntime` | 在项目根目录内执行受限的文件、搜索、写入和命令动作 |
 | `TrustedActionService` | 生成受信 runtime 的 preview、一次性确认 token 与 execute 入口 |
@@ -39,6 +39,7 @@ model decision
 - `query_course`
 - `add_course_reservation`
 - `rag_search`
+- `query_database`（模型生成 SQL 的只读查询：`SqlReadOnlyGuard` 正则守卫 + 租户过滤启发式 + 只读会话/超时/行数与单元格截断四层防御）
 
 `finish` 不属于 runtime action，它仍由 ReAct service 处理，因为它代表循环结束而不是工具调用。
 
@@ -52,6 +53,7 @@ Harness 当前注册的 action：
 | `query_course` | builtin | default | - |
 | `add_course_reservation` | builtin | default | `course`, `studentName`, `contactInfo`, `school` |
 | `rag_search` | builtin | default | - |
+| `query_database` | builtin | default | `sql` |
 | `mcp_call` | mcp | trusted | `server`, `tool`, `arguments` |
 | `workspace_list_files` | workspace | trusted | - |
 | `workspace_read_file` | workspace | trusted | `path` |
@@ -91,6 +93,13 @@ app:
             search:
               path: /mcp/tools/call
               timeout-ms: 5000
+    database-query:
+      enabled: true
+      max-rows: 30
+      query-timeout-seconds: 5
+      max-cell-chars: 200
+      max-sql-length: 4000
+      denied-tables: [users, roles, user_roles, refresh_tokens, api_keys, mysql]
 ```
 
 Policy guard 会按顺序检查：action 是否注册、是否被全局禁用、租户是否允许、required input 是否齐全、trusted runtime 是否开启、受信 action 是否真的带有 `trustedRuntimeAccess=true`。生产 profile 默认关闭 trusted runtime、workspace 写入和 shell 执行，避免部署后自动暴露本地执行能力。

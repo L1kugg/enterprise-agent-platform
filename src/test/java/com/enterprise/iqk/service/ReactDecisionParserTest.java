@@ -38,6 +38,19 @@ class ReactDecisionParserTest {
     }
 
     @Test
+    void parsesQueryDatabaseActionWithinWhitelist() {
+        // query_database 在白名单内：模型规划查数据库时不被强制归为 finish
+        ReactDecisionParser.ReasonDecision decision = parser.parse("""
+                {"thought":"用户想查课程数","action":"query_database",
+                 "action_input":{"sql":"SELECT COUNT(*) AS total FROM course WHERE tenant_id = 'public'"}}
+                """);
+
+        assertThat(decision.action()).isEqualTo("query_database");
+        assertThat(decision.actionInput()).containsEntry("sql",
+                "SELECT COUNT(*) AS total FROM course WHERE tenant_id = 'public'");
+    }
+
+    @Test
     void convertsUnknownOrInvalidModelOutputToSafeFinish() {
         ReactDecisionParser.ReasonDecision unknown = parser.parse("{" +
                 "\"action\":\"delete_everything\",\"answer\":\"safe\"}");

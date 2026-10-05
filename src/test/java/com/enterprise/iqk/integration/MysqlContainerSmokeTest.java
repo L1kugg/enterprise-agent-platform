@@ -57,7 +57,8 @@ class MysqlContainerSmokeTest {
     @Test
     void startsApplicationAndAppliesAllFlywayMigrations() {
         assertNotNull(flyway.info().current());
-        assertEquals("14", flyway.info().current().getVersion().getVersion());
+        // 与 db/migration 下最高迁移版本保持一致（当前 V19），新增迁移时同步更新
+        assertEquals("19", flyway.info().current().getVersion().getVersion());
 
         ResponseEntity<Map> response = restTemplate.getForEntity("/actuator/health", Map.class);
         assertEquals(HttpStatus.OK, response.getStatusCode());

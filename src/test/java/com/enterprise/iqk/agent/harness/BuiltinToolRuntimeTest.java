@@ -4,6 +4,7 @@ import com.enterprise.iqk.rag.HybridRagAnswerService;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.tools.CourseTools;
+import com.enterprise.iqk.tools.DatabaseQueryTools;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -45,7 +47,8 @@ class BuiltinToolRuntimeTest {
                         .score(0.8).snippet("evidence").build()))
                 .weights(weights)
                 .build());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(courseTools, hybridRagAnswerService);
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
 
         AgentObservation observation = runtime.execute(new AgentAction(
                 "rag_search",
@@ -87,7 +90,8 @@ class BuiltinToolRuntimeTest {
                         EvidenceItem.builder().snippet("有效证据").build(),
                         EvidenceItem.builder().snippet("   ").build()))
                 .build());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(courseTools, hybridRagAnswerService);
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
 
         AgentObservation observation = runtime.execute(new AgentAction(
                 "rag_search",
@@ -109,7 +113,8 @@ class BuiltinToolRuntimeTest {
     void executeReservationRejectsMissingRequiredFields() {
         CourseTools courseTools = mock(CourseTools.class);
         HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(courseTools, hybridRagAnswerService);
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
 
         AgentObservation observation = runtime.execute(new AgentAction(
                 "add_course_reservation",
@@ -134,7 +139,8 @@ class BuiltinToolRuntimeTest {
         CourseTools courseTools = mock(CourseTools.class);
         HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
         when(courseTools.querySchool()).thenReturn(List.of());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(courseTools, hybridRagAnswerService);
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
 
         AgentObservation observation = runtime.execute(new AgentAction(
                 "query_school",
@@ -152,5 +158,69 @@ class BuiltinToolRuntimeTest {
                 .containsEntry("data", List.of());
         verify(courseTools).querySchool();
         verifyNoInteractions(hybridRagAnswerService);
+    }
+
+    @Test
+    void executeDatabaseQueryDelegatesAndFlattensPayloadKeys() {
+        CourseTools courseTools = mock(CourseTools.class);
+        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
+        DatabaseQueryTools databaseQueryTools = mock(DatabaseQueryTools.class);
+        // 租户由服务端从 action.tenantId() 注入（归一化后透传），SQL 原样透传
+        when(databaseQueryTools.queryDatabase(eq("SELECT id FROM course"), eq("tenant-a")))
+                .thenReturn(Map.of(
+                        "columns", List.of("id"),
+                        "rows", List.of(Map.of("id", "1")),
+                        "rowCount", 1,
+                        "truncated", false,
+                        "executedSql", "SELECT id FROM course LIMIT 30"));
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, databaseQueryTools);
+
+        AgentObservation observation = runtime.execute(new AgentAction(
+                "query_database",
+                Map.of("sql", "SELECT id FROM course"),
+                "prompt",
+                "tenant-a",
+                "chat-1",
+                "balanced",
+                "",
+                ""
+        ));
+
+        // Map 载荷经 toMap 展平：业务键与 status/source 平级（前端轨迹通用 JSON 渲染依赖此形状）
+        assertThat(observation.toMap())
+                .containsEntry("status", "success")
+                .containsEntry("source", "builtin")
+                .containsEntry("rowCount", 1)
+                .containsEntry("columns", List.of("id"));
+        verifyNoInteractions(courseTools, hybridRagAnswerService);
+    }
+
+    @Test
+    void executeDatabaseQueryConvertsErrorMapToErrorObservation() {
+        CourseTools courseTools = mock(CourseTools.class);
+        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
+        DatabaseQueryTools databaseQueryTools = mock(DatabaseQueryTools.class);
+        when(databaseQueryTools.queryDatabase(anyString(), eq("tenant-a")))
+                .thenReturn(Map.of("status", "error", "message", "只允许 SELECT 查询"));
+        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
+                courseTools, hybridRagAnswerService, databaseQueryTools);
+
+        AgentObservation observation = runtime.execute(new AgentAction(
+                "query_database",
+                Map.of("sql", "WITH w AS (DELETE FROM course) SELECT 1"),
+                "prompt",
+                "tenant-a",
+                "chat-1",
+                "balanced",
+                "",
+                ""
+        ));
+
+        // status=error 的 Map 由 runtime 统一转 error 观测（只保留 message）
+        assertThat(observation.toMap())
+                .containsEntry("status", "error")
+                .containsEntry("source", "builtin")
+                .containsEntry("message", "只允许 SELECT 查询");
     }
 }

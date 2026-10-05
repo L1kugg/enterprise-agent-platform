@@ -221,6 +221,16 @@ app:
             get_weather:
               # 壳内 geocode + forecast 各一次上游调用，8s 覆盖串行总耗时
               timeout-ms: ${APP_MCP_WEATHER_TIMEOUT_MS:8000}
+    # 主库只读查询动作（query_database）：模型生成 SQL，后端正则守卫 + 只读会话 + 超时/行数/单元格截断。
+    # max-rows 与 HarnessPayloadSanitizer 的集合截断上限（30）对齐，配大只会被消毒器二次截断
+    database-query:
+      enabled: ${APP_AGENT_HARNESS_DB_QUERY_ENABLED:true}
+      max-rows: ${APP_AGENT_HARNESS_DB_QUERY_MAX_ROWS:30}
+      query-timeout-seconds: ${APP_AGENT_HARNESS_DB_QUERY_TIMEOUT_SECONDS:5}
+      max-cell-chars: ${APP_AGENT_HARNESS_DB_QUERY_MAX_CELL_CHARS:200}
+      max-sql-length: ${APP_AGENT_HARNESS_DB_QUERY_MAX_SQL_LENGTH:4000}
+      # 拒绝查询的表/schema 黑名单（凭证类默认全拉黑；观测不做键名脱敏，放行即原样进模型与轨迹）
+      denied-tables: ${APP_AGENT_HARNESS_DB_QUERY_DENIED_TABLES:users,roles,user_roles,refresh_tokens,api_keys,mysql}
   cost-governance:
     enabled: ${APP_COST_GOVERNANCE_ENABLED:true}
     default-monthly-budget-usd: ${APP_COST_DEFAULT_MONTHLY_BUDGET_USD:25.0000}

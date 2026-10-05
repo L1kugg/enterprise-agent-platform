@@ -4,7 +4,9 @@ import com.enterprise.iqk.domain.query.CourseQuery;
 import com.enterprise.iqk.rag.HybridRagAnswerService;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.EvidenceItem;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.tools.CourseTools;
+import com.enterprise.iqk.tools.DatabaseQueryTools;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -18,9 +20,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 进程内工具运行时：处理 4 个业务内置动作
- * （query_school / query_course / add_course_reservation / rag_search），
- * 直接复用 CourseTools 与 HybridRagAnswerService（四路混合检索），不经过模型工具调用协议。
+ * 进程内工具运行时：处理 5 个业务内置动作
+ * （query_school / query_course / add_course_reservation / rag_search / query_database），
+ * 直接复用 CourseTools、HybridRagAnswerService（四路混合检索）与 DatabaseQueryTools（主库只读查询），
+ * 不经过模型工具调用协议。
  */
 @Component
 @RequiredArgsConstructor
@@ -29,11 +32,13 @@ public class BuiltinToolRuntime implements AgentRuntime {
             "query_school",
             "query_course",
             "add_course_reservation",
-            "rag_search"
+            "rag_search",
+            "query_database"
     );
 
     private final CourseTools courseTools;
     private final HybridRagAnswerService hybridRagAnswerService;
+    private final DatabaseQueryTools databaseQueryTools;
 
     @Override
     public String source() {
@@ -54,6 +59,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
             case "query_course" -> courseTools.queryCourse(toCourseQuery(action.actionInput()));
             case "add_course_reservation" -> executeReservation(action.actionInput());
             case "rag_search" -> executeRagSearch(action);
+            case "query_database" -> executeDatabaseQuery(action);
             default -> Map.of("status", "error", "message", "unsupported action: " + action.action());
         };
         if (payload instanceof Map<?, ?> mapPayload && "error".equals(mapPayload.get("status"))) {
@@ -134,6 +140,17 @@ public class BuiltinToolRuntime implements AgentRuntime {
         String title = StringUtils.hasText(item.getTitle()) ? item.getTitle().replace(',', '，') : "未知来源";
         String chunk = StringUtils.hasText(item.getChunkId()) ? item.getChunkId() : "?";
         return "source=" + title + ", chunk=" + chunk;
+    }
+
+    /**
+     * 主库只读查询：SQL 由模型现场生成，守卫/租户启发式/停用开关都在 DatabaseQueryTools 内闭环。
+     * 租户从 action.tenantId() 服务端注入并归一化（schema 不开放该入参，防模型伪造）；
+     * sql 缺失时 ActionPolicyGuard 已在 runtime 之前拒绝，这里兜底返回空串交给工具层报错。
+     */
+    private Map<String, Object> executeDatabaseQuery(AgentAction action) {
+        String sql = stringVal(action.actionInput(), "sql", "");
+        String tenantId = TenantContext.normalize(action.tenantId());
+        return databaseQueryTools.queryDatabase(sql, tenantId);
     }
 
     /** 动作输入 → 课程查询对象：解析 type/edu/sorts（排序字段+升降序），解析不了的字段静默忽略 */

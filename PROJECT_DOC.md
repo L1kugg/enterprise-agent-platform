@@ -148,7 +148,7 @@ CREATED → PLANNING → SEARCHING → RETRIEVING → JUDGING → REFLECTING →
 
 ```
 用户提问
-  → 模型思考并选择动作（query_school / query_course / add_course_reservation / rag_search / finish）
+  → 模型思考并选择动作（query_school / query_course / add_course_reservation / rag_search / query_database / finish）
   → Harness 执行动作，返回 observation
   → observation 拼入滚动上下文
   → 模型再次思考
@@ -356,7 +356,7 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 
 | Runtime | 执行什么 | 信任级别 |
 |---------|---------|---------|
-| BuiltinToolRuntime | query_school / query_course / add_course_reservation / rag_search | 默认可用 |
+| BuiltinToolRuntime | query_school / query_course / add_course_reservation / rag_search / query_database | 默认可用 |
 | McpToolRuntime | 配置化的 MCP 外部工具调用 | 需要 trusted |
 | WorkspaceRuntime | 文件读写 / 文本搜索 / 补丁应用 / Shell 命令 | 需要 trusted |
 

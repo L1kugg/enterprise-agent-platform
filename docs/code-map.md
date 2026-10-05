@@ -32,16 +32,18 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 类 | 职责 |
 |---|---|
 | `tools/CourseTools.java` | 课程领域工具：query_school / query_course / add_course_reservation；LambdaQueryWrapper 查询、tenant_id 过滤、排序列白名单（SFunction 映射防注入）、预约幂等打标 |
+| `tools/SqlReadOnlyGuard.java` | query_database 的 SQL 只读守卫（纯函数）：剥注释/字面量后做单语句 + SELECT 白名单 + 写关键词整词黑名单（含改数 CTE/FOR SHARE）+ 表黑名单 + LIMIT 收敛；`extractTableNames` 供租户启发式复用 |
+| `tools/DatabaseQueryTools.java` | query_database 执行端：守卫 → 租户过滤启发式（information_schema + 5 分钟 TTL 缓存，fail-open）→ 只读会话 + 超时 + 驱动级行数硬顶 + 单元格截断；tool.query.latency 埋点 |
 
 ### Agent Harness（自研动作体系，`agent/harness/`）
 
 | 类 | 职责 |
 |---|---|
-| `ActionSchema.java` / `ActionSchemaRegistry.java` | 动作 schema 与注册表；构造器一次性注册 11 个动作（builtin 4 + mcp_call 1 + workspace 6）；`find()` Optional 查找，读时不可变拷贝 |
+| `ActionSchema.java` / `ActionSchemaRegistry.java` | 动作 schema 与注册表；构造器一次性注册 12 个动作（builtin 5 + mcp_call 1 + workspace 6）；`find()` Optional 查找，读时不可变拷贝 |
 | `AgentHarnessService.java` | 动作执行入口 `execute(AgentAction)`：校验 schema → 策略守卫 → 分发 runtime → 记录观测 |
 | `ActionPolicyGuard.java` / `ActionPolicyDecision.java` | 调用前策略判定（允许/拒绝/需受信确认） |
 | `TrustedActionService.java` | 受信动作：高危操作（如写库）先出预览，确认后执行，token 清理 |
-| `BuiltinToolRuntime.java` | 内置动作执行：query_school/query_course/add_course_reservation/rag_search（rag_search 内部调 `rag/HybridRagAnswerService` 四路混合，citations 映射回 `source=..., chunk=...` 文本、载荷键 query/answer/citations/evidence/weights 与旧单路一致） |
+| `BuiltinToolRuntime.java` | 内置动作执行：query_school/query_course/add_course_reservation/rag_search/query_database（rag_search 内部调 `rag/HybridRagAnswerService` 四路混合，citations 映射回 `source=..., chunk=...` 文本、载荷键 query/answer/citations/evidence/weights 与旧单路一致；query_database 内部调 `tools/DatabaseQueryTools`，租户从 action.tenantId() 服务端注入） |
 | `WorkspaceRuntime.java` | 工作区动作：文件读写/搜索/受限 shell，mvn/git/ripgrep 白名单，文件大小与搜索结果截断 |
 | `McpToolAdapter.java` / `HttpMcpToolAdapter.java` / `McpToolRuntime.java` | MCP 出站桥接：手拼 JSON-RPC 2.0 `tools/call`，JDK HttpClient 直连；SSRF 防护（拒绝 RFC1918/回环/云元数据地址 + allowedHosts 白名单）、响应体 2 MiB 上限、瞬时故障退避重试（重试不过模型、不烧 token）。已接首个真实工具：天气（详见下方"MCP 工具调用全链路"） |
 | `HarnessPayloadSanitizer.java` | 观测载荷消毒裁剪（防工具返回值撑爆上下文） |
