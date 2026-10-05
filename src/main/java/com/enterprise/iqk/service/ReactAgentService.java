@@ -83,6 +83,7 @@ public class ReactAgentService {
         MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
 
         for (int step = 1; step <= MAX_STEPS; step++) {
+            long stepStartNs = System.nanoTime(); // 每步掐表，轨迹记录真实耗时
             ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
             usedFallback = usedFallback || decision.fallback();
 
@@ -100,25 +101,13 @@ public class ReactAgentService {
                 if (decision.evidence() != null && !decision.evidence().isEmpty()) {
                     observation.put("evidence", decision.evidence());
                 }
-                trace.add(ReactTraceStepVO.builder()
-                        .step(step)
-                        .thought(decision.thought())
-                        .action("finish")
-                        .actionInput(decision.actionInput())
-                        .observation(observation)
-                        .build());
+                trace.add(buildTraceStep(step, decision, observation, stepStartNs));
                 return finalizeResponse(request, answer.answer(), trace, routeDecision, usedFallback,
                         memorySnapshot, tenantId, memoryUserKey);
             }
 
             Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
-            trace.add(ReactTraceStepVO.builder()
-                    .step(step)
-                    .thought(decision.thought())
-                    .action(decision.action())
-                    .actionInput(decision.actionInput())
-                    .observation(observation)
-                    .build());
+            trace.add(buildTraceStep(step, decision, observation, stepStartNs));
 
             rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
         }
@@ -153,6 +142,7 @@ public class ReactAgentService {
                     MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
 
                     for (int step = 1; step <= MAX_STEPS; step++) {
+                        long stepStartNs = System.nanoTime(); // 每步掐表，轨迹记录真实耗时
                         ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, memorySnapshot);
                         usedFallback = usedFallback || decision.fallback();
                         if ("finish".equals(decision.action())) {
@@ -165,25 +155,13 @@ public class ReactAgentService {
                             if (decision.evidence() != null && !decision.evidence().isEmpty()) {
                                 observation.put("evidence", decision.evidence());
                             }
-                            trace.add(ReactTraceStepVO.builder()
-                                    .step(step)
-                                    .thought(decision.thought())
-                                    .action("finish")
-                                    .actionInput(decision.actionInput())
-                                    .observation(observation)
-                                    .build());
+                            trace.add(buildTraceStep(step, decision, observation, stepStartNs));
                             directAnswer = emptyIfBlank(decision.answer());
                             break;
                         }
 
                         Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
-                        trace.add(ReactTraceStepVO.builder()
-                                .step(step)
-                                .thought(decision.thought())
-                                .action(decision.action())
-                                .actionInput(decision.actionInput())
-                                .observation(observation)
-                                .build());
+                        trace.add(buildTraceStep(step, decision, observation, stepStartNs));
                         rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
                     }
 
@@ -330,6 +308,19 @@ public class ReactAgentService {
                 "",
                 ""
         )).toMap();
+    }
+
+    /** 拼单步轨迹 VO：elapsedMs 用 stepStartNs 掐表换算，覆盖本步规划 + 动作执行全程。 */
+    private ReactTraceStepVO buildTraceStep(int step, ReasonDecision decision,
+                                            Object observation, long stepStartNs) {
+        return ReactTraceStepVO.builder()
+                .step(step)
+                .thought(decision.thought())
+                .action(decision.action())
+                .actionInput(decision.actionInput())
+                .observation(observation)
+                .elapsedMs(elapsedMs(stepStartNs))
+                .build();
     }
 
     /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败或空答案给兜底文案并标记 fallback。 */

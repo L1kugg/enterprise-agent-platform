@@ -8,6 +8,7 @@ import type {
   BranchMergeRequest,
   BranchMergeResult,
   DeepResearchResult,
+  DocumentContent,
   EvalComparison,
   EvalDataset,
   EvalDatasetCreate,
@@ -63,9 +64,19 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   }
 }
 
+/** 401 全局处理钩子：任何接口收到 401 都触发一次（useAuthActions 注册：清过期凭据 → 门闩弹回登录页）。 */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 function formatHttpError(status: number, message: string): Error {
   // 认证接口的业务失败走 HTTP 200 + ok=0，直接展示后端 msg；
   // 真正的 HTTP 错误才在文案里标注错误码，方便排查。
+  if (status === 401) {
+    unauthorizedHandler?.();
+  }
   if (status >= 200 && status < 300) {
     return new Error(message || '请求失败，请稍后重试');
   }
@@ -771,6 +782,42 @@ export async function searchIngestionPreview(
     throw formatHttpError(response.status, '试搜失败');
   }
   return payload;
+}
+
+/** 文档内容预览：后端重解析磁盘原文件返回切片文本块（超长已截断）。 */
+export async function getIngestionDocumentContent(
+  chatId: string,
+  auth?: AuthContext,
+): Promise<DocumentContent> {
+  const response = await fetch(
+    resolveApi(`/ingestion/documents/${encodeURIComponent(chatId)}/content`),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<DocumentContent & { msg?: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? '文档内容加载失败');
+  }
+  return payload;
+}
+
+/** 下载知识库文档原文件：fetch 带 JWT 取 blob（window.open 带不了认证头，所以不能用新标签页）。 */
+export async function downloadIngestionOriginalFile(
+  chatId: string,
+  auth?: AuthContext,
+): Promise<Blob> {
+  const response = await fetch(resolveApi(`/ai/pdf/file/${encodeURIComponent(chatId)}`), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  if (!response.ok) {
+    throw formatHttpError(response.status, '原文件下载失败');
+  }
+  return response.blob();
 }
 
 /** 管理员跨租户文档总览：分页 + 搜索（租户/批次/文件名）。 */

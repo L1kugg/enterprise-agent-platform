@@ -67,12 +67,17 @@
               height="100%"
               empty-text="还没有入库文档，先上传一个"
             >
-              <el-table-column
-                prop="sourceName"
-                label="文件"
-                min-width="180"
-                show-overflow-tooltip
-              />
+              <el-table-column prop="sourceName" label="文件" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-link
+                    class="kb-doc-name"
+                    type="primary"
+                    :underline="false"
+                    @click="openKnowledgeDocument(row)"
+                    >{{ row.sourceName }}</el-link
+                  >
+                </template>
+              </el-table-column>
               <el-table-column label="类型" width="80">
                 <template #default="{ row }">{{ row.sourceType || '—' }}</template>
               </el-table-column>
@@ -216,6 +221,7 @@
         </el-tab-pane>
       </el-tabs>
     </section>
+    <DocumentViewerDrawer />
   </section>
 </template>
 
@@ -225,6 +231,7 @@
 // （轮询读 useGlobalUi 的 activeView，与本组件卸载无关）；数据加载由
 // useViewActivation / App.vue onMounted 触发。
 import { ElMessage } from 'element-plus';
+import DocumentViewerDrawer from './DocumentViewerDrawer.vue';
 import {
   knowledgeDocuments,
   knowledgeDocsPage,
@@ -239,6 +246,7 @@ import {
   knowledgeUploading,
   loadKnowledgeDocuments,
   loadKnowledgeJobs,
+  openKnowledgeDocument,
   previewLoading,
   previewQuery,
   previewResult,
@@ -331,6 +339,18 @@ import { formatFileSize, formatJobTime, statusTagType } from '../../utils/format
 .kb-table-wrap {
   flex: 1;
   min-height: 0;
+}
+
+/* 文件名列的可点击文件名：单行省略，配合 show-overflow-tooltip 的溢出测量 */
+.kb-doc-name {
+  max-width: 100%;
+}
+
+.kb-doc-name :deep(.el-link__inner) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kb-pane .el-pagination {

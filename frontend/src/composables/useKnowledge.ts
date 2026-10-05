@@ -9,12 +9,19 @@ import type { UploadUserFile } from 'element-plus';
 
 import {
   deleteIngestionDocument,
+  downloadIngestionOriginalFile,
+  getIngestionDocumentContent,
   listIngestionDocuments,
   listRecentIngestionJobs,
   searchIngestionPreview,
   uploadIngestionDocument,
 } from '../api/client';
-import type { IngestionDocumentSummary, IngestionJob, RetrievalPreviewResult } from '../types/react';
+import type {
+  DocumentContent,
+  IngestionDocumentSummary,
+  IngestionJob,
+  RetrievalPreviewResult,
+} from '../types/react';
 import { isAuthError, shortId } from '../utils/format';
 import { activeView } from './useGlobalUi';
 import { apiKeyInput, authContext, token } from './useAuthState';
@@ -36,6 +43,10 @@ export const knowledgeDocsSearch = ref('');
 export const previewQuery = ref('');
 export const previewLoading = ref(false);
 export const previewResult = ref<RetrievalPreviewResult | null>(null);
+// 文档内容预览抽屉：点文件名打开，临时 UI 状态不持久化
+export const docViewerVisible = ref(false);
+export const docViewerLoading = ref(false);
+export const docViewerDoc = ref<DocumentContent | null>(null);
 
 export async function loadKnowledgeJobs(silent = false): Promise<void> {
   if (!token.value && !apiKeyInput.value) {
@@ -125,6 +136,50 @@ export async function removeKnowledgeDocument(row: IngestionDocumentSummary): Pr
     await Promise.all([loadKnowledgeDocuments(true), loadKnowledgeJobs(true)]);
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除失败';
+    ElMessage.error(message);
+  }
+}
+
+/** 点文件名打开内容预览：每次打开都重置旧内容；报错弹 toast 并收起抽屉（401 走页面内未登录提示）。 */
+export async function openKnowledgeDocument(row: IngestionDocumentSummary): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    knowledgeNeedsAuth.value = true;
+    return;
+  }
+  docViewerVisible.value = true;
+  docViewerLoading.value = true;
+  docViewerDoc.value = null;
+  try {
+    docViewerDoc.value = await getIngestionDocumentContent(row.chatId, authContext());
+  } catch (error) {
+    docViewerVisible.value = false;
+    if (isAuthError(error)) {
+      knowledgeNeedsAuth.value = true;
+    } else {
+      const message = error instanceof Error ? error.message : '文档内容加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    docViewerLoading.value = false;
+  }
+}
+
+/** 下载当前预览文档的原文件：blob + objectURL 触发浏览器下载，文件名用清单里的原始文件名。 */
+export async function downloadKnowledgeOriginal(): Promise<void> {
+  const doc = docViewerDoc.value;
+  if (!doc) {
+    return;
+  }
+  try {
+    const blob = await downloadIngestionOriginalFile(doc.chatId, authContext());
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = doc.sourceName || 'document';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '原文件下载失败';
     ElMessage.error(message);
   }
 }

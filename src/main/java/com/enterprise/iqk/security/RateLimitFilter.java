@@ -17,6 +17,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +49,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket());
         if (!bucket.tryConsume(1)) {
             response.setStatus(429);
+            // 手写 JSON 必须显式设 UTF-8：Servlet 默认 ISO-8859-1，中文会整个变成问号
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
             response.setContentType("application/json");
             response.getWriter().write("{\"ok\":0,\"msg\":\"请求太频繁了，请稍后再试\"}");
             return;

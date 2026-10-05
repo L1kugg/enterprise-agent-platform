@@ -22,6 +22,8 @@ export interface ReactTraceStep {
   action: string;
   actionInput?: Record<string, unknown>;
   observation?: unknown;
+  /** 本步真实耗时（毫秒）；工作流引擎轨迹与老会话历史没有此值。 */
+  elapsedMs?: number | null;
 }
 
 export interface ReactChatResponse {
@@ -301,6 +303,23 @@ export interface RetrievalPreviewItem {
   chunkId: string;
   score: number;
   snippet: string;
+}
+
+/** 文档内容预览的单个内容块（对应后端 DocumentContentVO.Block）；page 为 PDF 页码，非 PDF 为 null。 */
+export interface DocumentContentBlock {
+  index: number;
+  page?: number | null;
+  text: string;
+}
+
+/** 文档内容预览响应（对应后端 DocumentContentVO）：按入库顺序排列的切片文本块，超长已截断。 */
+export interface DocumentContent {
+  chatId: string;
+  sourceName: string;
+  sourceType?: string;
+  chunkCount: number;
+  truncated: boolean;
+  blocks: DocumentContentBlock[];
 }
 
 /** 知识库「试搜」结果（对应后端 RetrievalPreviewResult）。 */

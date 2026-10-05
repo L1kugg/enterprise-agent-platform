@@ -29,6 +29,8 @@ class ApiKeyOrJwtAuthFilterTest {
         MockHttpServletResponse resp = new MockHttpServletResponse();
         filter.doFilter(req, resp, new MockFilterChain());
         assertEquals(401, resp.getStatus());
+        // 手写 401 JSON 须按 UTF-8 编码，中文 msg 不能退化成问号
+        assertEquals("{\"ok\":0,\"msg\":\"未登录或登录已过期，请重新登录\"}", resp.getContentAsString());
     }
 
     @Test

@@ -3,8 +3,10 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.domain.enums.IngestionJobStatus;
+import com.enterprise.iqk.domain.vo.DocumentContentVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
+import com.enterprise.iqk.ingestion.DocumentContentService;
 import com.enterprise.iqk.ingestion.DocumentGraphBackfillService;
 import com.enterprise.iqk.ingestion.IngestionService;
 import com.enterprise.iqk.retrieval.RetrievalPreviewItem;
@@ -21,6 +23,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -50,6 +53,8 @@ class IngestionControllerWebMvcTest {
 
     @MockBean
     private IngestionService ingestionService;
+    @MockBean
+    private DocumentContentService documentContentService;
     @MockBean
     private DocumentGraphBackfillService documentGraphBackfillService;
     @MockBean
@@ -124,6 +129,40 @@ class IngestionControllerWebMvcTest {
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.items[0].sourceName").value("a.md"))
                 .andExpect(jsonPath("$.items[0].chunkCount").value(3));
+    }
+
+    @Test
+    void shouldReturnDocumentContent() throws Exception {
+        when(documentContentService.loadContent(any(), eq("doc-1"))).thenReturn(DocumentContentVO.builder()
+                .chatId("doc-1")
+                .sourceName("a.md")
+                .sourceType("MD")
+                .chunkCount(2)
+                .truncated(false)
+                .blocks(List.of(
+                        DocumentContentVO.Block.builder().index(0).page(null).text("第一块").build(),
+                        DocumentContentVO.Block.builder().index(1).page(3).text("第二块").build()))
+                .build());
+
+        mockMvc.perform(get("/ingestion/documents/doc-1/content"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chatId").value("doc-1"))
+                .andExpect(jsonPath("$.sourceName").value("a.md"))
+                .andExpect(jsonPath("$.chunkCount").value(2))
+                .andExpect(jsonPath("$.truncated").value(false))
+                .andExpect(jsonPath("$.blocks[0].page").doesNotExist())
+                .andExpect(jsonPath("$.blocks[1].page").value(3));
+    }
+
+    @Test
+    void shouldReturn404WhenDocumentContentMissing() throws Exception {
+        when(documentContentService.loadContent(any(), eq("doc-none")))
+                .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,
+                        "文档不存在或尚未成功入库"));
+
+        mockMvc.perform(get("/ingestion/documents/doc-none/content"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.msg").value("文档不存在或尚未成功入库"));
     }
 
     @Test

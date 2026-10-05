@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -106,6 +107,8 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
 
     private void unauthorized(HttpServletResponse response, String msg) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        // 手写 JSON 必须显式设 UTF-8：Servlet 默认 ISO-8859-1，中文会整个变成问号
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("application/json");
         response.getWriter().write("{\"ok\":0,\"msg\":\"" + msg + "\"}");
     }

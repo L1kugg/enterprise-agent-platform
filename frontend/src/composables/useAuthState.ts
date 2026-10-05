@@ -11,6 +11,8 @@ export const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
 export const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
 export const token = ref((bootstrap.token as string | undefined) ?? '');
 export const refreshToken = ref((bootstrap.refreshToken as string | undefined) ?? '');
+/** 访问令牌到期时刻（毫秒时间戳，0 = 未知）：静默续期定时器据此判断临期。 */
+export const tokenExpiresAt = ref((bootstrap.tokenExpiresAt as number | undefined) ?? 0);
 // 登录用户的首个角色（ADMIN/USER），控制管理员 UI 显隐
 export const role = ref((bootstrap.role as string | undefined) ?? '');
 export const authMode = ref<'login' | 'register'>('login');
@@ -27,6 +29,7 @@ registerPersistSlice(() => ({
   token: token.value,
   refreshToken: refreshToken.value,
   role: role.value,
+  tokenExpiresAt: tokenExpiresAt.value,
 }));
 
 // 登录态字段变化 → 持久化 + 用量刷新的 watch 在 registerAuthEffects（useAuthActions，

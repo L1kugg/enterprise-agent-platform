@@ -13,6 +13,8 @@ public class ReactTraceStepVO {
     private String action;
     private Map<String, Object> actionInput;
     private Object observation;
+    /** 本步真实耗时（毫秒）：从步开始（规划前）到轨迹落笔；工作流引擎与历史数据无此值为 null。 */
+    private Long elapsedMs;
 
     public String getThoughtSummary() {
         return thought;

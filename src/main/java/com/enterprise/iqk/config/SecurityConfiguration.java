@@ -77,8 +77,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.GET, "/cost/trend").hasAnyAuthority("PERM_COST_READ", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/cost/budget").hasAnyAuthority("PERM_COST_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ingestion/jobs/**", "/ingestion/jobs").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
-                    // 知识库文档清单 / 试搜：读侧，比下面的 /ingestion/** 写侧兜底更宽（OPS 与只读权限可见）
-                    .requestMatchers(HttpMethod.GET, "/ingestion/documents", "/ingestion/search").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
+                    // 知识库文档清单 / 内容预览 / 试搜：读侧，比下面的 /ingestion/** 写侧兜底更宽（OPS 与只读权限可见）
+                    .requestMatchers(HttpMethod.GET, "/ingestion/documents", "/ingestion/documents/*/content", "/ingestion/search").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/ingestion/jobs/process").hasRole("ADMIN")
                     .requestMatchers("/admin/**").hasRole("ADMIN")
                     .requestMatchers("/ingestion/**", "/ai/pdf/**").hasAnyAuthority("PERM_INGESTION_WRITE", "ROLE_ADMIN")

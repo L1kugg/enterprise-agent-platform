@@ -126,6 +126,10 @@ class ReactAgentServiceTest {
 
         var response = service.chat(request);
 
+        // 轨迹步骤带真实耗时（每步掐表），null 只出现在工作流引擎/历史数据里
+        assertThat(response.getTrace()).isNotEmpty();
+        assertThat(response.getTrace().get(0).getElapsedMs()).isNotNull().isGreaterThanOrEqualTo(0L);
+
         // 记忆进入 planner 的提示词（读侧闭环）；动作列表由 PlannerActionCatalog 从注册表生成
         ArgumentCaptor<String> plannerPrompt = ArgumentCaptor.forClass(String.class);
         verify(requestSpec).user(plannerPrompt.capture());

@@ -1,6 +1,7 @@
 package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.domain.IngestionJob;
+import com.enterprise.iqk.domain.vo.DocumentContentVO;
 import com.enterprise.iqk.domain.vo.IngestionDocumentVO;
 import com.enterprise.iqk.domain.vo.IngestionJobVO;
 import com.enterprise.iqk.domain.vo.IngestionSubmitVO;
@@ -8,6 +9,7 @@ import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.retrieval.RetrievalPreviewResult;
 import com.enterprise.iqk.retrieval.RetrievalPreviewService;
 import com.enterprise.iqk.config.properties.IngestionProperties;
+import com.enterprise.iqk.ingestion.DocumentContentService;
 import com.enterprise.iqk.ingestion.DocumentGraphBackfillService;
 import com.enterprise.iqk.ingestion.IngestionProcessResult;
 import com.enterprise.iqk.ingestion.IngestionService;
@@ -49,6 +51,7 @@ import java.util.Map;
 public class IngestionController {
 
     private final IngestionService ingestionService;
+    private final DocumentContentService documentContentService;
     private final DocumentGraphBackfillService documentGraphBackfillService;
     private final ChatHistoryRepository chatHistoryRepository;
     private final ObjectProvider<Tracer> tracerProvider;
@@ -109,6 +112,12 @@ public class IngestionController {
                 currentTenantId(), search, page, pageSize);
         List<IngestionDocumentVO> items = result.getItems().stream().map(this::toDocumentVO).toList();
         return new PagedResult<>(items, result.getTotal(), result.getPage(), result.getPageSize());
+    }
+
+    @GetMapping("/documents/{chatId}/content")
+    /** 文档内容预览：重解析磁盘原文件取切片文本（按入库顺序返回），超长截断；无成功入库或文件缺失返回 404。 */
+    public DocumentContentVO getDocumentContent(@PathVariable String chatId) {
+        return documentContentService.loadContent(currentTenantId(), chatId);
     }
 
     @GetMapping("/search")

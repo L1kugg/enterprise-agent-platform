@@ -32,5 +32,7 @@ class RateLimitFilterTest {
         MockHttpServletResponse resp2 = new MockHttpServletResponse();
         filter.doFilter(req2, resp2, new MockFilterChain());
         assertEquals(429, resp2.getStatus());
+        // 手写 429 JSON 须按 UTF-8 编码，中文 msg 不能退化成问号
+        assertEquals("{\"ok\":0,\"msg\":\"请求太频繁了，请稍后再试\"}", resp2.getContentAsString());
     }
 }

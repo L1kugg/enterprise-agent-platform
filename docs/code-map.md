@@ -105,6 +105,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `ingestion/IngestionWorker.java` + `queue/`（RabbitMq / RedisStream / Noop / db_polling） | 异步入队消费，多后端可切换 |
 | `graph/GraphService.java` + `KgEntityRecord` / `KgFactRecord` / `KgRelationRecord` | 知识图谱读侧：实体/关系/事实查询供 GraphRetriever（中文文本适配）；写入侧 `graph/GraphExtractionService.java` 在文档入库完成后由 LLM 抽取实体/关系/事实入库，文档删除联动清理对应图谱数据 |
 | `ingestion/DocumentGraphBackfillService.java` | 存量文档补图谱：重解析磁盘文档重建该 chat 的实体/关系/事实，`POST /ingestion/documents/{chatId}/graph/build` 触发 |
+| `ingestion/DocumentContentService.java` + `domain/vo/DocumentContentVO` | 文档内容预览：找最近一次 SUCCEEDED 且磁盘文件还在的任务，复用包内可见 `IngestionService.parseAndSplit` 重解析取切片文本（只读、不写向量库），按入库顺序返回内容块（PDF 块带 `page_number` 页码），正文超 20 万字符截断并置 `truncated`；`GET /ingestion/documents/{chatId}/content`，前端「文档清单」点文件名打开抽屉 |
 | `config/VectorStoreConfiguration.java` | pgvector VectorStore 装配（`OpenAiEmbeddingModel`） |
 
 **调用链**：`HybridRagAnswerService.answer()` 第 1 步四路检索（`rag/HybridRagAnswerService.java:79`）→ 第 1.5 步无关线兜底（:99-119；全低于线时向量放宽重试 `relaxedVectorRetry()` :221）→ 第 2 步证据判分（:122）→ 第 3 步引用（:130）。
@@ -248,7 +249,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `memory/`（6 个） | MemoryServiceTenantIsolationTest、MemoryInjectionAdvisorTest、ChatTurnMemoryRecorderTest、TaskConclusionMemoryRecorderTest、RagFactMemoryRecorderTest、MemoryExtractionServiceTest | 四层写入时机、截断、去重、故障降级、租户隔离；advisor 注入契约（system 首插/user 原文不动/未传参透传/召回失败降级） |
 | `rag/`（5 个） | HybridRagAnswerServiceMemoryTest、HybridRagAnswerServiceJudgingTest、HybridRagAnswerServiceIrrelevanceTest、RagAnswerServiceRerankTest、RagAnswerServiceRetrieveFallbackTest | 记忆注入断言 + 召回失败降级；判分消费（排序/垃圾线/降级回检索序）；无关线兜底闭环（全低于线不调模型回固定话术 / 放宽重试捞回走全管线且补向量权重 / 重试故障降级不炸 / 重试仍低线拒答）；重排分母 + 会话加成；检索异常兜底 |
 | `retrieval/`（9 个） | HybridRetrievalServiceTest、IdentityRerankerTest、VectorRetrieverScoreTest、KeywordRetrieverTest、GraphRetrieverTest、EvidenceJudgeServiceTest、LexicalMatcherTest、ChatScopeTest、RetrievalPreviewServiceTest | 加权融合、去重计数、分数下限、租户级过滤断言；真取消超时与按路计数（error/timeout 断言轮询等落表）、排队不烧超时预算、队列满 saturated、web 禁用短路、停机中断兜底完成 promise、排队时长指标；中文 bigram 命中、长文档不稀释、会话加成；时效度激活；切词/召回分契约；软作用域加成封顶；图谱路与试搜降级 |
-| `ingestion/`（3 个） | IngestionServiceTest、IngestionServiceGraphHookTest、DocumentGraphBackfillServiceTest | 入库解析/文档删除级联；图谱抽取钩子与存量回填 |
+| `ingestion/`（4 个） | IngestionServiceTest、IngestionServiceGraphHookTest、DocumentGraphBackfillServiceTest、DocumentContentServiceTest | 入库解析/文档删除级联；图谱抽取钩子与存量回填；内容预览的筛选/截断/404·500 语义 |
 | `service/`（4 个） | ReactAgentServiceTest、ReactDecisionParserTest、ReactResponseFormatterTest、TenantCostServiceTrendTest | ReAct 决策解析与格式化；用量趋势缺天补零 |
 | `controller/`（9 个） | AgentHarnessControllerWebMvcTest、AuthControllerWebMvcTest、IngestionControllerWebMvcTest、JavaApiContractTest、MemoryControllerTest、AdminControllerWebMvcTest、AdminControllerSecurityTest、ChatControllerMemoryTest、DeepResearchControllerWebMvcTest | Web 层契约；管理员总览跨租户可见性；chat 链路记忆注入断言；深度研究 202 受理形状与 429 |
 | `evaluation/`（2 个） | EvaluationScorerTest、EvaluationServiceTest | 打分逻辑；评测集删除级联清理与未知集拒绝 |

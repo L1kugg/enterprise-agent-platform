@@ -23,9 +23,8 @@ export const traceSteps = ref<ChatMessageTraceSteps>([]);
 type ChatMessageTraceSteps = import('../types/react').ReactTraceStep[];
 
 export const traceDurationMs = computed(() => {
-  if (!traceSteps.value.length) return 0;
-  // 若无真实耗时数据，按每步约 2 秒粗略估算
-  return traceSteps.value.length * 2000;
+  // 优先累计后端每步真实耗时；没有 elapsedMs 的旧轨迹（工作流引擎/历史会话）按每步约 2 秒粗略估算
+  return traceSteps.value.reduce((sum, step) => sum + (step.elapsedMs ?? 2000), 0);
 });
 
 export const sending = ref(false);
