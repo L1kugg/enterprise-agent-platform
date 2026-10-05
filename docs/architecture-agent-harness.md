@@ -39,7 +39,7 @@ model decision
 - `query_course`
 - `add_course_reservation`
 - `rag_search`
-- `query_database`（模型生成 SQL 的只读查询：`SqlReadOnlyGuard` 正则守卫 + 租户过滤启发式 + 只读会话/超时/行数与单元格截断四层防御）
+- `query_database`（模型生成 SQL 的只读查询：`SqlReadOnlyGuard` 正则守卫 + 租户占位符校验（业务表过滤只能写 `tenant_id = '__TENANT__'`，服务端执行前替换为当前租户，出现真实租户字面值一律拒绝）+ 只读会话/超时/行数与单元格截断多层防御）
 
 `finish` 不属于 runtime action，它仍由 ReAct service 处理，因为它代表循环结束而不是工具调用。
 

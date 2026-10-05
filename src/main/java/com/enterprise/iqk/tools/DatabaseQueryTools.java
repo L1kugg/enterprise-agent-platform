@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -25,9 +27,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * 经 SqlReadOnlyGuard 校验归一化后，在只读会话上对主库 MySQL 执行并回传行数据。
  *
  * <p>四层防御：① 只读守卫（写关键词/多语句/敏感表黑名单/LIMIT 收敛）
- * → ② 租户过滤启发式（业务表带 tenant_id 列而 SQL 未过滤时拒绝并给出确切改法）
- * → ③ 连接级只读 + 查询超时 → ④ 驱动级行数硬顶 + 单元格截断。
- * 租户值只出现在给模型的错误提示里，从不拼进执行的 SQL。
+ * → ② 租户占位符校验（业务表必须用 tenant_id = '__TENANT__' 过滤，出现真实租户字面值或
+ * &lt;&gt; 比较直接拒绝；执行前服务端把 '__TENANT__' 替换为当前租户——模型既不知道也写不出
+ * 其他租户的字面值）→ ③ 连接级只读 + 查询超时 → ④ 驱动级行数硬顶 + 单元格截断。
  *
  * <p>注入的 JdbcTemplate 是 Spring Boot 按主库 DataSource 自动装配的唯一 bean
  * （pgvector 的 JdbcTemplate 在 VectorStoreConfiguration 内部构建、不是 bean，勿混淆）。
@@ -42,6 +44,11 @@ public class DatabaseQueryTools {
     private static final long TENANT_TABLES_CACHE_TTL_NANOS = TimeUnit.MINUTES.toNanos(5);
     /** 错误消息里数据库原始报错的最大长度（模型观测预算有限，够定位即可） */
     private static final int DB_ERROR_MESSAGE_MAX_CHARS = 300;
+    /** 模型 SQL 中的租户占位符：执行前由服务端替换为真实租户值，模型接触不到租户实名 */
+    public static final String TENANT_PLACEHOLDER = "__TENANT__";
+    /** 提取 tenant_id 比较：只认单引号字面量，op 仅 = 与 &lt;&gt;；双引号形式不被识别（模型按示例重试） */
+    private static final Pattern TENANT_FILTER_PATTERN =
+            Pattern.compile("(?i)tenant_id\\s*(=|<>)\\s*'([^']*)'");
 
     private final JdbcTemplate jdbcTemplate;
     private final MeterRegistry meterRegistry;
@@ -103,36 +110,46 @@ public class DatabaseQueryTools {
             return errorMap(guard.reasonMessage());
         }
 
-        String tenantHint = missingTenantMessage(guard.normalizedSql(), tenantId);
+        String tenantHint = tenantComplianceMessage(guard.normalizedSql());
         if (tenantHint != null) {
             return errorMap(tenantHint);
         }
 
+        String executableSql = resolveTenantPlaceholder(guard.normalizedSql(), tenantId);
+
         try {
-            return executeReadOnly(guard.normalizedSql(), config);
+            return executeReadOnly(executableSql, config);
         } catch (DataAccessException ex) {
             // SQL 语法/列名错误等属模型可自行修正的问题：转成带原始报错的 error 观测供重试，
             // 不升级成整次回答的异常
             String cause = abbreviate(String.valueOf(ex.getMostSpecificCause().getMessage()),
                     DB_ERROR_MESSAGE_MAX_CHARS);
-            log.warn("只读查询执行失败: sql={}, reason={}", guard.normalizedSql(), ex.toString());
+            log.warn("只读查询执行失败: sql={}, reason={}", executableSql, ex.toString());
             return errorMap("查询执行失败，请根据数据库报错修正 SQL 后重试：" + cause);
         }
     }
 
     /**
-     * 租户过滤启发式：提取 FROM/JOIN 的表，与含 tenant_id 列的表求交集，
-     * 命中且 SQL 未出现 tenant_id 时返回修正提示（null 表示放行）。
-     * 刻意 fail-open：缓存查不到时跳过检查——本检查是提示性防线，
-     * 强约束靠提示词要求与模型重试闭环，不是硬隔离。
+     * 租户占位符校验（null 表示放行）：
+     * ① 值白名单——SQL 里出现的每个 tenant_id 比较必须是 = '__TENANT__'；
+     * 出现真实租户字面值或 &lt;&gt; 比较一律拒绝（防模型写出其他租户实现跨租户读）。
+     * ② 强制过滤——访问了含 tenant_id 列的业务表而 SQL 完全没写占位符时，给出确切改法。
+     * ② 依赖 information_schema 的表清单查询，缓存查不到时跳过（fail-open）；
+     * ① 是纯正则的硬校验，不受缓存影响。
      */
-    private String missingTenantMessage(String normalizedSql, String tenantId) {
-        String lower = normalizedSql.toLowerCase(Locale.ROOT);
-        if (lower.contains("tenant_id")) {
-            return null;
+    private String tenantComplianceMessage(String normalizedSql) {
+        Matcher matcher = TENANT_FILTER_PATTERN.matcher(normalizedSql);
+        while (matcher.find()) {
+            if ("<>".equals(matcher.group(1))) {
+                return "tenant_id 不支持 <> 比较：请改写为 tenant_id = '__TENANT__' 后重试。";
+            }
+            if (!TENANT_PLACEHOLDER.equalsIgnoreCase(matcher.group(2))) {
+                return "租户过滤只能写 tenant_id = '__TENANT__'（系统会自动替换为当前租户），"
+                        + "不能写出任何真实租户名，请修正 SQL 后重试。";
+            }
         }
         Set<String> tenantTables = tablesWithTenantColumn();
-        if (tenantTables.isEmpty()) {
+        if (tenantTables.isEmpty() || normalizedSql.contains(TENANT_PLACEHOLDER)) {
             return null;
         }
         List<String> hits = new ArrayList<>();
@@ -144,10 +161,16 @@ public class DatabaseQueryTools {
         if (hits.isEmpty()) {
             return null;
         }
-        // 租户值经单引号转义后仅出现在提示里，从不拼进执行的 SQL
-        String safeTenant = tenantId == null ? "public" : tenantId.replace("'", "''");
         return "缺少租户过滤：表 " + String.join("、", hits)
-                + " 含 tenant_id 列，请在 WHERE 中加上 tenant_id = '" + safeTenant + "' 后重试。";
+                + " 含 tenant_id 列，请在 WHERE 中加上 tenant_id = '__TENANT__' 后重试"
+                + "（系统会自动替换为当前租户）。";
+    }
+
+    /** 执行前把 '__TENANT__' 替换为当前租户（单引号转义）；替换串经 quoteReplacement 防特殊字符破坏正则。 */
+    private String resolveTenantPlaceholder(String normalizedSql, String tenantId) {
+        String safeTenant = !StringUtils.hasText(tenantId) ? "public" : tenantId.replace("'", "''");
+        return normalizedSql.replaceAll("(?i)'" + TENANT_PLACEHOLDER + "'",
+                Matcher.quoteReplacement("'" + safeTenant + "'"));
     }
 
     /** 含 tenant_id 列的表名集合（小写），带 TTL 缓存；查询失败不缓存、静默按空集处理。 */

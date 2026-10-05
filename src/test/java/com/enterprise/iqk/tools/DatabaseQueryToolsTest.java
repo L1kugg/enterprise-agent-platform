@@ -59,19 +59,44 @@ class DatabaseQueryToolsTest {
     }
 
     @Test
-    void missingTenantFilterReturnsCorrectiveHintWithTenantValue() {
+    void missingTenantFilterAsksForPlaceholderInsteadOfRealTenantValue() {
         when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of("course"));
 
-        Map<String, Object> payload = newTools().queryDatabase("SELECT * FROM course", "public");
+        Map<String, Object> payload = newTools().queryDatabase("SELECT * FROM course", "u-smoke_qdb");
 
         assertThat(payload).containsEntry("status", "error");
         assertThat((String) payload.get("message"))
                 .contains("缺少租户过滤")
                 .contains("course")
-                .contains("tenant_id = 'public'");
+                .contains("tenant_id = '__TENANT__'")
+                // 真实租户值不允许出现在给模型的提示里
+                .doesNotContain("u-smoke_qdb");
         // 启发式查 information_schema 属合法交互；拦截点在执行层（execute 只读查询未发生）
         verify(jdbcTemplate).queryForList(anyString(), eq(String.class));
         verify(jdbcTemplate, never()).execute(any(ConnectionCallback.class));
+    }
+
+    @Test
+    void realTenantLiteralIsRejectedEvenWhenSqlFiltersTenant() {
+        // 模型照示例抄真实租户名也一律拒绝：跨租户读的硬校验，纯正则、不依赖表清单
+        Map<String, Object> payload = newTools().queryDatabase(
+                "SELECT * FROM course WHERE tenant_id = 'public'", "u-smoke_qdb");
+
+        assertThat(payload).containsEntry("status", "error");
+        assertThat((String) payload.get("message"))
+                .contains("不能写出任何真实租户名")
+                .contains("tenant_id = '__TENANT__'");
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void notEqualTenantComparisonIsRejected() {
+        Map<String, Object> payload = newTools().queryDatabase(
+                "SELECT * FROM course WHERE tenant_id <> '__TENANT__'", "u-smoke_qdb");
+
+        assertThat(payload).containsEntry("status", "error");
+        assertThat((String) payload.get("message")).contains("不支持 <> 比较");
+        verifyNoInteractions(jdbcTemplate);
     }
 
     @Test
@@ -82,7 +107,9 @@ class DatabaseQueryToolsTest {
         ResultSet rs = mock(ResultSet.class);
         ResultSetMetaData md = mock(ResultSetMetaData.class);
         when(con.createStatement()).thenReturn(st);
-        when(st.executeQuery("SELECT id, name FROM course WHERE tenant_id = 'public' LIMIT 30"))
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of("course"));
+        // 执行前 '__TENANT__' 已被替换为真实租户（单引号保留）
+        when(st.executeQuery("SELECT id, name FROM course WHERE tenant_id = 'u-smoke_qdb' LIMIT 30"))
                 .thenReturn(rs);
         when(rs.getMetaData()).thenReturn(md);
         when(md.getColumnCount()).thenReturn(2);
@@ -95,7 +122,7 @@ class DatabaseQueryToolsTest {
                 .thenAnswer(invocation -> ((ConnectionCallback<?>) invocation.getArgument(0)).doInConnection(con));
 
         Map<String, Object> payload = newTools().queryDatabase(
-                "SELECT id, name FROM course WHERE tenant_id = 'public'", "public");
+                "SELECT id, name FROM course WHERE tenant_id = '__TENANT__'", "u-smoke_qdb");
 
         // 只读会话与驱动级硬顶：连接只读、语句超时、maxRows+1 探测截断
         verify(con).setReadOnly(true);
@@ -106,7 +133,7 @@ class DatabaseQueryToolsTest {
                 .containsEntry("columns", List.of("id", "name"))
                 .containsEntry("rowCount", 2)
                 .containsEntry("truncated", false)
-                .containsEntry("executedSql", "SELECT id, name FROM course WHERE tenant_id = 'public' LIMIT 30");
+                .containsEntry("executedSql", "SELECT id, name FROM course WHERE tenant_id = 'u-smoke_qdb' LIMIT 30");
         // null 单元格以显式 null 值保留在行 Map 里（JSON null），列序稳定
         Map<String, Object> row1 = new LinkedHashMap<>();
         row1.put("id", "1");
@@ -121,11 +148,12 @@ class DatabaseQueryToolsTest {
 
     @Test
     void convertsSqlExecutionFailureIntoRetryableErrorObservation() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of("course"));
         when(jdbcTemplate.execute(any(ConnectionCallback.class)))
                 .thenThrow(new QueryTimeoutException("statement timed out"));
 
         Map<String, Object> payload = newTools().queryDatabase(
-                "SELECT id FROM course WHERE tenant_id = 'public'", "public");
+                "SELECT id FROM course WHERE tenant_id = '__TENANT__'", "u-smoke_qdb");
 
         assertThat(payload).containsEntry("status", "error");
         assertThat((String) payload.get("message"))
@@ -142,14 +170,15 @@ class DatabaseQueryToolsTest {
     }
 
     @Test
-    void tenantHeuristicSkipsWhenSqlAlreadyFiltersTenant() {
-        // SQL 已带 tenant_id 时跳过租户启发式直接执行：
-        // 错误消息是执行层报错而非“缺少租户过滤”，即证明启发式被跳过
+    void tablesWithoutTenantColumnSkipTenantEnforcement() {
+        // information_schema 等系统表无 tenant_id 列：不在强制清单里，无占位符也直接放行执行；
+        // 错误消息是执行层报错而非"缺少租户过滤"，即证明租户检查被跳过
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class))).thenReturn(List.of("course"));
         when(jdbcTemplate.execute(any(ConnectionCallback.class)))
                 .thenThrow(new QueryTimeoutException("reached execution layer"));
 
         Map<String, Object> payload = newTools().queryDatabase(
-                "SELECT * FROM course WHERE tenant_id = 'public'", "public");
+                "SELECT table_name FROM information_schema.tables", "u-smoke_qdb");
 
         assertThat((String) payload.get("message")).contains("reached execution layer");
     }

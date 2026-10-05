@@ -31,15 +31,18 @@ public class ActionSchemaRegistry {
         register(new ActionSchema("rag_search", "builtin",
                 Set.of(), Set.of("query"), Set.of(), "read", false));
         // query_database：模型现场生成 SQL 的只读查询。tenantId 不开放为入参（防伪造），
-        // 由 BuiltinToolRuntime 从 action.tenantId() 服务端注入；
+        // 模型在 SQL 里只能写占位符 '__TENANT__'，由 DatabaseQueryTools 执行前替换为
+        // action.tenantId() 归一化后的真实租户——模型既不知道也写不出其他租户的字面值。
         // 风险由 SqlReadOnlyGuard（只读/单语句/敏感表黑名单/LIMIT 收敛）
-        // + DatabaseQueryTools 的只读会话/超时/行数截断兜住，
+        // + 租户占位符校验 + DatabaseQueryTools 的只读会话/超时/行数截断兜住，
         // 可被 disabled-actions / 租户白名单 / database-query.enabled 三层随时熔断。
         register(new ActionSchema("query_database", "builtin",
                 Set.of("sql"), Set.of(), Set.of(), "read", false,
                 "直接查询主库业务表（只读）。action_input 示例："
-                        + "{\"sql\":\"SELECT id, name, price FROM course WHERE tenant_id = 'public' LIMIT 10\"}。"
-                        + "只能一条 SELECT 语句（可为 WITH 开头的 CTE）；业务表必须带 tenant_id = '当前租户' 过滤条件；"
+                        + "{\"sql\":\"SELECT id, name, price FROM course WHERE tenant_id = '__TENANT__' LIMIT 10\"}。"
+                        + "只能一条 SELECT 语句（可为 WITH 开头的 CTE）；业务表必须带 tenant_id = '__TENANT__' 过滤，"
+                        + "系统会自动把 '__TENANT__' 替换为当前租户，禁止写出任何真实租户名；"
+                        + "information_schema 等系统表可直接查（无 tenant_id 列，无需过滤）；"
                         + "禁止 INSERT/UPDATE/DELETE 等任何写操作与多语句；结果自动追加 LIMIT 并截断。"));
 
         // mcp_call 不设 trustedOnly：外部只读查询（如天气）要能在聊天 ReAct 循环里直接用，
