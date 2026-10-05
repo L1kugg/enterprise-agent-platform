@@ -173,7 +173,7 @@ public class ReactAgentService {
 
                     Flux<String> answerSourceFlux = StringUtils.hasText(directAnswer)
                             ? AnswerStreamSupport.chunked(directAnswer)
-                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。答案正文不要罗列「引用来源/参考文献」清单，来源由界面单独展示。",
                                     buildFinalPrompt(request, trace, rollingContext, memorySnapshot),
                                     routeDecision, tenantId, "react_final");
 
@@ -333,7 +333,7 @@ public class ReactAgentService {
         String finalPrompt = buildFinalPrompt(request, trace, rollingContext, memorySnapshot);
         try {
             String answer = callModel(
-                    "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                    "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。答案正文不要罗列「引用来源/参考文献」清单，来源由界面单独展示。",
                     finalPrompt,
                     routeDecision,
                     tenantId,

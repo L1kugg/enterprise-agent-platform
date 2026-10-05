@@ -14,7 +14,8 @@ import java.util.Set;
 
 /**
  * ReAct 响应格式化器：统一组装成功响应、SSE 事件帧与 JSON 序列化。
- * 引用/证据从轨迹 observation 中去重抽取并给答案追加脚注；
+ * 引用/证据从轨迹 observation 中去重抽取（答案正文不再追加来源脚注——
+ * 来源清单由前端据 citations 字段单独渲染，正文里再拼一份会重复展示）；
  * appendContext 负责观察上下文的滚动拼接；toJson 失败降级为固定 JSON，绝不打断流。
  */
 @Component
@@ -22,7 +23,7 @@ import java.util.Set;
 public class ReactResponseFormatter {
     private final ObjectMapper objectMapper;
 
-    /** 组装成功响应：抽取 citations/evidence、追加引用脚注并附路由/实验信息。 */
+    /** 组装成功响应：抽取 citations/evidence（正文不追加脚注）并附路由/实验信息。 */
     public ReactChatResponseVO success(String chatId,
                                        String answer,
                                        List<ReactTraceStepVO> trace,
@@ -34,7 +35,7 @@ public class ReactResponseFormatter {
                 .ok(1)
                 .msg("ok")
                 .chatId(chatId)
-                .answer(attachCitationFooter(answer, citations))
+                .answer(emptyIfBlank(answer))
                 .fallback(fallback)
                 .citations(citations)
                 .evidence(evidence)
@@ -92,23 +93,6 @@ public class ReactResponseFormatter {
             }
         }
         return List.copyOf(values);
-    }
-
-    /** 给答案追加引用来源脚注；答案已含脚注或无引用则原样返回。 */
-    private String attachCitationFooter(String answer, List<String> citations) {
-        String safeAnswer = emptyIfBlank(answer);
-        if (citations == null || citations.isEmpty() || safeAnswer.contains("引用来源")) {
-            return safeAnswer;
-        }
-        StringBuilder builder = new StringBuilder(safeAnswer.trim());
-        if (builder.length() > 0) {
-            builder.append("\n\n");
-        }
-        builder.append("引用来源:\n");
-        for (int i = 0; i < citations.size(); i++) {
-            builder.append("[").append(i + 1).append("] ").append(citations.get(i)).append("\n");
-        }
-        return builder.toString().trim();
     }
 
     /** null/空白统一返回空串。 */

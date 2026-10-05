@@ -16,7 +16,7 @@ class ReactResponseFormatterTest {
     private final ReactResponseFormatter formatter = new ReactResponseFormatter(new ObjectMapper());
 
     @Test
-    void collectsUniqueEvidenceAndAppendsCitationFooter() {
+    void collectsUniqueEvidenceAndLeavesAnswerUntouched() {
         List<ReactTraceStepVO> trace = List.of(
                 ReactTraceStepVO.builder().step(1).observation(Map.of(
                         "citations", List.of("doc-1", "doc-1"),
@@ -33,7 +33,8 @@ class ReactResponseFormatterTest {
         assertThat(response.getCitations()).containsExactly("doc-1", "doc-2");
         assertThat(response.getEvidence()).containsExactly("first evidence", "second evidence");
         assertThat(response.getFallback()).isFalse();
-        assertThat(response.getAnswer()).contains("answer", "引用来源", "[1] doc-1", "[2] doc-2");
+        // 答案正文不再追加「引用来源」脚注：来源清单由前端据 citations 单独渲染，正文拼一份会重复展示
+        assertThat(response.getAnswer()).isEqualTo("answer").doesNotContain("引用来源");
     }
 
     @Test

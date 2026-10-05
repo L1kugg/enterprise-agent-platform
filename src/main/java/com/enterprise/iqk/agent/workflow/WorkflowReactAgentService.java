@@ -220,7 +220,7 @@ public class WorkflowReactAgentService {
         return Flux.<String>defer(() -> {
                     String direct = state.directAnswer().get();
                     return StringUtils.hasText(direct) ? AnswerStreamSupport.chunked(direct)
-                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                            : callModelStream("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。答案正文不要罗列「引用来源/参考文献」清单，来源由界面单独展示。",
                             buildFinalPrompt(state.request(), state.trace(), state.rollingContext().get()),
                             state.routeDecision(), state.tenantId(), "react_final");
                 })
@@ -306,7 +306,7 @@ public class WorkflowReactAgentService {
                                     String tenantId) {
         String finalPrompt = buildFinalPrompt(request, trace, rollingContext);
         try {
-            String answer = callModel("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+            String answer = callModel("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。答案正文不要罗列「引用来源/参考文献」清单，来源由界面单独展示。",
                     finalPrompt, routeDecision, tenantId, "react_final");
             if (StringUtils.hasText(answer)) {
                 return answer;
@@ -336,7 +336,7 @@ public class WorkflowReactAgentService {
         List<String> evidence = extractTraceStrings(trace, "evidence");
         return ReactChatResponseVO.builder()
                 .ok(1).msg("ok").chatId(chatId)
-                .answer(attachCitationFooter(answer, citations))
+                .answer(emptyIfBlank(answer))
                 .citations(citations).evidence(evidence)
                 .routeProfile(routeDecision == null ? "" : routeDecision.profile())
                 .routeReason(routeDecision == null ? "" : routeDecision.reason())
@@ -444,18 +444,6 @@ public class WorkflowReactAgentService {
             }
         }
         return List.copyOf(values);
-    }
-
-    private String attachCitationFooter(String answer, List<String> citations) {
-        if (citations == null || citations.isEmpty()) return emptyIfBlank(answer);
-        if (emptyIfBlank(answer).contains("引用来源")) return answer;
-        StringBuilder sb = new StringBuilder(emptyIfBlank(answer).trim());
-        if (sb.length() > 0) sb.append("\n\n");
-        sb.append("引用来源:\n");
-        for (int i = 0; i < citations.size(); i++) {
-            sb.append("[").append(i + 1).append("] ").append(citations.get(i)).append("\n");
-        }
-        return sb.toString().trim();
     }
 
     private String formatSse(String event, String data) { return "event: " + event + "\ndata: " + data + "\n\n"; }
