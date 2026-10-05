@@ -3,6 +3,7 @@ package com.enterprise.iqk.rag;
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.testutil.TestGuards;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -22,7 +23,7 @@ import static org.mockito.Mockito.mock;
 class RagAnswerServiceRerankTest {
 
     private RagAnswerService service() {
-        return new RagAnswerService(mock(VectorStore.class), mock(ChatClient.class),
+        return new RagAnswerService(mock(VectorStore.class), TestGuards.real(), mock(ChatClient.class),
                 mock(ModelRouter.class), new RagProperties(), new SimpleMeterRegistry(),
                 mock(TenantCostService.class));
     }

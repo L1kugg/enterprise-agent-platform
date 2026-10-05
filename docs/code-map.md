@@ -14,6 +14,7 @@
           │            ┌───────────────────────┼────────────────────────┐
           │            ▼                       ▼                        ▼
 检索     retrieval/（四路混合）        memory/（四层记忆注入）      llm/ModelRouter（模型分档）
+                                                                       llm/ModelCallGuard（熔断/重试/流式超时，织入全部 LLM 调用点）
           │
 Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策略守卫）
           agent/workflow/（状态机引擎）  agent/research/（深度研究编排）
@@ -258,9 +259,10 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `security/`（6 个） | ApiKeyOrJwtAuthFilterTest、DefaultFileSafetyScannerTest、JwtServiceTest、RateLimitFilterTest、RequestContextFilterTest、UserAuthServiceTest | 认证、限流、文件安全扫描（PDF/Word/Markdown 魔数）；注册/登录 |
 | `graph/` | GraphExtractionServiceTest | LLM 实体抽取入库 |
 | `config/`（4 个） | FlywayMigrationVersionTest、MysqlChatMemoryTest、ProdProfileConfigTest、SecurityDefaultsTest | 迁移版本、配置安全默认值 |
-| 其他 | ModelRouterTest、HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
+| `llm/`（1 个） | ModelCallGuardTest | 同步透传与计数、瞬时异常白名单重试、非白名单不重试、熔断打开快速失败（同步+流式）、流式超时按失败回写熔断器 |
+| 其他 | HashUtilsTest、MysqlContainerSmokeTest（集成）、TestVector（@Disabled 需外部模型） | |
 
-**运行**：`mvn test`（当前基线 292 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
+**运行**：`mvn test`（当前基线 334 个测试全绿；3 个跳过 = TestVector 需外部模型 ×2 + WorkspaceRuntimeTest 平台相关 ×1）。
 
 ---
 

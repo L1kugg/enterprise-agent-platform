@@ -7,6 +7,7 @@ import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.util.AnswerStreamSupport;
+import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryService;
@@ -61,6 +62,8 @@ public class ReactAgentService {
     private final MemoryService memoryService;
     /** 对话轮次 short 记忆写入器：成稿后写回，让下一轮召回有内容（写侧闭环）。 */
     private final ChatTurnMemoryRecorder chatTurnMemoryRecorder;
+    /** LLM 调用守卫：熔断/瞬时重试/流式超时（异常由循环既有规则兜底承接）。 */
+    private final ModelCallGuard modelCallGuard;
 
     /** 同步对话：跑完 ReAct 循环后一次性返回完整响应（含轨迹、引用与路由信息）。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
@@ -424,11 +427,11 @@ public class ReactAgentService {
                              String endpointTag) {
         long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
         tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
-        String output = routedPrompt(routeDecision)
+        String output = modelCallGuard.call("react", () -> routedPrompt(routeDecision)
                 .system(systemPrompt)
                 .user(userPrompt)
                 .call()
-                .content();
+                .content());
         long outputTokens = tenantCostService.estimateTokens(output);
         tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
         return output;
@@ -445,11 +448,11 @@ public class ReactAgentService {
 
         StringBuilder outputCollector = new StringBuilder();
         AtomicBoolean usageRecorded = new AtomicBoolean(false);
-        return routedPrompt(routeDecision)
+        return modelCallGuard.streaming("react", routedPrompt(routeDecision)
                 .system(systemPrompt)
                 .user(userPrompt)
                 .stream()
-                .content()
+                .content())
                 .doOnNext(chunk -> outputCollector.append(emptyIfBlank(chunk)))
                 .doFinally(signalType -> {
                     if (!usageRecorded.compareAndSet(false, true)) {

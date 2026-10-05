@@ -8,6 +8,7 @@ import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.testutil.TestGuards;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -75,7 +76,8 @@ class WorkflowReactAgentServiceStreamTest {
                         "profile_match", "", "", null));
         service = new WorkflowReactAgentService(workflowEngine, harness,
                 new PlannerActionCatalog(new ActionSchemaRegistry()), chatClient,
-                modelRouter, mock(TenantCostService.class), new ObjectMapper(), new SimpleMeterRegistry());
+                modelRouter, TestGuards.real(), mock(TenantCostService.class),
+                new ObjectMapper(), new SimpleMeterRegistry());
     }
 
     private ReactChatRequestVO request() {

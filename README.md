@@ -175,7 +175,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
 | 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
 | 安全体系 | API Key + JWT + Refresh Token + RBAC + 认证身份派生租户 + 安全响应头 + CORS 白名单 + 单实例 Bucket4j 内存限流 |
-| 弹性与容错 | 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）；各场景化兜底（检索静默补位、MCP 错误转 observation、入库重试+DLQ）；Resilience4j 熔断/重试/超时参数基线已定义、**尚未织入 LLM 调用链** |
+| 弹性与容错 | 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）；各场景化兜底（检索静默补位、MCP 错误转 observation、入库重试+DLQ）；Resilience4j 熔断/重试/流式超时已织入 LLM 调用链（`llm.ModelCallGuard`，按场景独立熔断器） |
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
 | Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
@@ -504,7 +504,7 @@ docker compose -f docker-compose.observability.yml up -d
 - 审计日志与保留策略
 - 敏感信息脱敏（API Key / Email / 查询参数级）
 - 上传文件类型/大小安全检查
-- Resilience4j 熔断/重试/超时参数基线（已定义、尚未织入 LLM 调用链，暂不产生防护效果）
+- Resilience4j 熔断/重试/流式超时（`llm.ModelCallGuard` 织入全部 LLM 调用链，按场景独立熔断器，`llm.call.outcome` 计数器观测）
 
 生产建议：
 
@@ -663,7 +663,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆，读写闭环接入生成链路 + `/ai/memory` REST）
 - [x] 安全响应头 + CORS 白名单
 - [x] 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）
-- [ ] Resilience4j 熔断/重试/超时接入 LLM 调用链（参数基线已定义，待织入）
+- [x] Resilience4j 熔断/重试/超时接入 LLM 调用链（`llm.ModelCallGuard` 编程式装饰，6 个调用点按场景独立熔断）
 - [x] 静态分析流水线（Checkstyle / PMD / SpotBugs）
 - [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
 - [x] 前端工程化（ESLint / Prettier / vue-tsc）

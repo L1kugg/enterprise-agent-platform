@@ -12,6 +12,7 @@ import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.testutil.TestGuards;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -83,7 +84,7 @@ class HybridRagAnswerServiceMemoryTest {
         service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), memoryService);
+                mock(RagFactMemoryRecorder.class), memoryService, TestGuards.real());
     }
 
     @Test

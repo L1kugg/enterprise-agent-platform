@@ -8,6 +8,7 @@ import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryItemRecord;
 import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.testutil.TestGuards;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,8 @@ class ReactAgentServiceTest {
                 new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 mock(MemoryService.class),
-                mock(ChatTurnMemoryRecorder.class)
+                mock(ChatTurnMemoryRecorder.class),
+                TestGuards.real()
         );
         ReactChatRequestVO missingPrompt = new ReactChatRequestVO();
         missingPrompt.setChatId("chat-1");
@@ -74,7 +76,8 @@ class ReactAgentServiceTest {
                 new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 mock(MemoryService.class),
-                mock(ChatTurnMemoryRecorder.class)
+                mock(ChatTurnMemoryRecorder.class),
+                TestGuards.real()
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("高温健康风险有哪些？");
@@ -117,7 +120,8 @@ class ReactAgentServiceTest {
                 new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 memoryService,
-                recorder
+                recorder,
+                TestGuards.real()
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");
@@ -172,7 +176,8 @@ class ReactAgentServiceTest {
                 new PlannerActionCatalog(new ActionSchemaRegistry()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 memoryService,
-                mock(ChatTurnMemoryRecorder.class)
+                mock(ChatTurnMemoryRecorder.class),
+                TestGuards.real()
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");

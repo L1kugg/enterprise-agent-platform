@@ -11,6 +11,7 @@ import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.testutil.TestGuards;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,7 +89,8 @@ class HybridRagAnswerServiceIrrelevanceTest {
 
         service = new HybridRagAnswerService(retrievalService, vectorRetriever,
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
-                meterRegistry, mock(TenantCostService.class), factRecorder, mock(MemoryService.class));
+                meterRegistry, mock(TenantCostService.class), factRecorder, mock(MemoryService.class),
+                TestGuards.real());
     }
 
     private void strictRetrievalReturns(ScoredDocument... docs) {

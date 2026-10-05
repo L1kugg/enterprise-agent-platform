@@ -2,6 +2,7 @@ package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
+import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.retrieval.ChatScope;
@@ -15,6 +16,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
@@ -38,11 +40,13 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  * 兜底重试仍为空时不调 LLM 直接返回固定话术；全链路埋点 rag.pipeline/retrieval/rerank 指标。
  * chat_id 不做硬过滤（否则知识库按会话割裂），同会话命中文档由 ChatScope 有界加分。
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RagAnswerService {
 
     private final VectorStore vectorStore;
+    private final ModelCallGuard modelCallGuard;
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
     private final RagProperties ragProperties;
@@ -94,16 +98,29 @@ public class RagAnswerService {
             // 记忆注入：认证主体为 user 键（匿名回落 chatId），advisor 组装期插
             // "已知记忆" system 消息（long/fact 跨会话视图，short 留给 ChatMemory）。
             String memoryUserKey = UserContext.currentUserId(chatId);
-            String answer = chatClient.prompt()
-                    .options(ChatOptions.builder().model(decision.model())
-                            .temperature(ragProperties.getTemperature()).build())
-                    .system(SystemConstants.RAG_ANSWER_SYSTEM)
-                    .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId)
-                        .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, normalizedTenantId)
-                        .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, memoryUserKey))
-                    .call()
-                    .content();
+            // 生成步经熔断/重试/超时守卫：LLM 持续不可用时快速失败并返回固定兜底文案
+            String answer;
+            try {
+                answer = modelCallGuard.call("rag", () -> chatClient.prompt()
+                        .options(ChatOptions.builder().model(decision.model())
+                                .temperature(ragProperties.getTemperature()).build())
+                        .system(SystemConstants.RAG_ANSWER_SYSTEM)
+                        .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
+                    .advisors(a -> a.param(CONVERSATION_ID, conversationId)
+                            .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, normalizedTenantId)
+                            .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, memoryUserKey))
+                        .call()
+                        .content());
+            } catch (RuntimeException ex) {
+                pipelineOutcome = "generation_fallback";
+                log.warn("RAG 生成失败，返回固定兜底文案: chatId={}, reason={}", chatId, ex.toString());
+                return RagResult.builder()
+                        .answer("模型服务暂时不可用，请稍后重试。")
+                        .citations(List.of())
+                        .evidence(List.of())
+                        .weights(VECTOR_ONLY_WEIGHTS)
+                        .build();
+            }
             long outputTokens = tenantCostService.estimateTokens(answer);
             tenantCostService.recordUsage(normalizedTenantId, decision.costTier(), inputTokens, outputTokens, "rag");
 

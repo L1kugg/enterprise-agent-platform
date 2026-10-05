@@ -155,7 +155,7 @@ curl -X POST http://localhost:8080/ai/workflow/react/chat \
 | 场景 | 预期行为 |
 |---|---|
 | 知识库无匹配 | answer="没有在当前知识库中检索到可用内容"，pipelineOutcome=empty |
-| 模型超时 | 生成调用异常向上抛出、由全局异常处理返回错误响应（管道内无静默降级；Resilience4j TimeLimiter 尚未接入调用链，暂不参与） |
+| 模型超时 | 生成调用异常向上抛出、由全局异常处理返回错误响应（管道内无静默降级）；流式另有 Resilience4j 30 秒超时基线（超时按失败回写熔断器），连续失败触发熔断后生成步骤快速失败返回固定兜底文案（`generation_fallback`） |
 | 工具调用失败 | observation 中 status=error，不阻断流程 |
 | 用户中断生成 | SSE stream 在 STOP 事件后正常关闭 |
 | 重复提交 | ingestion 幂等键去重，不重复入库 |

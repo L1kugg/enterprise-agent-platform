@@ -6,6 +6,7 @@ import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
+import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.util.AnswerStreamSupport;
@@ -51,6 +52,8 @@ public class WorkflowReactAgentService {
     /** 内部推理专用客户端（无对话记忆组件），避免未设 CONVERSATION_ID 时记忆断言失败 */
     private final ChatClient agentChatClient;
     private final ModelRouter modelRouter;
+    /** LLM 调用守卫：熔断/瞬时重试/流式超时（异常由循环既有规则兜底承接）。 */
+    private final ModelCallGuard modelCallGuard;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
@@ -358,11 +361,11 @@ public class WorkflowReactAgentService {
         long inputTokens = tenantCostService.estimateTokens(system)
                 + tenantCostService.estimateTokens(user);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
-        String output = agentChatClient.prompt()
+        String output = modelCallGuard.call("workflow", () -> agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 // 记忆注入：认证主体为 user 键（匿名时空键不注入），advisor 组装期插"已知记忆"system 消息
                 .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
-                .system(system).user(user).call().content();
+                .system(system).user(user).call().content());
         long outputTokens = tenantCostService.estimateTokens(output);
         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
         return output;
@@ -376,10 +379,10 @@ public class WorkflowReactAgentService {
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         StringBuilder collector = new StringBuilder();
         AtomicBoolean recorded = new AtomicBoolean(false);
-        return agentChatClient.prompt()
+        return modelCallGuard.streaming("workflow", agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
-                .system(system).user(user).stream().content()
+                .system(system).user(user).stream().content())
                 .doOnNext(collector::append)
                 .doFinally(sig -> {
                     if (!recorded.compareAndSet(false, true)) return;

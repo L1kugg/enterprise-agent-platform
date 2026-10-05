@@ -12,6 +12,7 @@ import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.testutil.TestGuards;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -85,7 +86,7 @@ class HybridRagAnswerServiceJudgingTest {
         service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), mock(MemoryService.class));
+                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real());
     }
 
     private EvidenceItem evidence(String chunkId, String title, double score) {
@@ -192,7 +193,7 @@ class HybridRagAnswerServiceJudgingTest {
         HybridRagAnswerService multiDocService = new HybridRagAnswerService(retrievalService,
                 mock(VectorRetriever.class), evidenceJudgeService, citationService, chatClient,
                 modelRouter, ragProperties, new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), mock(MemoryService.class));
+                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real());
 
         multiDocService.answer("两份报告各测得多少", "tenant-1", "chat-1", "conv-1", null);
 

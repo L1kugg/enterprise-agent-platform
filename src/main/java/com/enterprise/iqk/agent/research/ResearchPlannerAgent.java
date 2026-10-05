@@ -1,5 +1,6 @@
 package com.enterprise.iqk.agent.research;
 
+import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -26,6 +27,7 @@ public class ResearchPlannerAgent {
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
+    private final ModelCallGuard modelCallGuard;
 
     /** LLM 拆题：把主题分解为 3-5 个子问题+关键词；priorFindings 注入租户内早前任务结论供参考（可传空串）；解析失败或结果为空时降级为原主题单问（strategy=direct）。 */
     public ResearchPlan plan(String topic, String priorFindings, String conversationId, String tenantId, String modelProfile) {
@@ -35,13 +37,13 @@ public class ResearchPlannerAgent {
         long inputTokens = tenantCostService.estimateTokens(prompt);
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
 
-        String raw = chatClient.prompt()
+        String raw = modelCallGuard.call("research-plan", () -> chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .system("You are a research planner. Decompose complex topics into sub-questions. Return JSON only.")
                 .user(prompt)
                 .call()
-                .content();
+                .content());
 
         long outputTokens = tenantCostService.estimateTokens(raw);
         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "research_planner");

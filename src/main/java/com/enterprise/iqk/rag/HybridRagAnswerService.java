@@ -2,6 +2,7 @@ package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.constants.SystemConstants;
+import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryItemRecord;
 import com.enterprise.iqk.memory.MemoryService;
@@ -65,6 +66,7 @@ public class HybridRagAnswerService {
     private final TenantCostService tenantCostService;
     private final RagFactMemoryRecorder ragFactMemoryRecorder;
     private final MemoryService memoryService;
+    private final ModelCallGuard modelCallGuard;
 
     /** 执行完整混合 RAG 管线：检索为空返回固定话术；每轮生成 traceId 供日志关联，全链路埋点。 */
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
@@ -148,14 +150,30 @@ public class HybridRagAnswerService {
             long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
             tenantCostService.assertBudget(normalizedTenantId, decision.costTier(), inputTokens, 600);
 
-            String answer = chatClient.prompt()
-                    .options(ChatOptions.builder().model(decision.model())
-                            .temperature(ragProperties.getTemperature()).build())
-                    .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
-                    .user("用户问题:%n%s%n%n上下文:%n%s%s%n".formatted(prompt, context, memorySection))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
-                    .call()
-                    .content();
+            // 生成步经熔断/重试/超时守卫：LLM 持续不可用时快速失败并返回固定兜底文案，
+            // 不再让异常炸到全局处理器（熔断打开/重试耗尽/超时同路兜底）
+            String answer;
+            try {
+                answer = modelCallGuard.call("rag-hybrid", () -> chatClient.prompt()
+                        .options(ChatOptions.builder().model(decision.model())
+                                .temperature(ragProperties.getTemperature()).build())
+                        .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
+                        .user("用户问题:%n%s%n%n上下文:%n%s%s%n".formatted(prompt, context, memorySection))
+                    .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                        .call()
+                        .content());
+            } catch (RuntimeException ex) {
+                pipelineOutcome = "generation_fallback";
+                log.warn("混合 RAG 生成失败，返回固定兜底文案: chatId={}, reason={}", chatId, ex.toString());
+                return HybridRagResult.builder()
+                        .answer(GENERATION_FALLBACK_ANSWER)
+                        .citations(List.of())
+                        .evidence(List.of())
+                        .traceId(traceId)
+                        .memoryUsed(List.of())
+                        .weights(laneWeights)
+                        .build();
+            }
 
             long outputTokens = tenantCostService.estimateTokens(answer);
             tenantCostService.recordUsage(normalizedTenantId, decision.costTier(),
@@ -196,6 +214,8 @@ public class HybridRagAnswerService {
     /** 检索为空/全部无关时的统一话术（与 RagAnswerService 空路径同句）与提示行。 */
     private static final String EMPTY_ANSWER = "没有在当前知识库中检索到可用内容。";
     private static final String EMPTY_EVIDENCE_HINT = "未检索到匹配文档，请先上传资料或调整检索词。";
+    /** 生成步熔断/重试耗尽/超时后的固定兜底文案（citations/evidence 置空，避免与文案矛盾）。 */
+    private static final String GENERATION_FALLBACK_ANSWER = "模型服务暂时不可用，请稍后重试。";
 
     /**
      * 无关线兜底：原始检索分（向量路为余弦相似度，含同会话有界加分 +0.05，

@@ -408,15 +408,26 @@ API Key（X-API-Key）
                  └─ 超时 → 各 runtime 独立处理
 ```
 
-### 10.2 Resilience4j 配置（已定义、未织入）
+### 10.2 Resilience4j 防护（已织入 LLM 调用链）
 
-**当前状态**：`ResilienceConfiguration` 定义了 CircuitBreaker / Retry / TimeLimiter 三个 Bean，但**尚未通过注解或编程式装饰接入任何 LLM 调用链**（`ReactAgentService#callModel`、`ResearchPlannerAgent#plan`、`ReportWriterAgent#writeReport` 等），因此下表参数在当前版本**不产生实际防护效果**——LLM 持续不可用时没有熔断快速失败保护，实际兜底靠 10.3 的场景化处理与模型路由 fallback 链。下表仅为预留的参数基线；接入建议见 16.3 与 `ResilienceConfiguration` javadoc（callModel 链编程式装饰 + 同步启用 resilience4j-micrometer 指标）。
+**当前状态**：`llm.ModelCallGuard` 统一封装 CircuitBreaker / Retry / TimeLimiter 三个 Bean，以编程式装饰织入全部 LLM 调用点（按场景独立熔断器）：
 
-| 机制 | 预留参数 | 设计意图（未生效） |
+| 调用点 | 场景标识（熔断器实例） |
+|------|------|
+| `ReactAgentService` 规划（同步+流式） | `llm.react` |
+| `WorkflowReactAgentService`（同步+流式） | `llm.workflow` |
+| `RagAnswerService` 生成 | `llm.rag` |
+| `HybridRagAnswerService` 生成 | `llm.rag-hybrid` |
+| `ResearchPlannerAgent` 规划 | `llm.research-plan` |
+| `ReportWriterAgent` 报告生成 | `llm.research-report` |
+
+| 机制 | 生效方式 | 参数与语义 |
 |------|------|------|
-| CircuitBreaker | 失败率≥50% 或慢调用≥50%（>10s）→ 开路 30s → 半开 5 探测 | 模型持续不可用快速失败 |
-| Retry | 最多 3 次，间隔 2s，忽略参数错误 | 瞬时故障自动重试 |
-| TimeLimiter | 30 秒超时 | 防模型调用无限挂起 |
+| CircuitBreaker | 同步调用 + 流式订阅（`acquirePermission`）/ 终态回写 | 失败率≥50% 或慢调用≥50%（>10s）→ 开路 30s → 半开 5 探测；滑动窗口 20 次、最少 10 次才统计；打开后调用不发出、抛 `CallNotPermittedException` 快速失败 |
+| Retry | 仅同步调用（流式不重试，避免重复吐字） | 最多 3 次，间隔 2s，仅对瞬时异常重试（`RestClientException` / `WebClientException` / `TimeoutException` / `TransientAiException`）；熔断器异常不重试 |
+| TimeLimiter | 流式以 Reactor `timeout` 实现基线兜底 | 30 秒无任何新帧 → 按失败回写熔断器并中断流 |
+
+装饰顺序：同步 `Retry(CircuitBreaker(调用))`——熔断器记录每次尝试，重试由瞬时异常白名单驱动。观测：resilience4j starter 自动发布的 `resilience4j_circuitbreaker_*` tagged 指标（按 `llm.<场景>` 实例区分）+ 自定义计数器 `llm.call.outcome{scenario, outcome=success/error/not_permitted}`。RAG 两条链的生成步骤捕获熔断异常返回固定兜底文案（`generation_fallback`），ReAct / Workflow / DeepResearch 由既有场景兜底承接（见 10.3）。模型路由 fallback 链（10.3 末行）是路由层的独立降级，与本节熔断互补。
 
 ### 10.3 各场景兜底行为
 
@@ -651,9 +662,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 16.3 Resilience4j 接入确认
 
-**现状**：已确认——`ResilienceConfiguration` 定义了 CircuitBreaker / Retry / TimeLimiter 三个 Bean，但大模型调用链路（`ReactAgentService#callModel` / `callModelStream`、`WorkflowReactAgentService`、`ResearchPlannerAgent`、`ReportWriterAgent` 等）没有任何 `@CircuitBreaker` 注解或编程式装饰，配置**未生效**，LLM 持续不可用时没有熔断快速失败保护（`ResilienceConfiguration` javadoc 亦自述"尚未织入调用链"）。参数基线与设计意图见 10.2。
-
-**改进**：在 callModel 链路用 `CircuitBreakerRegistry` 编程式装饰接入，并同步启用 resilience4j-micrometer 指标（`r4j.circuit_breaker.*`）。
+**已解决**：`llm.ModelCallGuard` 已编程式织入全部 LLM 调用链（`ReactAgentService` / `WorkflowReactAgentService` / `RagAnswerService` / `HybridRagAnswerService` / `ResearchPlannerAgent` / `ReportWriterAgent`），同步调用走 Retry+熔断、流式走订阅前快速失败+30s 超时基线；resilience4j starter 自动发布 `resilience4j_circuitbreaker_*` 指标（懒创建实例也能挂上），另有 `llm.call.outcome` 自定义计数器。参数与织入明细见 10.2。
 
 ### 16.4 记忆系统与主管线的集成
 
