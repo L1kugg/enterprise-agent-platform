@@ -57,7 +57,7 @@ KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，不停留在单接�
 | 层次 | 技术 | 版本 |
 |------|------|------|
 | 语言/框架 | Java / Spring Boot | 17 / 3.4.5 |
-| AI 框架 | Spring AI | 1.0.0-M6 |
+| AI 框架 | Spring AI | 1.1.7 |
 | 安全 | Spring Security + JJWT | 6.x + 0.13.0 |
 | 弹性 | Resilience4j | 2.4.0 |
 | 限流 | Bucket4j + Redis | 8.10.1 |
@@ -655,15 +655,15 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 16.4 记忆系统与主管线的集成
 
-**现状**：`MemoryService.buildContext()` 定义完整，但从 RAG 主管线代码看未发现显式调用点，四层记忆可能未真正注入生成上下文。
+**现状**：读写闭环已全线打通（详见 `docs/architecture-memory-system.md`）。写侧四类 Recorder：`ChatTurnMemoryRecorder`（对话轮次 short）、`MemoryExtractionService`（画像提取 long）、`TaskConclusionMemoryRecorder`（任务结论 task）、`RagFactMemoryRecorder`（RAG 事实 fact）。读侧 `MemoryInjectionAdvisor` 显式 opt-in：调用方同时传 `memory.tenantId` 与 `memory.userId` 两个 advisor 参数才注入，记忆以独立 SystemMessage 插入 prompt 首部（不改写 user 消息，会话历史不累积记忆快照），默认只注 long/fact 跨会话视图；该 advisor 挂在 `CommonConfiguration` 的四个 ChatClient（主聊天 chatClient、客服 serviceChatClient、PDF 问答 pdfChatClient、agentChatClient）上。`HybridRagAnswerService` 另走显式召回（user prompt 三段式带"已知记忆"段并上报 `memoryUsed`），`ReactAgentService` 在 planner 提示词注入召回快照并经 `ChatTurnMemoryRecorder` 写回。REST 查询与管理由 `MemoryController` 提供（`/ai/memory/**`：query / task / events / save）。
 
-**改进**：确认 buildContext 的调用链路，或在 RAG 管线中显式集成记忆上下文组装。
+**改进**：无（原"未接入主管线"的评估已过时）；后续可关注 token 估算未计入记忆段的记账瑕疵（HybridRagAnswerService 已知瑕疵注释）。
 
 ### 16.5 Spring AI 版本升级
 
-**现状**：锁定在 1.0.0-M6 里程碑版本，迁移到 1.1.x 稳定线需逐文件适配 breaking changes。
+**现状**：已完成从 `1.0.0-M6` 到 `1.1.7` 稳定线（Maven Central）的升级，breaking changes（QuestionAnswerAdvisor 新包路径、`BaseChatMemoryAdvisor` 常量、starter 命名等）已全部适配。
 
-**计划**：见 `docs/spring-ai-upgrade-plan.md`。
+**历史记录**：迁移计划与风险矩阵见 `docs/spring-ai-upgrade-plan.md`（已标记完成，留档备查）。
 
 ---
 

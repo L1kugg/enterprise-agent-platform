@@ -1,20 +1,20 @@
 # Spring AI 升级计划
 
-> 目标：从 Spring AI 1.0.0-M6（已验证实现基线）升级到当前 1.1.x 稳定线，同步更新 starter 命名规范与 breaking API changes。
+> 目标：从 Spring AI 1.0.0-M6（原已验证实现基线）升级到 1.1.x 稳定线，同步更新 starter 命名规范与 breaking API changes。
 
-## 升级状态：🔄 进行中（API 迁移待完成）
+## 升级状态：✅ 已完成
 
-Spring AI `1.0.0-M6` 保持为当前可复现演示基线。官方稳定线已经进入 `1.1.x`，但从 M6 迁移需要逐文件适配 API 与 starter 命名变化，不能只改 BOM 版本。
+当前已运行在 Spring AI `1.1.7`（Maven Central 稳定版），`mvn test`、集成测试、demo smoke 与回归评测全部通过。本文档保留为迁移历史记录：下方的 breaking changes 清单即当时逐文件适配的内容。
 
 ## 当前基线
 
 | 组件 | 版本 | 渠道 |
 |---|---|---|
-| Spring Boot | 3.4.3 | Maven Central |
-| Spring AI BOM | 1.0.0-M6 | Spring Milestones |
+| Spring Boot | 3.4.5 | Maven Central |
+| Spring AI BOM | 1.1.7 | Maven Central |
 | Java | 17 | — |
 
-## 1.1.x 迁移候选
+## 迁移目标（已达成）
 
 | 组件 | 目标 |
 |---|---|

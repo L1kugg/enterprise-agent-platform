@@ -5,11 +5,11 @@
 [![Docs](https://img.shields.io/badge/docs-Repository-blue)](docs/index.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
-[![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
+[![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.7-green?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
 > **矩阵角色：** `knowledgeops-agent` 是平台基线：企业级 Spring AI RAG、Agent 工作流状态、记忆持久化基础能力、证据链、租户隔离、安全与可观测性。[`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) 等业务 Agent 构建在这一层之上。
 >
-> **Spring AI 基线：** 代码有意锁定在 `1.0.0-M6`，作为已验证的实现基线；向当前 `1.1.x` 稳定线的迁移在 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md) 中跟踪。
+> **Spring AI 基线：** 已运行在 `1.1.7` 稳定线（Maven Central）；从 `1.0.0-M6` 完成迁移的历史计划与 breaking changes 清单留档在 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
 KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
 
@@ -170,7 +170,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 混合检索 | VectorRetriever（pgvector）+ KeywordRetriever（关键词）+ GraphRetriever（知识图谱）+ WebRetriever（外部搜索）= HybridRetrievalService 融合排序 |
 | 证据评分与引用溯源 | EvidenceJudgeService 三维评分（相关性/权威性/时效性），CitationService 编号引用（来源/片段/可信度） |
 | 知识图谱 | MySQL 轻量图谱（kg_entity/kg_relation/kg_fact），支持实体搜索、一跳邻居、事实检索，种子课程图谱数据 |
-| 长短期记忆 | MemoryService + MySQL 四层记忆与自动过期清理；当前未提供 REST Controller，也未自动接入默认 Agent/RAG prompt 链路 |
+| 长短期记忆 | MemoryService + MySQL 四层记忆与自动过期清理；写侧四类 Recorder 闭环（对话轮次 short / 画像提取 long / 任务结论 task / RAG 事实 fact），读侧 `MemoryInjectionAdvisor` 显式 opt-in 注入生成链路（独立 SystemMessage、不污染会话历史，默认 long/fact）；REST 查询与管理 `/ai/memory/**`（MemoryController） |
 | 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
 | 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
 | 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
@@ -180,7 +180,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
-| 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs、SBOM、Trivy、全模块 JaCoCo 25% 门禁、真实 API 评测与 evaluator contract 自测 |
+| 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs、SBOM、Trivy、全模块 JaCoCo 30% 门禁、真实 API 评测与 evaluator contract 自测 |
 | 容器化 | Docker 多阶段构建、安全加固、docker-compose 资源限制、命名卷持久化 |
 | 前端工程化 | Vue 3 + TypeScript + ESLint + Prettier + vue-tsc 类型检查 |
 
@@ -190,7 +190,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 
 - Java 17
 - Spring Boot 3.4.5
-- Spring AI 1.0.0-M6
+- Spring AI 1.1.7
 - Spring Security 6.x（JWT + API Key + RBAC）
 - Resilience4j 2.4.0（CircuitBreaker / Retry / TimeLimiter）
 - Bucket4j Core（当前为单实例内存限流；分布式后端尚未实现）
@@ -204,8 +204,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 - Checkstyle / PMD 7.x / SpotBugs / OWASP Dependency-Check / CycloneDX SBOM
 - Maven 3.9+
 
-> **版本说明**：Spring AI 当前锁定在 `1.0.0-M6`，这是本仓库已经完成编译、测试、演示和证据链校验的实现基线。
-> 迁移到当前 `1.1.x` 稳定线需要逐文件适配 breaking changes，计划与风险矩阵见 [spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
+> **版本说明**：Spring AI 运行在 `1.1.7` 稳定线（Maven Central），已通过编译、测试、演示和证据链校验；从 `1.0.0-M6` 迁移的 breaking changes 适配记录见 [spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
 ---
 
@@ -604,7 +603,7 @@ GitHub Actions 工作流：`Intelligent QA Platform CI`（7-job 流水线）
 | Job | 职责 |
 |---|---|
 | code-quality | Checkstyle / PMD / SpotBugs 静态扫描 |
-| build | 编译、单测、集成测试、JaCoCo 25% 门禁、CycloneDX SBOM、评测器契约自测 |
+| build | 编译、单测、集成测试、JaCoCo 30% 门禁、CycloneDX SBOM、评测器契约自测 |
 | frontend | ESLint / Prettier / vue-tsc / Vite 构建 |
 | owasp-scan | OWASP 依赖漏洞扫描 |
 | e2e-smoke | Docker Compose 启动、健康检查、端到端聊天和真实 API 质量门禁 |
@@ -661,7 +660,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] 混合检索（Vector + Keyword + Graph + Web 四路召回融合）
 - [x] 证据评分与引用溯源（三维评分 + 编号引用）
 - [x] 知识图谱（kg_entity/kg_relation/kg_fact + GraphRetriever）
-- [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆）
+- [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆，读写闭环接入生成链路 + `/ai/memory` REST）
 - [x] 安全响应头 + CORS 白名单
 - [x] Resilience4j 熔断/重试/超时
 - [x] 静态分析流水线（Checkstyle / PMD / SpotBugs）
