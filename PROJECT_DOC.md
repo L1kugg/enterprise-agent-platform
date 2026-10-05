@@ -408,9 +408,11 @@ API Key（X-API-Key）
                  └─ 超时 → 各 runtime 独立处理
 ```
 
-### 10.2 Resilience4j 配置
+### 10.2 Resilience4j 配置（已定义、未织入）
 
-| 机制 | 参数 | 作用 |
+**当前状态**：`ResilienceConfiguration` 定义了 CircuitBreaker / Retry / TimeLimiter 三个 Bean，但**尚未通过注解或编程式装饰接入任何 LLM 调用链**（`ReactAgentService#callModel`、`ResearchPlannerAgent#plan`、`ReportWriterAgent#writeReport` 等），因此下表参数在当前版本**不产生实际防护效果**——LLM 持续不可用时没有熔断快速失败保护，实际兜底靠 10.3 的场景化处理与模型路由 fallback 链。下表仅为预留的参数基线；接入建议见 16.3 与 `ResilienceConfiguration` javadoc（callModel 链编程式装饰 + 同步启用 resilience4j-micrometer 指标）。
+
+| 机制 | 预留参数 | 设计意图（未生效） |
 |------|------|------|
 | CircuitBreaker | 失败率≥50% 或慢调用≥50%（>10s）→ 开路 30s → 半开 5 探测 | 模型持续不可用快速失败 |
 | Retry | 最多 3 次，间隔 2s，忽略参数错误 | 瞬时故障自动重试 |
@@ -649,9 +651,9 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 16.3 Resilience4j 接入确认
 
-**现状**：`ResilienceConfiguration` 定义了熔断器注册表，但实际大模型调用链路中未发现 `@CircuitBreaker` 注解或编程式装饰，配置可能未真正生效。
+**现状**：已确认——`ResilienceConfiguration` 定义了 CircuitBreaker / Retry / TimeLimiter 三个 Bean，但大模型调用链路（`ReactAgentService#callModel` / `callModelStream`、`WorkflowReactAgentService`、`ResearchPlannerAgent`、`ReportWriterAgent` 等）没有任何 `@CircuitBreaker` 注解或编程式装饰，配置**未生效**，LLM 持续不可用时没有熔断快速失败保护（`ResilienceConfiguration` javadoc 亦自述"尚未织入调用链"）。参数基线与设计意图见 10.2。
 
-**改进**：排查并确认熔断器是否织入 `callModel()` 调用链，或改用编程式装饰。
+**改进**：在 callModel 链路用 `CircuitBreakerRegistry` 编程式装饰接入，并同步启用 resilience4j-micrometer 指标（`r4j.circuit_breaker.*`）。
 
 ### 16.4 记忆系统与主管线的集成
 
