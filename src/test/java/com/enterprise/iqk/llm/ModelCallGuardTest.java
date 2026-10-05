@@ -150,8 +150,9 @@ class ModelCallGuardTest {
             return "第二次成功";
         });
 
+        // state 指标是 one-hot 编码：每个状态一个 gauge（state=closed/open/…），处于该状态值为 1
         assertThat(meterRegistry.get("resilience4j.circuitbreaker.state")
-                .tag("name", "llm.research-plan").gauge().value()).isEqualTo(0.0); // 0 = closed
+                .tag("name", "llm.research-plan").tag("state", "closed").gauge().value()).isEqualTo(1.0);
         assertThat(meterRegistry.get("resilience4j.retry.calls")
                 .tag("name", "llm.research-plan")
                 .tag("kind", "successful_with_retry").functionCounter().count()).isEqualTo(1.0);
