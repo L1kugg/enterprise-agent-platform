@@ -74,3 +74,7 @@ dist/
 
 # Local runtime upload index written by LocalPdfFileRepository
 /chat-pdf.properties
+
+# Personal notes (keep out of version control)
+/bug_track.json
+/career-claim-ledger.json
