@@ -31,6 +31,11 @@ public class ReactResponseFormatter {
                                        boolean fallback) {
         List<String> citations = extractTraceStrings(trace, "citations");
         List<String> evidence = extractTraceStrings(trace, "evidence");
+        // 答案明确说"知识库无此内容"时不再挂引用，避免与检索 top-k 自相矛盾
+        if (isNoHitAnswer(answer)) {
+            citations = List.of();
+            evidence = List.of();
+        }
         return ReactChatResponseVO.builder()
                 .ok(1)
                 .msg("ok")
@@ -73,6 +78,12 @@ public class ReactResponseFormatter {
     }
 
     /** 从轨迹各步 observation 的指定 key 去重抽取字符串列表。 */
+    private static boolean isNoHitAnswer(String answer) {
+        if (!StringUtils.hasText(answer)) return false;
+        return answer.contains("暂无") || answer.contains("未收录")
+                || answer.contains("没有在当前知识库") || answer.contains("未检索到");
+    }
+
     private List<String> extractTraceStrings(List<ReactTraceStepVO> trace, String key) {
         if (trace == null || trace.isEmpty()) {
             return List.of();

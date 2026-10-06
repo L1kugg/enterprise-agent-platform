@@ -34,7 +34,43 @@
         <p class="section-label">创建评测集</p>
         <el-input v-model="evalDatasetName" size="small" placeholder="评测集名称" />
         <el-input v-model="evalDatasetDescription" size="small" placeholder="描述" />
+        <div class="eval-editor-toggle">
+          <el-radio-group v-model="evalEditorMode" size="small">
+            <el-radio-button value="form">表单</el-radio-button>
+            <el-radio-button value="json">JSON</el-radio-button>
+          </el-radio-group>
+        </div>
+        <template v-if="evalEditorMode === 'form'">
+          <div v-for="(draft, i) in evalCaseDrafts" :key="i" class="eval-case-draft">
+            <div class="eval-case-head">
+              <span>题目 {{ i + 1 }}</span>
+              <button
+                type="button"
+                :disabled="evalCaseDrafts.length <= 1"
+                @click="removeEvalCase(i)"
+              >
+                删除
+              </button>
+            </div>
+            <el-input v-model="draft.question" size="small" placeholder="问题，如：高温作业有哪些风险？" />
+            <el-input
+              v-model="draft.expected"
+              size="small"
+              placeholder="期望关键词（逗号分隔），如：高温,风险"
+            />
+            <el-input
+              v-model="draft.forbidden"
+              size="small"
+              placeholder="禁用关键词（可选，逗号分隔）"
+            />
+          </div>
+          <div class="eval-case-actions">
+            <el-button size="small" @click="addEvalCase">添加题目</el-button>
+            <el-button size="small" type="primary" plain @click="syncDraftsToJson">生成 JSON</el-button>
+          </div>
+        </template>
         <el-input
+          v-else
           v-model="evalDatasetJson"
           class="eval-json-input"
           type="textarea"
@@ -143,6 +179,58 @@ import {
 } from '../../composables/useEvaluation';
 import { formatPercent, formatRunScore } from '../../utils/evalFormat';
 import { shortId } from '../../utils/format';
+import { ref, watch } from 'vue';
+
+// 结构化题目编辑器：业务用户不写 JSON，表单填完一键生成；JSON 模式保留给高级用户
+const evalEditorMode = ref<'form' | 'json'>('json');
+const evalCaseDrafts = ref([{ question: '', expected: '', forbidden: '' }]);
+
+function addEvalCase() {
+  evalCaseDrafts.value.push({ question: '', expected: '', forbidden: '' });
+}
+
+function removeEvalCase(index: number) {
+  evalCaseDrafts.value.splice(index, 1);
+}
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(/[,，]/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function syncDraftsToJson() {
+  const cases = evalCaseDrafts.value
+    .filter((d) => d.question.trim())
+    .map((d, i) => ({
+      caseId: `case_${String(i + 1).padStart(3, '0')}`,
+      category: 'rag_recall',
+      chatId: `eval-case-${i + 1}`,
+      question: d.question.trim(),
+      expectedKeywords: splitCsv(d.expected),
+      ...(splitCsv(d.forbidden).length ? { forbiddenKeywords: splitCsv(d.forbidden) } : {}),
+    }));
+  evalDatasetJson.value = JSON.stringify(cases, null, 2);
+  evalEditorMode.value = 'json';
+}
+
+// 切到表单模式时尝试把现有 JSON 反解析成草稿，双向不割裂
+watch(evalEditorMode, (mode) => {
+  if (mode !== 'form') return;
+  try {
+    const parsed = JSON.parse(evalDatasetJson.value);
+    if (Array.isArray(parsed) && parsed.length) {
+      evalCaseDrafts.value = parsed.map((c) => ({
+        question: String(c.question ?? ''),
+        expected: Array.isArray(c.expectedKeywords) ? c.expectedKeywords.join(',') : '',
+        forbidden: Array.isArray(c.forbiddenKeywords) ? c.forbiddenKeywords.join(',') : '',
+      }));
+    }
+  } catch {
+    // JSON 非法或为空：保留现有草稿，用户从头填
+  }
+});
 </script>
 
 <style scoped>
@@ -234,6 +322,47 @@ import { shortId } from '../../utils/format';
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.eval-editor-toggle {
+  display: flex;
+}
+
+.eval-case-draft {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ui-panel) 70%, transparent);
+}
+
+.eval-case-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.eval-case-head button {
+  border: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.eval-case-head button:hover:not(:disabled) {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.45);
+}
+
+.eval-case-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .eval-score-strip {

@@ -206,27 +206,29 @@ import { formatTime } from '../utils/format';
 }
 
 .new-chat-btn {
-  border: 1px solid rgba(14, 116, 144, 0.35);
-  background: linear-gradient(150deg, rgba(14, 116, 144, 0.2), rgba(15, 118, 110, 0.14));
-  color: var(--ui-text);
-  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--ui-accent-strong);
+  color: #fff;
+  border-radius: 10px;
   padding: 10px 14px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition:
     transform 180ms ease,
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    filter 180ms ease;
 }
 
 .new-chat-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(14, 116, 144, 0.18);
+  box-shadow: 0 8px 18px color-mix(in oklab, var(--ui-accent-strong) 32%, transparent);
+  filter: brightness(1.05);
 }
 
 .session-tools {
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 10px;
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   display: flex;
@@ -269,9 +271,14 @@ import { formatTime } from '../utils/format';
   transition: border-color 160ms ease;
 }
 
-.session-item:hover,
+.session-item:hover {
+  border-color: color-mix(in oklab, var(--ui-accent) 45%, transparent);
+}
+
 .session-item.active {
-  border-color: rgba(14, 116, 144, 0.45);
+  border-color: color-mix(in oklab, var(--ui-accent) 60%, transparent);
+  background: color-mix(in oklab, var(--ui-accent) 9%, var(--ui-card));
+  box-shadow: inset 3px 0 0 var(--ui-accent-strong);
 }
 
 .session-content {

@@ -6,6 +6,7 @@ import com.enterprise.iqk.security.AuditLogFilter;
 import com.enterprise.iqk.security.HttpMetricsFilter;
 import com.enterprise.iqk.security.RateLimitFilter;
 import com.enterprise.iqk.security.RequestContextFilter;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,6 +53,10 @@ public class SecurityConfiguration {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         } else {
             http.authorizeHttpRequests(auth -> auth
+                // Servlet 异步（SSE 流式）收尾时容器会重新 dispatch 回过滤器链；
+                // 认证过滤器不重跑，若不放行会把已鉴权的长连接当匿名掐断
+                // （初始请求仍走完整鉴权，ASYNC 仅是同一请求的内部收尾）。
+                .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info", "/error").permitAll()
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/actuator/prometheus").hasAnyAuthority("PERM_METRICS_READ", "ROLE_ADMIN", "ROLE_OPS")

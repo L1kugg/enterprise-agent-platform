@@ -1,5 +1,6 @@
 package com.enterprise.iqk.agent.harness;
 
+import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -26,7 +27,9 @@ class TrustedActionServiceTest {
         TrustedActionService service = new TrustedActionService(
                 harnessService,
                 new ActionSchemaRegistry(),
-                new HarnessPayloadSanitizer()
+                new HarnessPayloadSanitizer(),
+                new InMemoryTrustedActionStore(),
+                new AgentHarnessProperties()
         );
 
         TrustedActionPreviewResponse preview = service.preview(new TrustedActionRequest(
@@ -54,7 +57,9 @@ class TrustedActionServiceTest {
         TrustedActionService service = new TrustedActionService(
                 harnessService,
                 new ActionSchemaRegistry(),
-                new HarnessPayloadSanitizer()
+                new HarnessPayloadSanitizer(),
+                new InMemoryTrustedActionStore(),
+                new AgentHarnessProperties()
         );
         TrustedActionPreviewResponse preview = service.preview(new TrustedActionRequest(
                 "workspace_read_file", Map.of("path", "README.md"),
@@ -65,7 +70,11 @@ class TrustedActionServiceTest {
         assertThat(denied.toMap())
                 .containsEntry("status", "error")
                 .containsEntry("message", "trusted action token not found");
-        verify(harnessService, org.mockito.Mockito.never()).execute(any());
+        // 存储键按租户隔离：错误租户的尝试不消费 token，正确租户仍可执行
+        when(harnessService.execute(any())).thenReturn(AgentObservation.success("workspace", Map.of("ok", 1), 1));
+        AgentObservation allowed = service.execute(preview.token(), "tenant-a");
+        assertThat(allowed.toMap()).containsEntry("status", "success");
+        verify(harnessService, org.mockito.Mockito.times(1)).execute(any());
     }
 
     @Test
@@ -73,7 +82,9 @@ class TrustedActionServiceTest {
         TrustedActionService service = new TrustedActionService(
                 mock(AgentHarnessService.class),
                 new ActionSchemaRegistry(),
-                new HarnessPayloadSanitizer()
+                new HarnessPayloadSanitizer(),
+                new InMemoryTrustedActionStore(),
+                new AgentHarnessProperties()
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(new TrustedActionRequest(

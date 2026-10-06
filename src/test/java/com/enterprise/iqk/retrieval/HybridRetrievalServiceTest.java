@@ -127,6 +127,25 @@ class HybridRetrievalServiceTest {
     }
 
     @Test
+    void doesNotMergeDocumentsSharingOnlyALongPrefix() {
+        HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
+        String sharedPrefix = ("合同编号：HT-2026-001 甲方：同一模板主体 乙方：同一模板主体 "
+                + "条款：本合同适用于知识库模板场景，以下内容为模板共享前缀，用于验证去重指纹不会截断。").repeat(4);
+
+        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+                .thenReturn(List.of(doc("vec-template-a", "vector", sharedPrefix + " 结论：向量侧版本。", 0.9),
+                        doc("vec-template-b", "vector", sharedPrefix + " 结论：关键词侧版本。", 0.8)));
+        when(keywordRetriever.retrieve(any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(any(), any(), anyInt())).thenReturn(List.of());
+        when(webRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
+
+        HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 5);
+
+        // 前 200 字符完全相同但正文不同的文档不应被错误合并
+        assertThat(result.totalAfterDedup()).isEqualTo(2);
+    }
+
+    @Test
     void allSourcesFailingReturnsEmptyResult() {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
 

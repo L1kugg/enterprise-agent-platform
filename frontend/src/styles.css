@@ -1,19 +1,45 @@
+/*
+ * 设计基础层：品牌色板 / Element Plus 主题对齐 / 背景与全局细节。
+ * 原则：这是运维控制台，底色安静、层次靠面板和文字，不靠大色块。
+ */
+
 :root {
-  --ui-text: #1b2434;
-  --ui-muted: #596479;
-  --ui-accent: #0f766e;
-  --ui-border: rgba(15, 23, 42, 0.15);
-  --ui-card: rgba(250, 252, 255, 0.82);
-  --ui-panel: rgba(241, 246, 255, 0.76);
+  --ui-text: #17222e;
+  --ui-muted: #5b6878;
+  --ui-accent: #0e7490;
+  --ui-accent-strong: #0f766e;
+  --ui-border: rgba(23, 34, 46, 0.13);
+  --ui-card: rgba(255, 255, 255, 0.86);
+  --ui-panel: rgba(240, 245, 248, 0.8);
+
+  /* Element Plus 品牌对齐：默认蓝换成产品 teal，消除自定义件与组件库的色差 */
+  --el-color-primary: #0e7490;
+  --el-color-primary-light-3: #3d97ab;
+  --el-color-primary-light-5: #6fb4c3;
+  --el-color-primary-light-7: #a4d0da;
+  --el-color-primary-light-8: #c2dfe6;
+  --el-color-primary-light-9: #e6f1f4;
+  --el-color-primary-dark-2: #0b5c73;
+  --el-border-radius-base: 8px;
+  --el-font-family: 'IBM Plex Sans', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif;
 }
 
 html.dark {
-  --ui-text: #e2e8f0;
-  --ui-muted: #9aa9bf;
-  --ui-accent: #34d399;
-  --ui-border: rgba(148, 163, 184, 0.25);
-  --ui-card: rgba(8, 15, 30, 0.82);
-  --ui-panel: rgba(18, 28, 46, 0.72);
+  --ui-text: #e5edf3;
+  --ui-muted: #93a3b5;
+  --ui-accent: #38bdf8;
+  --ui-accent-strong: #2dd4bf;
+  --ui-border: rgba(148, 163, 184, 0.22);
+  --ui-card: rgba(13, 20, 32, 0.86);
+  --ui-panel: rgba(22, 31, 47, 0.78);
+
+  --el-color-primary: #2dd4bf;
+  --el-color-primary-light-3: #4ddcc9;
+  --el-color-primary-light-5: #7be7d8;
+  --el-color-primary-light-7: #a9f0e5;
+  --el-color-primary-light-8: #c0f4ec;
+  --el-color-primary-light-9: #e8fbf7;
+  --el-color-primary-dark-2: #14b8a6;
 }
 
 *,
@@ -30,17 +56,50 @@ body,
 }
 
 body {
-  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif;
+  font-family: var(--el-font-family);
   color: var(--ui-text);
   background:
-    radial-gradient(circle at 6% -14%, rgba(14, 116, 144, 0.18), transparent 36%),
-    radial-gradient(circle at 92% -10%, rgba(15, 118, 110, 0.18), transparent 33%),
-    linear-gradient(164deg, #f6f9ff 0%, #eef4ff 45%, #f4fffd 100%);
+    radial-gradient(1200px 480px at 88% -12%, rgba(14, 116, 144, 0.07), transparent 62%),
+    linear-gradient(180deg, #f8fafb 0%, #f1f5f7 100%);
 }
 
 html.dark body {
   background:
-    radial-gradient(circle at 12% -10%, rgba(14, 165, 233, 0.24), transparent 28%),
-    radial-gradient(circle at 90% -16%, rgba(16, 185, 129, 0.2), transparent 24%),
-    linear-gradient(152deg, #020617 0%, #0c162a 58%, #12233a 100%);
+    radial-gradient(1100px 420px at 85% -10%, rgba(45, 212, 191, 0.06), transparent 60%),
+    linear-gradient(180deg, #0a111d 0%, #0d1524 100%);
+}
+
+/* 细滚动条：密集控制台里默认滚动条太笨重 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ui-muted) 45%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ui-muted) 42%, transparent);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--ui-accent) 26%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--ui-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* 指标数字对齐：用量/评测页的数字列不再跳动 */
+.eval-metric-card strong,
+.eval-panel-head strong {
+  font-variant-numeric: tabular-nums;
 }

@@ -1,5 +1,6 @@
 package com.enterprise.iqk.agent.harness;
 
+import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -78,6 +79,29 @@ class WorkspaceRuntimeTest {
         assertThat(patch).contains("--- a/README.md", "+++ b/README.md");
         assertThat(applied.toMap()).containsEntry("status", "written");
         assertThat(Files.readString(workspace.resolve("README.md"))).isEqualTo("new line");
+    }
+
+    @Test
+    void rejectsMvnByDefaultAndForcesOfflineWhenExplicitlyAllowed() {
+        WorkspaceRuntime runtime = new WorkspaceRuntime(workspace);
+
+        // mvn 不在默认白名单：网络可达命令需运维显式启用
+        AgentObservation denied = runtime.execute(action("workspace_run_shell",
+                Map.of("command", "mvn test")));
+        assertThat(denied.toMap()).containsEntry("status", "error");
+
+        // 显式放行后，mvnOffline=true 默认注入 -o 阻止联网拉依赖
+        AgentHarnessProperties props = new AgentHarnessProperties();
+        props.getWorkspace().setRoot(workspace.toString());
+        props.getWorkspace().setShellEnabled(true);
+        props.getWorkspace().setAllowedCommands(new java.util.LinkedHashSet<>(java.util.Set.of("mvn")));
+        WorkspaceRuntime mvnRuntime = new WorkspaceRuntime(props, new UnifiedDiffService(), workspace);
+        assertThat(mvnRuntime.prepareCommand(List.of("mvn", "test")))
+                .containsExactly("mvn", "-o", "test");
+
+        props.getWorkspace().setMvnOffline(false);
+        assertThat(mvnRuntime.prepareCommand(List.of("mvn", "test")))
+                .containsExactly("mvn", "test");
     }
 
     private AgentAction action(String action, Map<String, Object> input) {

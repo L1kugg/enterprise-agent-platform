@@ -35,17 +35,29 @@ public enum WorkflowState {
         return this == DONE || this == FAILED;
     }
 
+    /** ReAct 动作→状态：rag_search=SEARCHING；数据/工具查询=RETRIEVING；finish/写入=WRITING */
+    public static WorkflowState forAction(String action) {
+        return switch (action == null ? "finish" : action) {
+            case "rag_search" -> SEARCHING;
+            case "query_database", "query_school", "query_course", "mcp_call" -> RETRIEVING;
+            default -> WRITING;
+        };
+    }
     /** 守卫：当前状态是否允许转移到 target（终态不允许再转移） */
     public boolean canTransitionTo(WorkflowState target) {
         return switch (this) {
             case CREATED -> target == PLANNING;
             case PLANNING -> target == SEARCHING || target == RETRIEVING || target == WRITING || target == FAILED;
-            case SEARCHING -> target == RETRIEVING || target == JUDGING || target == FAILED;
-            case RETRIEVING -> target == JUDGING || target == REFLECTING || target == WRITING || target == FAILED;
+            // ReAct 动作顺序非确定：连续同类动作（如两次 rag_search）保持原状态，
+            // 搜索后可直接成稿（finish）；检索类动作间可来回切换，不必经过固定轮次。
+            case SEARCHING -> target == SEARCHING || target == RETRIEVING || target == JUDGING
+                    || target == WRITING || target == FAILED;
+            case RETRIEVING -> target == SEARCHING || target == RETRIEVING || target == JUDGING
+                    || target == REFLECTING || target == WRITING || target == FAILED;
             case JUDGING -> target == REFLECTING || target == WRITING || target == FAILED;
             case REFLECTING -> target == WRITING || target == NEED_MORE_EVIDENCE || target == FAILED;
             case NEED_MORE_EVIDENCE -> target == SEARCHING || target == RETRIEVING || target == FAILED;
-            case WRITING -> target == DONE || target == FAILED;
+            case WRITING -> target == WRITING || target == DONE || target == FAILED;
             case DONE, FAILED -> false;
         };
     }

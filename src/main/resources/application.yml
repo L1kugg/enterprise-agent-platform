@@ -142,6 +142,7 @@ app:
   workflow:
     reclaim-interval-ms: ${APP_WORKFLOW_RECLAIM_INTERVAL_MS:300000}
     stale-task-minutes: ${APP_WORKFLOW_STALE_TASK_MINUTES:30}
+    react-max-steps: ${APP_WORKFLOW_REACT_MAX_STEPS:6}
   audit:
     retention-days: ${APP_AUDIT_RETENTION_DAYS:90}
   model-router:
@@ -197,6 +198,10 @@ app:
     max-results: ${APP_WEB_SEARCH_MAX_RESULTS:5}
   agent-harness:
     trusted-runtime-enabled: ${APP_AGENT_HARNESS_TRUSTED_ENABLED:false}
+    trusted-action:
+      # memory 仅适合单实例；多实例部署切 redis（preview/execute 跨节点原子消费）
+      store: ${APP_AGENT_HARNESS_TRUSTED_ACTION_STORE:memory}
+      token-ttl: ${APP_AGENT_HARNESS_TRUSTED_ACTION_TTL:PT10M}
     workspace:
       root: ${APP_AGENT_HARNESS_WORKSPACE_ROOT:.}
       write-enabled: ${APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED:false}
@@ -205,6 +210,8 @@ app:
       max-command-output-bytes: ${APP_AGENT_HARNESS_MAX_COMMAND_OUTPUT_BYTES:12000}
       max-file-bytes: ${APP_AGENT_HARNESS_MAX_FILE_BYTES:20000}
       max-search-files: ${APP_AGENT_HARNESS_MAX_SEARCH_FILES:1000}
+      # mvn 属网络可达命令，默认白名单不含；显式放行时保持 mvn-offline=true 阻止联网拉依赖
+      mvn-offline: ${APP_AGENT_HARNESS_MVN_OFFLINE:true}
     mcp:
       # 瞬时故障（网络异常/5xx）在适配器层重试的次数与退避基数，0 表示关闭重试
       retry-attempts: ${APP_AGENT_HARNESS_MCP_RETRY_ATTEMPTS:2}

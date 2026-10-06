@@ -10,9 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -339,9 +344,17 @@ public class HybridRetrievalService {
     /** 生成去重指纹：内容折叠空白后取前 200 个字符（null 内容按空串处理） */
     private String fingerprint(ScoredDocument d) {
         String content = d.getContent() != null ? d.getContent() : "";
-        // 取前 200 个字符作为去重键
+        // 全文归一化后取 SHA-256：模板化文档（同前缀不同内容）不会误合并，
+        // 碰撞概率相对取前 200 字符的截断键趋近于零。
         String normalized = content.replaceAll("\\s+", " ").trim();
-        return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException ex) {
+            // JDK 17 必带 SHA-256；兜底退回截断键，保证检索链路永不因指纹失败中断
+            return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
+        }
     }
 
     /** 单路检索结果：文档 + 是否降级（异常或超时按空列表降级） */

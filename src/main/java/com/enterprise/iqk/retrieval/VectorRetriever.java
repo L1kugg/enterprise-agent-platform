@@ -60,7 +60,9 @@ public class VectorRetriever {
                         .sourceType("vector")
                         .title(metaStr(d, "file_name", "unknown"))
                         .chunkId("chunk-" + metaStr(d, "chunk_index", String.valueOf(i)))
-                        .content(d.getFormattedContent())
+                        // getFormattedContent() 会把元数据拼进正文，证据片段会变成 tenant_id/chunk_index 调试串；
+                        // content 只装真实切片文本，元数据走 metadata 字段供判分/过滤用
+                        .content(d.getText())
                         .rawText(d.getText())
                         .retrievalScore(ChatScope.boost(extractScore(d, i), d, chatId))
                         .metadata(d.getMetadata())

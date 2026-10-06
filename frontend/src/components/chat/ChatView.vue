@@ -50,7 +50,7 @@
             <span v-if="entry.item.state === 'pending'" class="status-dot">思考中</span>
           </div>
 
-          <div class="bubble">
+          <div class="bubble" :class="{ 'bubble-error': entry.item.state === 'error' }">
             <template v-if="entry.item.role === 'assistant'">
               <div
                 v-if="entry.item.state === 'pending' && !entry.item.content"
@@ -193,6 +193,16 @@
           </div>
 
           <div class="message-actions">
+            <button
+              v-if="entry.item.state === 'error'"
+              type="button"
+              class="retry-btn"
+              :disabled="sending"
+              @click="regenerateFrom(entry.index)"
+            >
+              <el-icon :size="12"><RefreshRight /></el-icon>
+              重试本次回答
+            </button>
             <button type="button" @click="copyMessage(entry.item.content)">
               <el-icon :size="12"><CopyDocument /></el-icon>
               复制
@@ -614,6 +624,18 @@ import {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* 失败态：红色描边气泡 + 醒目重试按钮，用户不用猜「重新生成」能不能当重试用 */
+.bubble-error {
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  background: color-mix(in oklab, rgba(220, 38, 38, 0.06), var(--ui-card));
+}
+
+.retry-btn {
+  border-color: rgba(220, 38, 38, 0.55) !important;
+  color: #dc2626 !important;
+  font-weight: 600;
 }
 
 .citation-panel,

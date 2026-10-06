@@ -98,11 +98,12 @@ import { activateView } from '../composables/useViewActivation';
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(150deg, rgba(14, 116, 144, 0.85), rgba(15, 118, 110, 0.7));
+  background: var(--ui-accent-strong);
   color: #fff;
   font-size: 17px;
   font-weight: 800;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px color-mix(in oklab, var(--ui-accent-strong) 30%, transparent);
 }
 
 .rail-nav {
@@ -125,9 +126,10 @@ import { activateView } from '../composables/useViewActivation';
 }
 
 .rail-btn {
+  position: relative;
   width: 48px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   padding: 7px 0 5px;
   display: flex;
   flex-direction: column;
@@ -149,7 +151,19 @@ import { activateView } from '../composables/useViewActivation';
 }
 
 .rail-btn.active {
-  color: #fff;
-  background: linear-gradient(150deg, rgba(14, 116, 144, 0.9), rgba(15, 118, 110, 0.78));
+  color: var(--ui-accent-strong);
+  background: color-mix(in oklab, var(--ui-accent) 14%, transparent);
+}
+
+/* 左缘指示条：当前页签一眼可辨，不靠大色块 */
+.rail-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--ui-accent-strong);
 }
 </style>

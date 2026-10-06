@@ -170,7 +170,7 @@
           <span class="usage-legend"><i class="usage-dot red"></i>成本</span>
         </div>
       </div>
-      <el-table :data="usagePoints" height="100%" empty-text="暂无用量数据">
+      <el-table :data="usageTableRows" height="100%" empty-text="暂无用量数据">
         <el-table-column prop="date" label="日期" min-width="100" />
         <el-table-column label="请求数" width="90">
           <template #default="{ row }">{{ row.requestCount.toLocaleString() }}</template>
@@ -191,6 +191,7 @@
 
 <script setup lang="ts">
 // 用量统计页：模板与样式从 App.vue 原文搬入，行为零变化。
+import { computed } from 'vue';
 // 范围切换/悬浮/图表几何全部在 useUsage 单例（registerUsageEffects 监听
 // usageRange 变化，仍由 App.vue setup 只调一次）。数据加载只在
 // useViewActivation / App.vue onMounted 触发，本组件纯展示。
@@ -205,6 +206,12 @@ import {
   usageRange,
   usageTrendChart,
 } from '../../composables/useUsage';
+
+// 表格只列有实际用量的日子：全零行对用户是噪音，趋势图仍保留完整时间轴；
+// 日期倒序，今天（最新用量）永远在第一行
+const usageTableRows = computed(() =>
+  usagePoints.value.filter((d) => d.requestCount > 0).sort((a, b) => b.date.localeCompare(a.date)),
+);
 </script>
 
 

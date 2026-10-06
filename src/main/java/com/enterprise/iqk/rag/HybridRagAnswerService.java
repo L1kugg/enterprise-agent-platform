@@ -123,6 +123,11 @@ public class HybridRagAnswerService {
             // 第 2 步：证据评审
             List<EvidenceItem> evidence = evidenceJudgeService.judge(usableDocs, prompt);
 
+            // 引用与证据展示与生成上下文同口径：只保留 rerankTopK 内的条目，
+            // 避免回答只引用了前几条、下方却挂出十几条未参与生成的无关引用
+            int evidenceCap = Math.max(1, ragProperties.getRerankTopK());
+            evidence = evidence.size() > evidenceCap ? evidence.subList(0, evidenceCap) : evidence;
+
             // Step 2.5：把高置信证据写入租户级 fact 记忆
             //（尽力而为；recorder 内部做了置信度门槛与条数上限，
             // 绝不会拖慢或中断 RAG 管线）

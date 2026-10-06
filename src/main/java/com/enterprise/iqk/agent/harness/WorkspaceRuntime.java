@@ -42,6 +42,7 @@ public class WorkspaceRuntime implements AgentRuntime {
     private final AgentHarnessProperties harnessProperties;
     private final UnifiedDiffService diffService;
     private final Path workspaceRoot;
+    private final WorkspaceCommandGuard commandGuard;
 
     /** 生产构造器：工作区根取自配置；根目录归一化为绝对路径，resolvePath 的逃逸判断以此为准 */
     @Autowired
@@ -57,6 +58,7 @@ public class WorkspaceRuntime implements AgentRuntime {
         this.harnessProperties = harnessProperties;
         this.diffService = diffService;
         this.workspaceRoot = workspaceRoot.toAbsolutePath().normalize();
+        this.commandGuard = new WorkspaceCommandGuard(harnessProperties, this.workspaceRoot);
     }
 
     @Override
@@ -248,9 +250,10 @@ public class WorkspaceRuntime implements AgentRuntime {
             return Map.of("status", "error", "message", "workspace shell is disabled");
         }
         List<String> command = tokenizeCommand(stringVal(input, "command", ""));
-        if (!isAllowedCommand(command)) {
+        if (!commandGuard.isAllowed(command)) {
             return Map.of("status", "error", "message", "command is not allowed");
         }
+        command = prepareCommand(command);
         int defaultTimeout = Math.max(1, harnessProperties.getWorkspace().getCommandTimeoutSeconds());
         int timeoutSeconds = Math.min(Math.max(intVal(input.get("timeoutSeconds"), defaultTimeout), 1), 30);
         ProcessBuilder builder = new ProcessBuilder(command);
@@ -343,120 +346,9 @@ public class WorkspaceRuntime implements AgentRuntime {
         return Stream.of(command.trim().split("\\s+")).filter(StringUtils::hasText).toList();
     }
 
-    private boolean isAllowedCommand(List<String> command) {
-        if (command.isEmpty()) {
-            return false;
-        }
-        String executable = command.get(0);
-        if (!harnessProperties.getWorkspace().getAllowedCommands().contains(executable)) {
-            return false;
-        }
-        if ("pwd".equals(executable)) {
-            return command.size() == 1;
-        }
-        if ("ls".equals(executable) || "rg".equals(executable)) {
-            // 非 flag 参数视为文件系统路径（对 rg 来说第一个非 flag
-            // 参数是匹配模式，最坏也只是匹配不到结果）；拒绝任何解析后
-            // 落在 workspace 根目录之外的参数，防止借 shell 读取宿主机文件。
-            return argsWithinWorkspace(command.subList(1, command.size()));
-        }
-        if ("git".equals(executable)) {
-            return command.size() >= 2
-                    && harnessProperties.getWorkspace().getAllowedGitSubcommands().contains(command.get(1))
-                    && argsAreSafeGitFlags(command.subList(2, command.size()));
-        }
-        if ("mvn".equals(executable)) {
-            return command.stream().anyMatch("test"::equals)
-                    && command.stream().allMatch(this::isAllowedMvnTestToken);
-        }
-        return false;
-    }
-
-    /**
-     * mvn test 允许列表：-q，以及属性名以已知安全前缀开头的
-     * -D&lt;name&gt;=&lt;value&gt;。若不做此限制，被提示词注入或配置错误的
-     * LLM 驱动 Agent 在调用 workspace_run_shell 时可能传入
-     *   mvn test -DargLine="-javaagent:/tmp/evil.jar"
-     *   mvn test -Dsurefire.suiteXmlFiles=/tmp/evil.xml
-     * 使 Surefire 测试 JVM 加载恶意 Java agent 或执行自定义
-     * suite XML，从测试进程内部绕过 workspace 沙箱。
-     */
-    private static final java.util.Set<String> SAFE_MVN_PROPERTY_PREFIXES = java.util.Set.of(
-            // 用户确实会想要传入的 Surefire 测试选择参数。其余参数
-            // （argLine、exec.executable、surefire.suiteXmlFiles、
-            // maven.compiler 等）可能影响测试 JVM 的类路径或执行，
-            // 一律拒绝。
-            "test=",
-            "groups=",
-            "excludedGroups=",
-            "failIfNoTests=",
-            "skipTests=",
-            "maven.test.skip="
-    );
-
-    private boolean isAllowedMvnTestToken(String token) {
-        if ("mvn".equals(token) || "test".equals(token) || "-q".equals(token)) {
-            return true;
-        }
-        if (token.startsWith("-D")) {
-            String property = token.substring(2);
-            for (String prefix : SAFE_MVN_PROPERTY_PREFIXES) {
-                if (property.startsWith(prefix)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * git flag 拒绝列表：传给白名单内 git 子命令的每个 flag 都不得命中
-     * 此处所列项。主要风险是 --output，它会让 git log / git show
-     * 写入宿主机路径，破坏 workspace 沙箱。--exec / --upload-pack /
-     * --receive-pack 会接受攻击者可控的命令，同样予以拒绝。
-     */
-    private static final java.util.Set<String> UNSAFE_GIT_FLAGS = java.util.Set.of(
-            "--output", "-o", "--exec", "--upload-pack", "--receive-pack",
-            "--ssh-command");
-
-    private boolean argsAreSafeGitFlags(java.util.List<String> args) {
-        return args.stream().filter(a -> a.startsWith("-"))
-                .map(this::stripOptionValue)
-                .noneMatch(UNSAFE_GIT_FLAGS::contains);
-    }
-
-    private String stripOptionValue(String arg) {
-        int eq = arg.indexOf('=');
-        return eq < 0 ? arg : arg.substring(0, eq);
-    }
-
-    private boolean argsWithinWorkspace(List<String> args) {
-        for (String arg : args) {
-            if (arg.startsWith("-")) {
-                // 拒绝会导致底层工具执行命令或读取宿主机任意文件的选项。
-                // ripgrep 的 --pre 和 --pre-glob 会在搜索每个文件前执行
-                // shell 命令；--hostname-bin 和 --regexp-file 会读取宿主机
-                // 文件系统中的文件。ls / git 目前没有同类选项，因此采用
-                // 列举选项的方式让允许列表保持收紧。
-                String normalized = stripOptionValue(arg);
-                if (normalized.startsWith("--pre")
-                        || normalized.startsWith("--pre-glob")
-                        || normalized.equals("--hostname-bin")
-                        || normalized.equals("--regexp-file")) {
-                    return false;
-                }
-                continue;
-            }
-            try {
-                Path resolved = workspaceRoot.resolve(arg).normalize();
-                if (!resolved.startsWith(workspaceRoot)) {
-                    return false;
-                }
-            } catch (Exception ex) {
-                return false;
-            }
-        }
-        return true;
+    /** 保留测试入口：命令加固详见 WorkspaceCommandGuard#prepare */
+    List<String> prepareCommand(List<String> command) {
+        return commandGuard.prepare(command);
     }
 
     private int maxCommandOutputBytes() {

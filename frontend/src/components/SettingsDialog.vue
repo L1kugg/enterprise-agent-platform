@@ -40,6 +40,9 @@
         <el-form-item label="响应模式">
           <el-switch v-model="streaming" inline-prompt active-text="SSE" inactive-text="JSON" />
         </el-form-item>
+        <el-form-item label="外观">
+          <el-switch v-model="darkMode" inline-prompt active-text="Dark" inactive-text="Light" />
+        </el-form-item>
       </el-form>
       <div class="auth-buttons">
         <el-tag v-if="role" size="small" :type="isAdmin ? 'danger' : 'info'">{{ role }}</el-tag>
@@ -57,7 +60,7 @@
 // 鉴权与模型设置弹窗：模板与样式从 App.vue 原文搬入，行为零变化。
 // 打开开关在 useGlobalUi（图标栏"设置"按钮直接置 true），状态/动作来自
 // useAuthState + useChatState + useAuthActions 单例，无需 props/emits。
-import { opsDialogVisible } from '../composables/useGlobalUi';
+import { darkMode, opsDialogVisible } from '../composables/useGlobalUi';
 import {
   agentEngine,
   modelProfile,

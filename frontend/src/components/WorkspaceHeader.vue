@@ -151,7 +151,7 @@ import {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding: 14px 20px;
+  padding: 14px 22px;
   border-bottom: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-card) 84%, transparent);
   backdrop-filter: blur(10px);
@@ -196,7 +196,8 @@ import {
 
 h2 {
   margin: 8px 0 0;
-  font-size: 22px;
+  font-size: 21px;
+  letter-spacing: -0.01em;
   line-height: 1.22;
 }
 

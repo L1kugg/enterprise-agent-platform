@@ -3,6 +3,7 @@ package com.enterprise.iqk.config.properties;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -17,6 +18,7 @@ public class AgentHarnessProperties {
     private Workspace workspace = new Workspace();
     private Mcp mcp = new Mcp();
     private DatabaseQuery databaseQuery = new DatabaseQuery();
+    private TrustedAction trustedAction = new TrustedAction();
 
     @Data
     public static class Workspace {
@@ -27,7 +29,13 @@ public class AgentHarnessProperties {
         private int maxCommandOutputBytes = 12_000;
         private int maxFileBytes = 20_000;
         private int maxSearchFiles = 1_000;
-        private Set<String> allowedCommands = new LinkedHashSet<>(Set.of("pwd", "ls", "rg", "git", "mvn"));
+        /**
+         * 默认不含 mvn：mvn test 会解析 POM 并可能联网拉依赖，属于
+         * 网络可达命令；确需启用时由运维显式加入，并建议保持 mvnOffline=true。
+         */
+        private Set<String> allowedCommands = new LinkedHashSet<>(Set.of("pwd", "ls", "rg", "git"));
+        /** mvn 强制离线（注入 -o），阻止测试进程联网拉取依赖；确需在线构建时置 false */
+        private boolean mvnOffline = true;
         private Set<String> allowedGitSubcommands = new LinkedHashSet<>(
                 Set.of("status", "diff", "show", "log", "rev-parse", "branch"));
     }
@@ -79,5 +87,17 @@ public class AgentHarnessProperties {
         /** 拒绝查询的表/schema 黑名单：凭证类默认全拉黑（观测不做键名脱敏，一旦放行原样进模型与轨迹） */
         private Set<String> deniedTables = new LinkedHashSet<>(Set.of(
                 "users", "roles", "user_roles", "refresh_tokens", "api_keys", "mysql"));
+    }
+
+    /**
+     * 受信动作两段式确认的挂起存储与 token 有效期。
+     * store=memory 仅适合单实例；多实例部署必须切 redis，
+     * 否则 preview 与 execute 落在不同节点时 token 互相不可见。
+     */
+    @Data
+    public static class TrustedAction {
+        /** memory | redis */
+        private String store = "memory";
+        private Duration tokenTtl = Duration.ofMinutes(10);
     }
 }

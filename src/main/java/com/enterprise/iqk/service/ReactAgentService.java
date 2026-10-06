@@ -257,6 +257,7 @@ public class ReactAgentService {
                 %s
                 %n
                 只返回 JSON，格式如下：
+                规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
                 {
                   "thought": "简短的中文推理",
                   "action": "从上面列表中选一个动作",

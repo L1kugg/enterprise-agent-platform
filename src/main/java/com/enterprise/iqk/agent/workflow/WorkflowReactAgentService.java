@@ -6,12 +6,14 @@ import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
+import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.util.AnswerStreamSupport;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.security.UserContext;
+import com.enterprise.iqk.service.ReactResponseFormatter;
 import com.enterprise.iqk.service.TenantCostService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,20 +33,16 @@ import reactor.core.publisher.SignalType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** ReAct 执行层 Agent：以 AgentWorkflowEngine 留痕驱动 ReAct 循环（reason→harness 执行动作→观测并入滚动上下文，最多 MAX_STEPS 轮），全程可回放；工作流状态由 mapToWorkflowState 按轮次映射，JUDGING/REFLECTING 仅为进度标签而非语义判定。 */
+/** ReAct 执行层 Agent：留痕驱动 reason→动作→观测循环，步数可配、状态由实际动作推导，全程可回放。 */
 @Service
 @RequiredArgsConstructor
 public class WorkflowReactAgentService {
-
-    private static final int MAX_STEPS = 6; // ReAct 最大轮次，用尽仍未 finish 则强制总结成稿
 
     private final AgentWorkflowEngine workflowEngine;
     private final AgentHarnessService agentHarnessService;
@@ -57,6 +55,8 @@ public class WorkflowReactAgentService {
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final AgentWorkflowProperties agentWorkflowProperties;
+    private final ReactResponseFormatter responseFormatter;
 
     public ReactChatResponseVO chat(ReactChatRequestVO request) { // 同步 ReAct：跑完循环后一次性返回答案+轨迹+引用；异常置任务 FAILED 后上抛
         validateRequest(request);
@@ -74,7 +74,8 @@ public class WorkflowReactAgentService {
         String rollingContext = "";
 
         try {
-            for (int stepNum = 1; stepNum <= MAX_STEPS; stepNum++) {
+            WorkflowState currentState = WorkflowState.PLANNING;
+            for (int stepNum = 1; stepNum <= maxSteps(); stepNum++) {
                 AgentStepRecord stepRecord = workflowEngine.startStep(
                         task.getTaskId(), "planner", stepNum,
                         Map.of("prompt", request.getPrompt(), "rollingContext", rollingContext));
@@ -83,8 +84,7 @@ public class WorkflowReactAgentService {
                 ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
 
                 if ("finish".equals(decision.action())) {
-                    String answer = StringUtils.hasText(decision.answer())
-                            ? decision.answer()
+                    String answer = StringUtils.hasText(decision.answer()) ? decision.answer()
                             : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
                     Map<String, Object> obs = new LinkedHashMap<>();
                     obs.put("status", "completed");
@@ -96,13 +96,15 @@ public class WorkflowReactAgentService {
                             Map.of("answer", answer), obs,
                             decision.thought(), "finish", decision.actionInput(),
                             0, 0, elapsedMs(stepStartNs), null);
+                    workflowEngine.transitionStatus(task.getTaskId(), currentState, WorkflowState.WRITING);
                     workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, answer);
                     workflowEngine.recordTaskMetrics("REACT", "DONE", elapsedMs(startedNs));
-                    return success(request.getChatId(), answer, trace, routeDecision, task.getTaskId());
+                    return responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false);
                 }
 
-                workflowEngine.transitionStatus(task.getTaskId(),
-                        mapToWorkflowState(stepNum), mapToWorkflowState(stepNum + 1));
+                WorkflowState nextState = WorkflowState.forAction(decision.action());
+                workflowEngine.transitionStatus(task.getTaskId(), currentState, nextState);
+                currentState = nextState;
 
                 Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
                         task.getTaskId(), stepRecord.getStepId());
@@ -116,9 +118,10 @@ public class WorkflowReactAgentService {
             }
 
             String answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
+            workflowEngine.transitionStatus(task.getTaskId(), currentState, WorkflowState.WRITING);
             workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, answer);
             workflowEngine.recordTaskMetrics("REACT", "DONE", elapsedMs(startedNs));
-            return success(request.getChatId(), answer, trace, routeDecision, task.getTaskId());
+            return responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false);
 
         } catch (RuntimeException e) {
             workflowEngine.failTask(task.getTaskId(), e.getMessage());
@@ -145,7 +148,8 @@ public class WorkflowReactAgentService {
                     StreamState state = new StreamState(request, task,
                             resolveRouteDecision(request.getModelProfile(), "react", request.getChatId(), tenantId),
                             tenantId, new ArrayList<>(), new AtomicReference<>(""),
-                            new AtomicReference<>(""), firstTokenMs, outcomeRef, startedNs);
+                            new AtomicReference<>(""), firstTokenMs, outcomeRef, startedNs,
+                            new AtomicReference<>(WorkflowState.PLANNING));
                     return stepFlux(state, 1).concatWith(finalAnswerFlux(state));
                 })
                 .onErrorResume(ex -> {
@@ -178,7 +182,7 @@ public class WorkflowReactAgentService {
     /** 递归单步流：每完成一轮 ReAct（reason→动作执行）立即向下游发一条 trace 帧，循环不再整体阻塞在 defer 里跑完才发首帧。 */
     private Flux<String> stepFlux(StreamState state, int stepNum) {
         return Flux.defer(() -> {
-            if (stepNum > MAX_STEPS) {
+            if (stepNum > maxSteps()) {
                 return Flux.<String>empty(); // 轮次用尽，交由 finalAnswerFlux 强制总结成稿
             }
             AgentStepRecord stepRecord = workflowEngine.startStep(
@@ -199,9 +203,11 @@ public class WorkflowReactAgentService {
                         Map.of("answer", state.directAnswer().get()), obs,
                         decision.thought(), "finish", decision.actionInput(),
                         0, 0, elapsedMs(stepStartNs), null);
+                transitionWorkflowState(state, WorkflowState.WRITING);
                 return Flux.just(formatSse("trace", toJson(stepVo)));
             }
 
+            transitionWorkflowState(state, WorkflowState.forAction(decision.action()));
             Object observation = executeAction(state.request(), decision.action(), decision.actionInput(),
                     state.tenantId(), state.task().getTaskId(), stepRecord.getStepId());
             ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, observation);
@@ -239,8 +245,8 @@ public class WorkflowReactAgentService {
                         state.firstTokenMs().set(elapsedMs(state.startedNs())); // 零 token 兜底计时
                     }
                     String answer = answerBuilder.toString();
-                    ReactChatResponseVO response = success(state.request().getChatId(), answer,
-                            state.trace(), state.routeDecision(), state.task().getTaskId());
+                    ReactChatResponseVO response = responseFormatter.success(state.request().getChatId(),
+                            answer, state.trace(), state.routeDecision(), false);
                     workflowEngine.completeTask(state.task().getTaskId(), WorkflowState.DONE, answer);
                     state.outcomeRef().set("success");
                     return Flux.just(formatSse("done", toJson(response)));
@@ -255,7 +261,8 @@ public class WorkflowReactAgentService {
                                AtomicReference<String> directAnswer,
                                AtomicReference<Long> firstTokenMs,
                                AtomicReference<String> outcomeRef,
-                               long startedNs) {
+                               long startedNs,
+                               AtomicReference<WorkflowState> workflowState) {
     }
 
     private ReasonDecision reason(ReactChatRequestVO request,
@@ -268,6 +275,7 @@ public class WorkflowReactAgentService {
                 你是一个教育助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
                 %s
+                规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
                 只返回 JSON：{"thought": "简短的中文推理", "action": "动作名", "action_input": {"key":"value"}, "answer": "仅 finish 时提供，用中文作答"}
                 用户问题：
                 %s
@@ -331,26 +339,6 @@ public class WorkflowReactAgentService {
                 .actionInput(d.actionInput()).observation(obs).build();
     }
 
-    private ReactChatResponseVO success(String chatId, String answer,
-                                         List<ReactTraceStepVO> trace,
-                                         ModelRouter.ModelRouteDecision routeDecision,
-                                         String taskId) {
-        List<String> citations = extractTraceStrings(trace, "citations");
-        List<String> evidence = extractTraceStrings(trace, "evidence");
-        return ReactChatResponseVO.builder()
-                .ok(1).msg("ok").chatId(chatId)
-                .answer(emptyIfBlank(answer))
-                .citations(citations).evidence(evidence)
-                .routeProfile(routeDecision == null ? "" : routeDecision.profile())
-                .routeReason(routeDecision == null ? "" : routeDecision.reason())
-                .routeCostTier(routeDecision == null ? "" : routeDecision.costTier())
-                .experimentKey(routeDecision == null ? "" : routeDecision.experimentKey())
-                .experimentVariant(routeDecision == null ? "" : routeDecision.experimentVariant())
-                .experimentBucket(routeDecision == null ? null : routeDecision.experimentBucket())
-                .trace(trace)
-                .build();
-    }
-
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String profile, String endpoint,
                                                                  String subjectKey, String tenantId) {
         return modelRouter.resolve(profile, endpoint, tenantId, subjectKey);
@@ -391,14 +379,14 @@ public class WorkflowReactAgentService {
                 });
     }
 
-    private WorkflowState mapToWorkflowState(int step) { // 轮次→状态映射：1→SEARCHING、2→RETRIEVING、3→JUDGING、4→REFLECTING、其余→WRITING
-        return switch (step) {
-            case 1 -> WorkflowState.SEARCHING;
-            case 2 -> WorkflowState.RETRIEVING;
-            case 3 -> WorkflowState.JUDGING;
-            case 4 -> WorkflowState.REFLECTING;
-            default -> WorkflowState.WRITING;
-        };
+    private int maxSteps() {
+        return Math.max(1, agentWorkflowProperties.getReactMaxSteps());
+    }
+
+    /** 流式路径的状态推进：CAS 更新本地引用并留痕，避免并发帧重复回退状态 */
+    private void transitionWorkflowState(StreamState state, WorkflowState target) {
+        WorkflowState current = state.workflowState().getAndSet(target);
+        workflowEngine.transitionStatus(state.task().getTaskId(), current, target);
     }
 
     private ReasonDecision parseDecision(String raw) {
@@ -431,22 +419,6 @@ public class WorkflowReactAgentService {
         int start = raw.indexOf('{');
         int end = raw.lastIndexOf('}');
         return (start < 0 || end <= start) ? "" : raw.substring(start, end + 1);
-    }
-
-    private List<String> extractTraceStrings(List<ReactTraceStepVO> trace, String key) {
-        if (trace == null || trace.isEmpty()) return List.of();
-        Set<String> values = new LinkedHashSet<>();
-        for (ReactTraceStepVO step : trace) {
-            if (!(step.getObservation() instanceof Map<?, ?> obs)) continue;
-            Object raw = obs.get(key);
-            if (raw instanceof List<?> list) {
-                for (Object item : list) {
-                    String s = emptyIfBlank(String.valueOf(item));
-                    if (StringUtils.hasText(s)) values.add(s);
-                }
-            }
-        }
-        return List.copyOf(values);
     }
 
     private String formatSse(String event, String data) { return "event: " + event + "\ndata: " + data + "\n\n"; }

@@ -5,9 +5,11 @@ import com.enterprise.iqk.agent.harness.AgentAction;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.agent.harness.AgentObservation;
 import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
+import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.service.ReactResponseFormatter;
 import com.enterprise.iqk.testutil.TestGuards;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -77,7 +79,9 @@ class WorkflowReactAgentServiceStreamTest {
         service = new WorkflowReactAgentService(workflowEngine, harness,
                 new PlannerActionCatalog(new ActionSchemaRegistry()), chatClient,
                 modelRouter, TestGuards.real(), mock(TenantCostService.class),
-                new ObjectMapper(), new SimpleMeterRegistry());
+                new ObjectMapper(), new SimpleMeterRegistry(),
+                new AgentWorkflowProperties(),
+                new ReactResponseFormatter(new ObjectMapper()));
     }
 
     private ReactChatRequestVO request() {
