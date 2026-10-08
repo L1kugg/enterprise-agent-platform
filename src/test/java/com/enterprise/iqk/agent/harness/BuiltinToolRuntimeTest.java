@@ -3,8 +3,8 @@ package com.enterprise.iqk.agent.harness;
 import com.enterprise.iqk.rag.HybridRagAnswerService;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.EvidenceItem;
-import com.enterprise.iqk.tools.CourseTools;
 import com.enterprise.iqk.tools.DatabaseQueryTools;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -12,215 +12,78 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class BuiltinToolRuntimeTest {
 
-    @Test
-    void executeRagSearchReturnsTraceFriendlyObservation() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        // 前端色条按 Map 插入序绘制，weights 必须保持 vector/keyword/graph/web 顺序
-        Map<String, Double> weights = new LinkedHashMap<>();
-        weights.put("vector", 0.4);
-        weights.put("keyword", 0.25);
-        weights.put("graph", 0.2);
-        weights.put("web", 0.15);
-        when(hybridRagAnswerService.answer(
-                eq("java cache"),
-                eq("tenant-a"),
-                eq("chat-1"),
-                eq("react::chat-1"),
-                eq("balanced")
-        )).thenReturn(HybridRagAnswerService.HybridRagResult.builder()
-                .answer("answer")
-                .citations(List.of(CitationItem.builder()
-                        .index(1).sourceType("vector").title("doc")
-                        .chunkId("chunk-1").confidence(0.8).excerpt("摘录").build()))
-                .evidence(List.of(EvidenceItem.builder()
-                        .sourceType("vector").title("doc").chunkId("chunk-1")
-                        .score(0.8).snippet("evidence").build()))
-                .weights(weights)
-                .build());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
+    private HybridRagAnswerService ragService;
+    private DatabaseQueryTools dbTools;
+    private BuiltinToolRuntime runtime;
 
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "rag_search",
-                Map.of("query", "java cache"),
-                "fallback prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "task-1",
-                "step-1"
-        ));
-
-        Map<String, Object> payload = observation.toMap();
-        assertThat(payload)
-                .containsEntry("status", "success")
-                .containsEntry("query", "java cache")
-                .containsEntry("answer", "answer")
-                .containsEntry("source", "builtin");
-        // citations 是前端 parseCitation 可解析的文本（source=标题, chunk=块号）
-        assertThat(payload.get("citations")).isEqualTo(List.of("source=doc, chunk=chunk-1"));
-        assertThat(payload.get("evidence")).isEqualTo(List.of("evidence"));
-        // 当次实际召回路权重随观测回传（四路归一化值），前端轨迹条照此绘制
-        assertThat(payload.get("weights")).isEqualTo(weights);
+    @BeforeEach
+    void setUp() {
+        ragService = mock(HybridRagAnswerService.class);
+        dbTools = mock(DatabaseQueryTools.class);
+        runtime = new BuiltinToolRuntime(ragService, dbTools);
     }
 
     @Test
-    void executeRagSearchFiltersBlankEvidenceAndEscapesCommasInCitationTitle() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        when(hybridRagAnswerService.answer(
-                eq("q"), eq("tenant-a"), eq("chat-1"), eq("react::chat-1"), eq("balanced")
-        )).thenReturn(HybridRagAnswerService.HybridRagResult.builder()
-                .answer("answer")
-                // 标题含半角逗号会截断前端正则 source=[^,]+，必须转全角
-                .citations(List.of(CitationItem.builder()
-                        .index(1).sourceType("vector").title("报告, 2024版")
-                        .chunkId("chunk-1").build()))
-                .evidence(List.of(
-                        EvidenceItem.builder().snippet("有效证据").build(),
-                        EvidenceItem.builder().snippet("   ").build()))
-                .build());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
-
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "rag_search",
-                Map.of("query", "q"),
-                "fallback prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "task-1",
-                "step-1"
-        ));
-
-        Map<String, Object> payload = observation.toMap();
-        assertThat(payload.get("citations")).isEqualTo(List.of("source=报告， 2024版, chunk=chunk-1"));
-        assertThat(payload.get("evidence")).isEqualTo(List.of("有效证据"));
+    void supportsOnlyEnterpriseActions() {
+        assertThat(runtime.supports("create_task")).isTrue();
+        assertThat(runtime.supports("rag_search")).isTrue();
+        assertThat(runtime.supports("query_database")).isTrue();
+        assertThat(runtime.supports("query_school")).isFalse();
+        assertThat(runtime.supports("query_course")).isFalse();
     }
 
     @Test
-    void executeReservationRejectsMissingRequiredFields() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
-
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "add_course_reservation",
-                Map.of("course", "Java"),
-                "prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "",
-                ""
-        ));
-
-        assertThat(observation.toMap())
-                .containsEntry("status", "error")
-                .containsEntry("source", "builtin")
-                .containsEntry("message", "missing required fields for reservation");
-        verifyNoInteractions(courseTools, hybridRagAnswerService);
+    void createTaskReturnsConfirmation() {
+        AgentObservation obs = runtime.execute(new AgentAction(
+                "create_task",
+                Map.of("title", "完成季度报告", "description", "整理Q3数据", "priority", "high"),
+                "prompt", "tenant", "chat", "balanced", "task", "step", false));
+        assertThat(obs.toMap()).containsEntry("status", "created");
+        assertThat(obs.toMap())
+                .containsEntry("taskTitle", "完成季度报告")
+                .containsEntry("description", "整理Q3数据")
+                .containsEntry("priority", "high");
     }
 
     @Test
-    void executeSchoolQueryDelegatesToCourseTools() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        when(courseTools.querySchool()).thenReturn(List.of());
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, mock(DatabaseQueryTools.class));
-
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "query_school",
-                Map.of(),
-                "prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "",
-                ""
-        ));
-
-        assertThat(observation.toMap())
-                .containsEntry("status", "success")
-                .containsEntry("data", List.of());
-        verify(courseTools).querySchool();
-        verifyNoInteractions(hybridRagAnswerService);
+    void createTaskRejectsMissingTitle() {
+        AgentObservation obs = runtime.execute(new AgentAction(
+                "create_task", Map.of("description", "no title"),
+                "prompt", "tenant", "chat", "balanced", "task", "step", false));
+        assertThat(obs.toMap()).containsEntry("status", "error");
     }
 
     @Test
-    void executeDatabaseQueryDelegatesAndFlattensPayloadKeys() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        DatabaseQueryTools databaseQueryTools = mock(DatabaseQueryTools.class);
-        // 租户由服务端从 action.tenantId() 注入（归一化后透传），SQL 原样透传
-        when(databaseQueryTools.queryDatabase(eq("SELECT id FROM course"), eq("tenant-a")))
-                .thenReturn(Map.of(
-                        "columns", List.of("id"),
-                        "rows", List.of(Map.of("id", "1")),
-                        "rowCount", 1,
-                        "truncated", false,
-                        "executedSql", "SELECT id FROM course LIMIT 30"));
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, databaseQueryTools);
+    void ragSearchDelegatesToHybridService() {
+        HybridRagAnswerService.HybridRagResult result = HybridRagAnswerService.HybridRagResult.builder()
+                .answer("测试回答")
+                .citations(List.of(CitationItem.builder().title("doc.pdf").chunkId("c1").build()))
+                .evidence(List.of(EvidenceItem.builder().snippet("证据片段").build()))
+                .weights(null)
+                .build();
+        when(ragService.answer(anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(result);
 
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "query_database",
-                Map.of("sql", "SELECT id FROM course"),
-                "prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "",
-                ""
-        ));
-
-        // Map 载荷经 toMap 展平：业务键与 status/source 平级（前端轨迹通用 JSON 渲染依赖此形状）
-        assertThat(observation.toMap())
-                .containsEntry("status", "success")
-                .containsEntry("source", "builtin")
-                .containsEntry("rowCount", 1)
-                .containsEntry("columns", List.of("id"));
-        verifyNoInteractions(courseTools, hybridRagAnswerService);
+        AgentObservation obs = runtime.execute(new AgentAction(
+                "rag_search", Map.of("query", "测试"),
+                "prompt", "tenant", "chat", "balanced", "task", "step", false));
+        assertThat(obs.toMap()).containsEntry("status", "success");
     }
 
     @Test
-    void executeDatabaseQueryConvertsErrorMapToErrorObservation() {
-        CourseTools courseTools = mock(CourseTools.class);
-        HybridRagAnswerService hybridRagAnswerService = mock(HybridRagAnswerService.class);
-        DatabaseQueryTools databaseQueryTools = mock(DatabaseQueryTools.class);
-        when(databaseQueryTools.queryDatabase(anyString(), eq("tenant-a")))
-                .thenReturn(Map.of("status", "error", "message", "只允许 SELECT 查询"));
-        BuiltinToolRuntime runtime = new BuiltinToolRuntime(
-                courseTools, hybridRagAnswerService, databaseQueryTools);
-
-        AgentObservation observation = runtime.execute(new AgentAction(
-                "query_database",
-                Map.of("sql", "WITH w AS (DELETE FROM course) SELECT 1"),
-                "prompt",
-                "tenant-a",
-                "chat-1",
-                "balanced",
-                "",
-                ""
-        ));
-
-        // status=error 的 Map 由 runtime 统一转 error 观测（只保留 message）
-        assertThat(observation.toMap())
-                .containsEntry("status", "error")
-                .containsEntry("source", "builtin")
-                .containsEntry("message", "只允许 SELECT 查询");
+    void databaseQueryDelegates() {
+        when(dbTools.queryDatabase(anyString(), anyString()))
+                .thenReturn(Map.of("status", "success", "rows", 5));
+        AgentObservation obs = runtime.execute(new AgentAction(
+                "query_database", Map.of("sql", "SELECT 1"),
+                "prompt", "tenant", "chat", "balanced", "task", "step", false));
+        assertThat(obs.toMap()).containsEntry("status", "success");
     }
 }

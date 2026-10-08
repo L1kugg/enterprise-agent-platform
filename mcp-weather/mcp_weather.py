@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"status": "error", "message": "not found"}, status=404)
 
     def do_POST(self):
-        if self.path != "/mcp/tools/call":
+        if self.path not in ("/mcp/tools/call", "/mcp/tools/list"):
             self._send_json({"status": "error", "message": "not found"}, status=404)
             return
         try:
@@ -148,6 +148,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         rpc_id = req.get("id")
+        if req.get("method") == "tools/list":
+            self._send_json({"jsonrpc": "2.0", "id": rpc_id, "result": {
+                "tools": [{
+                    "name": "get_weather",
+                    "description": "查询指定城市的当前天气和今日预报",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string", "description": "城市中文名"}
+                        },
+                        "required": ["city"]
+                    }
+                }]
+            }})
+            return
         if req.get("method") != "tools/call":
             self._send_json({"status": "error", "message": "only method tools/call is supported"})
             return

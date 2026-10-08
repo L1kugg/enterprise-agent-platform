@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -143,6 +144,56 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
     @Override
     public Object execute(Map<String, Object> arguments) {
         return Map.of("status", "error", "message", "configured MCP call requires server and tool");
+    }
+
+    /**
+     * 动态发现指定 server 的工具列表（JSON-RPC tools/list）。
+     * 返回格式：[{"name":"get_weather","description":"查询天气","inputSchema":{...}}]
+     * server 不存在或上游不可达时返回空列表（启动阶段不因单个 server 故障阻断）。
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listTools(String server) {
+        AgentHarnessProperties.McpServer serverConfig = harnessProperties.getMcp().getServers().get(server);
+        if (serverConfig == null || !serverConfig.isEnabled() || !StringUtils.hasText(serverConfig.getBaseUrl())) {
+            return List.of();
+        }
+        try {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "jsonrpc", "2.0",
+                    "id", UUID.randomUUID().toString(),
+                    "method", "tools/list"
+            ));
+            URI uri = resolveUri(serverConfig.getBaseUrl(), "/mcp/tools/list");
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            HttpResponse<byte[]> response = sendWithRetry(request);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.warn("MCP tools/list failed: server={}, status={}", server, response.statusCode());
+                return List.of();
+            }
+            Map<String, Object> parsed = objectMapper.readValue(
+                    new String(response.body(), java.nio.charset.StandardCharsets.UTF_8), Map.class);
+            Object result = parsed.get("result");
+            if (!(result instanceof Map<?, ?> resultMap)) {
+                return List.of();
+            }
+            Object tools = resultMap.get("tools");
+            if (!(tools instanceof List<?> toolList)) {
+                return List.of();
+            }
+            return toolList.stream()
+                    .filter(t -> t instanceof Map)
+                    .map(t -> (Map<String, Object>) t)
+                    .toList();
+        } catch (Exception ex) {
+            log.warn("MCP tools/list error: server={}, reason={}", server, ex.getMessage());
+            return List.of();
+        }
     }
 
     /** 拼 baseUrl + tool path 成最终 URI（拼接前再过一次 SSRF 校验，防配置运行期被改） */

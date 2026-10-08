@@ -251,13 +251,15 @@ public class ReactAgentService {
                                   MemoryService.MemoryContextSnapshot memorySnapshot) {
         // 提示词用中文驱动，模型的 thought/answer 才会用中文输出；JSON 键名与动作名保持英文（解析器依赖）。
         String planningPrompt = """
-                你是一个教育助手场景的 ReAct 规划器，负责为下一步选择且仅选择一个动作。
+                你是一个企业智能助手场景的 ReAct 规划器，负责为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
                 %n
                 %s
                 %n
                 只返回 JSON，格式如下：
                 规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
+                如果已知记忆中已包含用户问题的答案（如用户姓名、身份、偏好、之前结论），直接选择 finish 并引用记忆内容作答，不要执行 rag_search。
+                如果用户询问你是谁/你能做什么/有什么功能，直接选择 finish 并介绍自己的能力（知识库检索问答RAG、业务数据查询、任务创建、天气查询、深度研究），不要执行 rag_search。
                 {
                   "thought": "简短的中文推理",
                   "action": "从上面列表中选一个动作",
@@ -280,7 +282,7 @@ public class ReactAgentService {
                 request.getPrompt(),
                 memoryBlock(memorySnapshot),
                 emptyIfBlank(rollingContext),
-                responseFormatter.toJson(trace)
+                responseFormatter.traceSummary(trace)
         );
 
         try {
@@ -372,7 +374,7 @@ public class ReactAgentService {
                 %n
                 请输出最终中文答案，要求简洁、可执行、结构清晰。
                 %n""".formatted(request.getPrompt(), memoryBlock(memorySnapshot),
-                responseFormatter.toJson(trace), emptyIfBlank(rollingContext));
+                responseFormatter.traceSummary(trace), emptyIfBlank(rollingContext));
     }
 
     /** 记忆召回：任何失败返回 null，按"无记忆可用"降级，绝不中断 ReAct 主链路。 */

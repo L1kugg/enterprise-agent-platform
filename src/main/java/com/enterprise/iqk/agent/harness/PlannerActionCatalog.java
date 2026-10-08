@@ -20,9 +20,11 @@ public class PlannerActionCatalog {
 
     private final ActionSchemaRegistry registry;
     private final Set<String> whitelist;
+    private final McpToolCatalog mcpToolCatalog;
 
-    public PlannerActionCatalog(ActionSchemaRegistry registry) {
+    public PlannerActionCatalog(ActionSchemaRegistry registry, McpToolCatalog mcpToolCatalog) {
         this.registry = registry;
+        this.mcpToolCatalog = mcpToolCatalog;
         this.whitelist = Set.copyOf(plannerActions().stream()
                 .map(ActionSchema::action)
                 .collect(Collectors.toSet()));
@@ -36,6 +38,14 @@ public class PlannerActionCatalog {
     }
 
     /** 动作是否在规划器白名单内（含 finish）；白名单外由调用方强制归为 finish */
+
+    /** mcp_call 的提示词从 McpToolCatalog 动态生成，其余用 schema 静态定义 */
+    private String hintFor(ActionSchema schema) {
+        if ("mcp_call".equals(schema.action())) {
+            return mcpToolCatalog.plannerHint();
+        }
+        return schema.plannerHint();
+    }
     public boolean isPlannerAction(String action) {
         return FINISH.equals(action) || (action != null && whitelist.contains(action));
     }
@@ -46,7 +56,7 @@ public class PlannerActionCatalog {
         for (ActionSchema schema : plannerActions()) {
             block.append("\n- ").append(schema.action());
             if (StringUtils.hasText(schema.plannerHint())) {
-                block.append("（").append(schema.plannerHint()).append("）");
+                block.append("（").append(hintFor(schema)).append("）");
             }
         }
         block.append("\n- ").append(FINISH);
@@ -63,7 +73,7 @@ public class PlannerActionCatalog {
         plannerActions().stream()
                 .filter(schema -> StringUtils.hasText(schema.plannerHint()))
                 .forEach(schema -> section.append("\n").append(schema.action())
-                        .append("（").append(schema.plannerHint()).append("）"));
+                        .append("（").append(hintFor(schema)).append("）"));
         return section.toString();
     }
 }

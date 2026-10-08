@@ -4,10 +4,12 @@ import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
 import com.enterprise.iqk.agent.harness.AgentAction;
 import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.agent.harness.AgentObservation;
+import com.enterprise.iqk.agent.harness.McpToolCatalog;
 import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.service.ReactResponseFormatter;
 import com.enterprise.iqk.testutil.TestGuards;
@@ -53,10 +55,12 @@ class WorkflowReactAgentServiceStreamTest {
     private ChatClient chatClient;
     private ChatClient.CallResponseSpec callSpec;
     private WorkflowReactAgentService service;
+    private MemoryService memoryService;
 
     @BeforeEach
     void setUp() {
         workflowEngine = mock(AgentWorkflowEngine.class);
+        memoryService = mock(MemoryService.class);
         harness = mock(AgentHarnessService.class);
         chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class, RETURNS_SELF);
@@ -72,15 +76,17 @@ class WorkflowReactAgentServiceStreamTest {
                 .thenReturn(AgentStepRecord.builder().stepId("step-1").taskId("task-1").build());
         when(harness.execute(any(AgentAction.class)))
                 .thenReturn(AgentObservation.success("builtin", Map.of("rows", 2), 3));
+        when(memoryService.buildContext(anyString(), anyString())).thenReturn(null);
         ModelRouter modelRouter = mock(ModelRouter.class);
         when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false,
                         "profile_match", "", "", null));
         service = new WorkflowReactAgentService(workflowEngine, harness,
-                new PlannerActionCatalog(new ActionSchemaRegistry()), chatClient,
+                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), chatClient,
                 modelRouter, TestGuards.real(), mock(TenantCostService.class),
                 new ObjectMapper(), new SimpleMeterRegistry(),
                 new AgentWorkflowProperties(),
+                memoryService,
                 new ReactResponseFormatter(new ObjectMapper()));
     }
 

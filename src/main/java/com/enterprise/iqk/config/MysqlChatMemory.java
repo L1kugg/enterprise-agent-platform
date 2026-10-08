@@ -30,7 +30,8 @@ import java.util.List;
  */
 public class MysqlChatMemory implements ChatMemory {
     /** 默认记忆窗口：读取最近 100 条消息 */
-    private static final int DEFAULT_HISTORY_SIZE = 100;
+    /** 默认记忆窗口：读取最近 20 条消息（上下文防爆，长对话裁旧留新） */
+    private static final int DEFAULT_HISTORY_SIZE = 20;
 
     private final ConversationMapper conversationMapper;
 

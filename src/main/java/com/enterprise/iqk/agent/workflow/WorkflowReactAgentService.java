@@ -10,6 +10,7 @@ import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.util.AnswerStreamSupport;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.security.UserContext;
@@ -22,6 +23,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -41,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** ReAct 执行层 Agent：留痕驱动 reason→动作→观测循环，步数可配、状态由实际动作推导，全程可回放。 */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class WorkflowReactAgentService {
 
@@ -56,6 +59,7 @@ public class WorkflowReactAgentService {
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
     private final AgentWorkflowProperties agentWorkflowProperties;
+    private final MemoryService memoryService;
     private final ReactResponseFormatter responseFormatter;
 
     public ReactChatResponseVO chat(ReactChatRequestVO request) { // 同步 ReAct：跑完循环后一次性返回答案+轨迹+引用；异常置任务 FAILED 后上抛
@@ -72,6 +76,9 @@ public class WorkflowReactAgentService {
 
         List<ReactTraceStepVO> trace = new ArrayList<>();
         String rollingContext = "";
+        String memoryUserKey = UserContext.currentUserId(request.getChatId());
+        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
+        String knownMemory = memoryBlock(memorySnapshot);
 
         try {
             WorkflowState currentState = WorkflowState.PLANNING;
@@ -81,7 +88,7 @@ public class WorkflowReactAgentService {
                         Map.of("prompt", request.getPrompt(), "rollingContext", rollingContext));
 
                 long stepStartNs = System.nanoTime();
-                ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+                ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId, knownMemory);
 
                 if ("finish".equals(decision.action())) {
                     String answer = StringUtils.hasText(decision.answer()) ? decision.answer()
@@ -91,7 +98,7 @@ public class WorkflowReactAgentService {
                     obs.put("citations", decision.citations() != null ? decision.citations() : List.of());
                     obs.put("evidence", decision.evidence() != null ? decision.evidence() : List.of());
 
-                    trace.add(buildTraceStep(stepNum, decision, obs));
+                    trace.add(buildTraceStep(stepNum, decision, obs, elapsedMs(stepStartNs)));
                     workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
                             Map.of("answer", answer), obs,
                             decision.thought(), "finish", decision.actionInput(),
@@ -99,7 +106,7 @@ public class WorkflowReactAgentService {
                     workflowEngine.transitionStatus(task.getTaskId(), currentState, WorkflowState.WRITING);
                     workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, answer);
                     workflowEngine.recordTaskMetrics("REACT", "DONE", elapsedMs(startedNs));
-                    return responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false);
+                    return withMemory(responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false), memorySnapshot);
                 }
 
                 WorkflowState nextState = WorkflowState.forAction(decision.action());
@@ -108,7 +115,7 @@ public class WorkflowReactAgentService {
 
                 Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
                         task.getTaskId(), stepRecord.getStepId());
-                trace.add(buildTraceStep(stepNum, decision, observation));
+                trace.add(buildTraceStep(stepNum, decision, observation, elapsedMs(stepStartNs)));
                 workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
                         null, observation,
                         decision.thought(), decision.action(), decision.actionInput(),
@@ -121,7 +128,7 @@ public class WorkflowReactAgentService {
             workflowEngine.transitionStatus(task.getTaskId(), currentState, WorkflowState.WRITING);
             workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, answer);
             workflowEngine.recordTaskMetrics("REACT", "DONE", elapsedMs(startedNs));
-            return responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false);
+            return withMemory(responseFormatter.success(request.getChatId(), answer, trace, routeDecision, false), memorySnapshot);
 
         } catch (RuntimeException e) {
             workflowEngine.failTask(task.getTaskId(), e.getMessage());
@@ -149,7 +156,8 @@ public class WorkflowReactAgentService {
                             resolveRouteDecision(request.getModelProfile(), "react", request.getChatId(), tenantId),
                             tenantId, new ArrayList<>(), new AtomicReference<>(""),
                             new AtomicReference<>(""), firstTokenMs, outcomeRef, startedNs,
-                            new AtomicReference<>(WorkflowState.PLANNING));
+                            new AtomicReference<>(WorkflowState.PLANNING),
+                            memoryBlock(recallMemory(tenantId, UserContext.currentUserId(request.getChatId()))));
                     return stepFlux(state, 1).concatWith(finalAnswerFlux(state));
                 })
                 .onErrorResume(ex -> {
@@ -191,12 +199,12 @@ public class WorkflowReactAgentService {
 
             long stepStartNs = System.nanoTime();
             ReasonDecision decision = reason(state.request(), state.rollingContext().get(),
-                    state.trace(), state.routeDecision(), state.tenantId());
+                    state.trace(), state.routeDecision(), state.tenantId(), state.knownMemory());
 
             if ("finish".equals(decision.action())) {
                 Map<String, Object> obs = new LinkedHashMap<>();
                 obs.put("status", "completed");
-                ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, obs);
+                ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, obs, elapsedMs(stepStartNs));
                 state.trace().add(stepVo);
                 state.directAnswer().set(emptyIfBlank(decision.answer()));
                 workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
@@ -210,7 +218,7 @@ public class WorkflowReactAgentService {
             transitionWorkflowState(state, WorkflowState.forAction(decision.action()));
             Object observation = executeAction(state.request(), decision.action(), decision.actionInput(),
                     state.tenantId(), state.task().getTaskId(), stepRecord.getStepId());
-            ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, observation);
+            ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, observation, elapsedMs(stepStartNs));
             state.trace().add(stepVo);
             workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
                     null, observation,
@@ -262,26 +270,32 @@ public class WorkflowReactAgentService {
                                AtomicReference<Long> firstTokenMs,
                                AtomicReference<String> outcomeRef,
                                long startedNs,
-                               AtomicReference<WorkflowState> workflowState) {
+                               AtomicReference<WorkflowState> workflowState,
+                               String knownMemory) {
     }
 
     private ReasonDecision reason(ReactChatRequestVO request,
                                   String rollingContext,
                                   List<ReactTraceStepVO> trace,
                                   ModelRouter.ModelRouteDecision routeDecision,
-                                  String tenantId) {
+                                  String tenantId,
+                                  String knownMemory) {
         // 提示词用中文驱动，模型 thought/answer 才会用中文；JSON 键名与动作名保持英文，解析逻辑依赖它们。
         String planningPrompt = """
-                你是一个教育助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
+                你是一个企业智能助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
                 %s
                 规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
+                如果已知记忆中已包含用户问题的答案（如用户姓名、身份、偏好、之前结论），直接选择 finish 并引用记忆内容作答，不要执行 rag_search。
+                如果用户询问你是谁/你能做什么/有什么功能，直接选择 finish 并介绍自己的能力（知识库检索问答RAG、业务数据查询、任务创建、天气查询、深度研究），不要执行 rag_search。
                 只返回 JSON：{"thought": "简短的中文推理", "action": "动作名", "action_input": {"key":"value"}, "answer": "仅 finish 时提供，用中文作答"}
                 用户问题：
                 %s
                 滚动上下文：
                 %s
-                已有轨迹：%s""".formatted(plannerActionCatalog.workflowActionsSection(), request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
+                已知记忆（用户画像 / 近期对话 / 已确认事实，作为背景参考）：
+                %s
+                已有轨迹：%s""".formatted(plannerActionCatalog.workflowActionsSection(), request.getPrompt(), emptyIfBlank(knownMemory), emptyIfBlank(rollingContext), responseFormatter.traceSummary(trace));
 
         try {
             String raw = callModel("你是严格的 JSON ReAct 规划器，只输出合法 JSON，thought 与 answer 用简体中文。",
@@ -333,10 +347,11 @@ public class WorkflowReactAgentService {
         return "用户问题:%n%s%n%nReAct轨迹:%n%s%n%n观察上下文:%n%s%n%n请输出最终中文答案，要求简洁、可执行、结构清晰。%n".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
-    private ReactTraceStepVO buildTraceStep(int step, ReasonDecision d, Object obs) {
+    private ReactTraceStepVO buildTraceStep(int step, ReasonDecision d, Object obs, long elapsedMs) {
         return ReactTraceStepVO.builder()
                 .step(step).thought(d.thought()).action(d.action())
-                .actionInput(d.actionInput()).observation(obs).build();
+                .actionInput(d.actionInput()).observation(obs)
+                .elapsedMs(elapsedMs).build();
     }
 
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String profile, String endpoint,
@@ -389,6 +404,26 @@ public class WorkflowReactAgentService {
         workflowEngine.transitionStatus(state.task().getTaskId(), current, target);
     }
 
+    /** 记忆召回（读侧）：失败返回 null，按无记忆降级，绝不中断工作流主链路 */
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey) {
+        try {
+            return memoryService.buildContext(tenantId, userKey);
+        } catch (Exception ex) {
+            log.warn("记忆召回失败（不影响工作流引擎）: user={}, reason={}", userKey, ex.toString());
+            return null;
+        }
+    }
+
+    private String memoryBlock(MemoryService.MemoryContextSnapshot snapshot) {
+        return snapshot != null && StringUtils.hasText(snapshot.contextText())
+                ? snapshot.contextText().trim() : "(none)";
+    }
+
+    private ReactChatResponseVO withMemory(ReactChatResponseVO r, MemoryService.MemoryContextSnapshot s) {
+        r.setMemoryUsed(s == null ? List.of() : s.usedLabels());
+        return r;
+    }
+
     private ReasonDecision parseDecision(String raw) {
         String json = extractJson(raw);
         if (!StringUtils.hasText(json)) {
@@ -432,7 +467,8 @@ public class WorkflowReactAgentService {
         StringBuilder sb = new StringBuilder(emptyIfBlank(origin));
         if (sb.length() > 0) sb.append("\n");
         sb.append("action=").append(action).append(", observation=").append(toJson(observation));
-        return sb.toString();
+        // 上下文防爆：保留最近 8000 字符
+        return sb.length() > 8000 ? sb.substring(sb.length() - 8000) : sb.toString();
     }
 
     private void recordStreamMetrics(long startedNs, Long firstTokenMs, String outcome) {

@@ -1,42 +1,35 @@
 package com.enterprise.iqk.agent.harness;
 
-import com.enterprise.iqk.domain.query.CourseQuery;
 import com.enterprise.iqk.rag.HybridRagAnswerService;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.security.TenantContext;
-import com.enterprise.iqk.tools.CourseTools;
 import com.enterprise.iqk.tools.DatabaseQueryTools;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 进程内工具运行时：处理 5 个业务内置动作
- * （query_school / query_course / add_course_reservation / rag_search / query_database），
- * 直接复用 CourseTools、HybridRagAnswerService（四路混合检索）与 DatabaseQueryTools（主库只读查询），
+ * 进程内工具运行时：处理企业级内置动作
+ * （create_task / rag_search / query_database），
+ * 直接复用 HybridRagAnswerService（四路混合检索）与 DatabaseQueryTools（主库只读查询），
  * 不经过模型工具调用协议。
  */
 @Component
 @RequiredArgsConstructor
 public class BuiltinToolRuntime implements AgentRuntime {
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
-            "query_school",
-            "query_course",
-            "add_course_reservation",
+            "create_task",
             "rag_search",
             "query_database"
     );
 
-    private final CourseTools courseTools;
     private final HybridRagAnswerService hybridRagAnswerService;
     private final DatabaseQueryTools databaseQueryTools;
 
@@ -50,14 +43,11 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return SUPPORTED_ACTIONS.contains(action);
     }
 
-    /** 按动作分发；下游返回 status=error 的 Map 时统一转为 error 观测 */
     @Override
     public AgentObservation execute(AgentAction action) {
         long startedNs = System.nanoTime();
         Object payload = switch (action.action()) {
-            case "query_school" -> courseTools.querySchool();
-            case "query_course" -> courseTools.queryCourse(toCourseQuery(action.actionInput()));
-            case "add_course_reservation" -> executeReservation(action.actionInput());
+            case "create_task" -> executeCreateTask(action);
             case "rag_search" -> executeRagSearch(action);
             case "query_database" -> executeDatabaseQuery(action);
             default -> Map.of("status", "error", "message", "unsupported action: " + action.action());
@@ -70,34 +60,20 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return AgentObservation.success(source(), payload, elapsedMs(startedNs));
     }
 
-    /** 预约登记：course/studentName/contactInfo/school 四项必填，缺一返回 error；成功返回 reservationId */
-    private Map<String, Object> executeReservation(Map<String, Object> actionInput) {
-        String course = stringVal(actionInput, "course", "");
-        String studentName = stringVal(actionInput, "studentName", "");
-        String contactInfo = stringVal(actionInput, "contactInfo", "");
-        String school = stringVal(actionInput, "school", "");
-        String remark = stringVal(actionInput, "remark", "");
-
-        if (!StringUtils.hasText(course)
-                || !StringUtils.hasText(studentName)
-                || !StringUtils.hasText(contactInfo)
-                || !StringUtils.hasText(school)) {
-            return Map.of(
-                    "status", "error",
-                    "message", "missing required fields for reservation"
-            );
+    /** 创建工作任务：返回确认信息（后续版本接入任务系统）。 */
+    private Map<String, Object> executeCreateTask(AgentAction action) {
+        String title = stringVal(action.actionInput(), "title", "");
+        String description = stringVal(action.actionInput(), "description", "");
+        String priority = stringVal(action.actionInput(), "priority", "normal");
+        if (!StringUtils.hasText(title)) {
+            return Map.of("status", "error", "message", "task title is required");
         }
-
-        String reservationId = courseTools.addCourseReservation(
-                course,
-                studentName,
-                contactInfo,
-                school,
-                remark
-        );
         return Map.of(
                 "status", "created",
-                "reservationId", reservationId
+                "taskTitle", title,
+                "description", description,
+                "priority", priority,
+                "message", "任务已创建并写入跟踪记忆"
         );
     }
 
@@ -127,7 +103,6 @@ public class BuiltinToolRuntime implements AgentRuntime {
                 .map(EvidenceItem::getSnippet)
                 .filter(StringUtils::hasText)
                 .toList());
-        // 当次实际生效的召回路权重（四路归一化值）：前端轨迹条照此绘制
         payload.put("weights", result.getWeights() == null ? Map.of() : result.getWeights());
         return payload;
     }
@@ -153,31 +128,6 @@ public class BuiltinToolRuntime implements AgentRuntime {
         return databaseQueryTools.queryDatabase(sql, tenantId);
     }
 
-    /** 动作输入 → 课程查询对象：解析 type/edu/sorts（排序字段+升降序），解析不了的字段静默忽略 */
-    private CourseQuery toCourseQuery(Map<String, Object> actionInput) {
-        CourseQuery query = new CourseQuery();
-        query.setType(stringVal(actionInput, "type", null));
-        query.setEdu(intVal(actionInput.get("edu")));
-
-        Object sortsObj = actionInput.get("sorts");
-        if (sortsObj instanceof List<?> list && !list.isEmpty()) {
-            List<CourseQuery.Sort> sorts = new ArrayList<>();
-            for (Object item : list) {
-                if (!(item instanceof Map<?, ?> rawSort)) {
-                    continue;
-                }
-                CourseQuery.Sort sort = new CourseQuery.Sort();
-                Object field = rawSort.get("field");
-                Object isAsc = rawSort.get("isAsc");
-                sort.setField(field == null ? null : String.valueOf(field));
-                sort.setIsAsc(isAsc == null ? null : Boolean.parseBoolean(String.valueOf(isAsc)));
-                sorts.add(sort);
-            }
-            query.setSorts(sorts);
-        }
-        return query;
-    }
-
     /** 去掉 chatId 中的单引号，防止拼接进 SQL 的注入风险 */
     private String sanitizeChatId(String value) {
         if (!StringUtils.hasText(value)) {
@@ -194,18 +144,6 @@ public class BuiltinToolRuntime implements AgentRuntime {
         }
         String value = String.valueOf(raw).trim();
         return StringUtils.hasText(value) ? value : fallback;
-    }
-
-    /** 取整型字段：解析失败返回 null（不抛异常） */
-    private Integer intVal(Object raw) {
-        if (raw == null) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(String.valueOf(raw));
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 
     /** 纳秒起点换算毫秒耗时 */

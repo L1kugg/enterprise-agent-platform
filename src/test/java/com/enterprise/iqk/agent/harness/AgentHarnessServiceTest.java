@@ -24,7 +24,7 @@ class AgentHarnessServiceTest {
 
             @Override
             public boolean supports(String action) {
-                return "query_school".equals(action);
+                return "create_task".equals(action);
             }
 
             @Override
@@ -38,7 +38,8 @@ class AgentHarnessServiceTest {
                 recorder,
                 new HarnessPayloadSanitizer()
         );
-        AgentAction action = new AgentAction("query_school", Map.of(), "prompt",
+        AgentAction action = new AgentAction("create_task",
+                Map.of("title", "准备会议", "description", "整理议题"), "prompt",
                 "tenant", "chat", "balanced", "task-1", "step-1");
 
         AgentObservation observation = service.execute(action);

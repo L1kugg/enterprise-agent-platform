@@ -74,10 +74,20 @@ public class ReactResponseFormatter {
         if (builder.length() > 0) {
             builder.append("\n");
         }
-        return builder.append("action=").append(action).append(", observation=").append(toJson(observation)).toString();
+        builder.append("action=").append(action).append(", observation=").append(toJson(observation));
+        // 上下文防爆：保留最近 8000 字符，旧观测丢弃（规划器主要依赖近期上下文）
+        return builder.length() > 8000 ? builder.substring(builder.length() - 8000) : builder.toString();
     }
 
     /** 从轨迹各步 observation 的指定 key 去重抽取字符串列表。 */
+    /** 轨迹压缩摘要：只保留步号+动作+耗时，观测详情由 rollingContext 携带（防上下文爆炸） */
+    public String traceSummary(List<ReactTraceStepVO> trace) {
+        if (trace == null || trace.isEmpty()) return "(空)";
+        return trace.stream()
+                .map(s -> "Step " + s.getStep() + ": " + s.getAction()
+                        + " (" + (s.getElapsedMs() != null ? s.getElapsedMs() : 0) + "ms)")
+                .reduce((a, b) -> a + "\n" + b).orElse("(空)");
+    }
     private static boolean isNoHitAnswer(String answer) {
         if (!StringUtils.hasText(answer)) return false;
         return answer.contains("暂无") || answer.contains("未收录")

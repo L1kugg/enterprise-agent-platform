@@ -26,7 +26,7 @@ public class CommonConfiguration {
                 .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())//增强器，MessageChatMemoryAdvisor：帮我们存储对话的上下文
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入：传 MEMORY_TENANT/USER 参数的链路在请求组装期插入"已知记忆"system 消息
-                .defaultSystem("你是一个专业、友好、可靠的AI助手，请基于用户问题给出清晰、准确、简洁的回答。")
+                .defaultSystem("你是一位企业智能助手，专注于知识检索、业务数据查询和任务协助。语气专业、简洁、面向决策。")
                 .build();
     }
 

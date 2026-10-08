@@ -78,3 +78,6 @@ dist/
 # Personal notes (keep out of version control)
 /bug_track.json
 /career-claim-ledger.json
+
+# Local agent workspace memory
+.workbuddy/

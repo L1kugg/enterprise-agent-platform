@@ -1,6 +1,7 @@
 package com.enterprise.iqk.agent.harness;
 
 import java.util.Map;
+import java.util.List;
 
 /** MCP 工具适配器：绑定一对 server/tool，runtime 据此路由调用。每个外部工具一个实现。 */
 public interface McpToolAdapter {
@@ -22,4 +23,9 @@ public interface McpToolAdapter {
 
     /** 执行工具调用，返回结构化结果（失败用 status=error 的 Map 表达） */
     Object execute(Map<String, Object> arguments);
+
+    /** 发现指定 server 的可用工具（JSON-RPC tools/list）；不支持动态发现的适配器返回空列表 */
+    default List<Map<String, Object>> listTools(String server) {
+        return List.of();
+    }
 }

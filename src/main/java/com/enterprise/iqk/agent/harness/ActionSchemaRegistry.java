@@ -21,13 +21,10 @@ public class ActionSchemaRegistry {
 
     /** 构造期一次性注册全部动作：builtin 5 个（读学校/读课程/预约/RAG 检索/主库只读查询）、mcp_call 1 个、workspace 6 个（列文件/读文件/搜文本/提补丁/应用补丁/跑命令） */
     public ActionSchemaRegistry() {
-        register(new ActionSchema("query_school", "builtin",
-                Set.of(), Set.of(), Set.of(), "read", false));
-        register(new ActionSchema("query_course", "builtin",
-                Set.of(), Set.of("type", "edu", "sorts"), Set.of(), "read", false));
-        register(new ActionSchema("add_course_reservation", "builtin",
-                Set.of("course", "studentName", "contactInfo", "school"),
-                Set.of("remark"), Set.of("contactInfo"), "write", false));
+        register(new ActionSchema("create_task", "builtin",
+                Set.of("title", "description"),
+                Set.of("priority"), Set.of(), "write", false,
+                "创建工作任务并写入记忆。需要 title 和 description，priority 可选。"));
         register(new ActionSchema("rag_search", "builtin",
                 Set.of(), Set.of("query"), Set.of(), "read", false));
         // query_database：模型现场生成 SQL 的只读查询。tenantId 不开放为入参（防伪造），

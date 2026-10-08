@@ -1,6 +1,7 @@
 package com.enterprise.iqk.service;
 
 import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
+import com.enterprise.iqk.agent.harness.McpToolCatalog;
 import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -8,10 +9,11 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class ReactDecisionParserTest {
     private final ReactDecisionParser parser = new ReactDecisionParser(
-            new PlannerActionCatalog(new ActionSchemaRegistry()), new ObjectMapper());
+            new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), new ObjectMapper());
 
     @Test
     void parsesAllowedActionAndInputFromModelJson() {

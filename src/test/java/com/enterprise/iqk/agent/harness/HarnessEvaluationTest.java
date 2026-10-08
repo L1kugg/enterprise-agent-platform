@@ -27,8 +27,9 @@ class HarnessEvaluationTest {
                 new HarnessPayloadSanitizer()
         );
 
-        AgentObservation builtin = service.execute(action("query_school", Map.of(), false));
-        AgentObservation invalid = service.execute(action("add_course_reservation", Map.of("course", "Java"), false));
+        AgentObservation builtin = service.execute(action("create_task",
+                Map.of("title", "完成季度报告", "description", "整理Q3数据"), false));
+        AgentObservation invalid = service.execute(action("query_school", Map.of(), false));
         AgentObservation mcp = service.execute(action("mcp_call",
                 Map.of("server", "demo", "tool", "echo", "arguments", Map.of("text", "ok")), false));
         AgentObservation workspaceDenied = service.execute(action("workspace_read_file",
@@ -52,7 +53,7 @@ class HarnessEvaluationTest {
 
             @Override
             public boolean supports(String action) {
-                return "query_school".equals(action);
+                return "create_task".equals(action);
             }
 
             @Override

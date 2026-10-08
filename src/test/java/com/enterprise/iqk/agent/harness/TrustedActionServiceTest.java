@@ -88,7 +88,7 @@ class TrustedActionServiceTest {
         );
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.preview(new TrustedActionRequest(
-                "query_school", Map.of(), "prompt", "tenant", "chat", "balanced", "", "")))
+                "rag_search", Map.of("query", "企业助手能力"), "prompt", "tenant", "chat", "balanced", "", "")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("does not require trusted runtime");
     }

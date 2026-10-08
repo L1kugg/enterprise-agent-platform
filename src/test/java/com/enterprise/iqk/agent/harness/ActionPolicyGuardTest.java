@@ -14,14 +14,14 @@ class ActionPolicyGuardTest {
 
     @Test
     void rejectsMissingRequiredFields() {
-        AgentAction action = new AgentAction("add_course_reservation",
-                Map.of("course", "Java"), "prompt", "tenant", "chat", "balanced", "", "");
+        AgentAction action = new AgentAction("create_task",
+                Map.of("description", "测试"), "prompt", "tenant", "chat", "balanced", "", "");
 
         ActionPolicyDecision decision = guard.evaluate(action);
 
         assertThat(decision.allowed()).isFalse();
         assertThat(decision.code()).isEqualTo("invalid_action_input");
-        assertThat(decision.message()).contains("studentName", "contactInfo", "school");
+        assertThat(decision.message()).contains("title");
     }
 
     @Test
@@ -52,8 +52,8 @@ class ActionPolicyGuardTest {
 
     @Test
     void rejectsUnknownFields() {
-        AgentAction action = new AgentAction("query_course",
-                Map.of("type", "Java", "extra", "x"), "prompt", "tenant", "chat", "balanced", "", "");
+        AgentAction action = new AgentAction("create_task",
+                Map.of("title", "t", "description", "d", "extra", "x"), "prompt", "tenant", "chat", "balanced", "", "");
 
         ActionPolicyDecision decision = guard.evaluate(action);
 
@@ -77,7 +77,7 @@ class ActionPolicyGuardTest {
     @Test
     void rejectsTenantDeniedActionsFromConfiguration() {
         AgentHarnessProperties properties = new AgentHarnessProperties();
-        properties.getTenantAllowedActions().put("tenant-a", java.util.Set.of("query_school"));
+        properties.getTenantAllowedActions().put("tenant-a", java.util.Set.of("mcp_call"));
         ActionPolicyGuard localGuard = new ActionPolicyGuard(new ActionSchemaRegistry(), properties);
 
         ActionPolicyDecision decision = localGuard.evaluate(new AgentAction("rag_search",

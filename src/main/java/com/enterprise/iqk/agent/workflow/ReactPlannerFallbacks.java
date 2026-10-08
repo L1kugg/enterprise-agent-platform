@@ -32,15 +32,15 @@ final class ReactPlannerFallbacks {
         }
         if (containsAny(safe, "校区", "campus")) {
             return new ReasonFallback("识别到校区相关问题，走校区查询兜底流程。", "finish", Map.of(),
-                    "已识别为校区查询请求：可以返回校区列表，并按城市或课程类型做进一步筛选。",
-                    List.of("source=fallback://school_query_flow, chunk=1"),
-                    List.of("校区查询流程：先列出校区，再按城市/课程类型筛选。"));
+                    "我是企业智能助手，能够提供知识库检索、业务数据查询、任务创建和深度研究等功能。",
+                    List.of("source=fallback://self_intro, chunk=1"),
+                    List.of("自我介绍：列出可用能力和典型场景。"));
         }
-        if (containsAny(safe, "课程预约", "预约字段", "预约需要", "联系方式", "姓名")) {
-            return new ReasonFallback("识别到课程预约相关需求，返回预约字段模板。", "finish", Map.of(),
-                    "课程预约建议至少包含：课程、姓名、联系方式、校区。",
-                    List.of("source=fallback://course_reservation_schema, chunk=1"),
-                    List.of("预约字段模板。"));
+        if (containsAny(safe, "创建任务", "新建任务", "待办", "remind", "task")) {
+            return new ReasonFallback("识别到课程预约相关需求，返回任务创建模板。", "finish", Map.of(),
+                    "任务创建需要提供标题和描述，优先级可选（high/normal/low）。",
+                    List.of("source=fallback://task_creation, chunk=1"),
+                    List.of("任务创建模板。"));
         }
         if (containsAny(safe, "知识库", "引用", "来源", "pdf", "文档", "source")) {
             return new ReasonFallback("识别到知识库/引用相关需求，转知识库检索。", "rag_search", Map.of("query", prompt),
