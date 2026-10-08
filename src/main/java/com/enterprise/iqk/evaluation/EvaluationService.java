@@ -10,6 +10,7 @@ import com.enterprise.iqk.evaluation.vo.EvalResultVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunRequestVO;
 import com.enterprise.iqk.evaluation.vo.EvalRunVO;
 import com.enterprise.iqk.rag.HybridRagAnswerService;
+import com.enterprise.iqk.retrieval.RetrievalResultItem;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -38,9 +39,6 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class EvaluationService {
-    /** 单 case 综合分达到该阈值才计入 passedCases */
-    private static final double PASS_THRESHOLD = 0.70;
-
     private final EvalDatasetMapper evalDatasetMapper;
     private final EvalCaseMapper evalCaseMapper;
     private final EvalRunMapper evalRunMapper;
@@ -48,8 +46,8 @@ public class EvaluationService {
     private final HybridRagAnswerService hybridRagAnswerService;
     private final ObjectMapper objectMapper;
     private final EvaluationScorer evaluationScorer;
+    private final EvaluationSummaryCalculator summaryCalculator;
     private final EvaluationReportRenderer evaluationReportRenderer;
-
     /** 创建评测数据集：校验后写 eval_dataset / eval_case，用例缺 caseId 时按序生成 case-###。 */
     public EvalDatasetVO createDataset(String tenantId, EvalDatasetCreateVO request) {
         if (request == null) {
@@ -61,7 +59,6 @@ public class EvaluationService {
         if (request.getCases() == null || request.getCases().isEmpty()) {
             throw new IllegalArgumentException("评测集至少需要一条测试题");
         }
-
         String tenant = TenantContext.normalize(tenantId);
         String datasetId = "eval-ds-" + shortUuid();
         LocalDateTime now = LocalDateTime.now();
@@ -91,6 +88,8 @@ public class EvaluationService {
                     .chatId(emptyIfBlank(item.getChatId()))
                     .questionText(item.getQuestion().trim())
                     .expectedCitationsJson(writeJsonList(item.getExpectedCitations()))
+                    .expectedDocumentIdsJson(writeJsonList(item.getExpectedDocumentIds()))
+                    .expectedChunkIdsJson(writeJsonList(item.getExpectedChunkIds()))
                     .expectedKeywordsJson(writeJsonList(item.getExpectedKeywords()))
                     .forbiddenKeywordsJson(writeJsonList(item.getForbiddenKeywords()))
                     .sortOrder(order++)
@@ -157,8 +156,13 @@ public class EvaluationService {
                 .passedCases(0)
                 .runScore(0.0)
                 .retrievalHitRate(0.0)
+                .retrievalMetricsCases(0)
+                .retrievalMetricLevel("none")
+                .recallAtKRate(0.0)
+                .mrrAtK(0.0)
+                .precisionAtKRate(0.0)
                 .citationCoverageRate(0.0)
-                .answerFaithfulnessScore(0.0)
+                .citationMarkerCoverageRate(0.0)
                 .avgLatencyMs(0.0)
                 .failureRate(0.0)
                 .startedAt(now)
@@ -172,13 +176,18 @@ public class EvaluationService {
             results.add(runCase(tenant, runId, dataset.getDatasetId(), cases.get(i), request, i));
         }
 
-        EvalMetricSummaryVO summary = summarize(results);
+        EvalMetricSummaryVO summary = summaryCalculator.summarize(results);
         run.setStatus("SUCCESS");
         run.setPassedCases(summary.getPassedCases());
         run.setRunScore(summary.getRunScore());
         run.setRetrievalHitRate(summary.getRetrievalHitRate());
+        run.setRetrievalMetricsCases(summary.getRetrievalMetricsCases());
+        run.setRetrievalMetricLevel(summary.getRetrievalMetricLevel());
+        run.setRecallAtKRate(summary.getRecallAtKRate());
+        run.setMrrAtK(summary.getMrrAtK());
+        run.setPrecisionAtKRate(summary.getPrecisionAtKRate());
         run.setCitationCoverageRate(summary.getCitationCoverageRate());
-        run.setAnswerFaithfulnessScore(summary.getAnswerFaithfulnessScore());
+        run.setCitationMarkerCoverageRate(summary.getCitationMarkerCoverageRate());
         run.setAvgLatencyMs(summary.getAvgLatencyMs());
         run.setFailureRate(summary.getFailureRate());
         run.setFinishedAt(LocalDateTime.now());
@@ -255,9 +264,10 @@ public class EvaluationService {
         String errorMessage = "";
         List<String> citations = List.of();
         List<String> evidence = List.of();
+        List<RetrievalResultItem> retrievalResults = List.of();
 
         try {
-            String chatId = resolveChatId(evalCase, request, index);
+            String chatId = resolveChatId(runId, evalCase, request, index);
             HybridRagAnswerService.HybridRagResult result = hybridRagAnswerService.answer(
                     evalCase.getQuestionText(),
                     tenant,
@@ -268,6 +278,8 @@ public class EvaluationService {
             answer = emptyIfBlank(result.getAnswer());
             citations = EvalCitationFormatter.toCitationStrings(result.getCitations());
             evidence = EvalCitationFormatter.toEvidenceStrings(result.getEvidence());
+            retrievalResults = result.getRetrievalResults() == null
+                    ? List.of() : result.getRetrievalResults();
             if (!StringUtils.hasText(answer)) {
                 status = "FAILED";
                 errorMessage = "empty answer";
@@ -283,6 +295,7 @@ public class EvaluationService {
                 answer,
                 citations,
                 evidence,
+                retrievalResults,
                 "FAILED".equals(status)
         );
         EvalResultRecord record = EvalResultRecord.builder()
@@ -296,37 +309,25 @@ public class EvaluationService {
                 .answerText(answer)
                 .citationsJson(writeJsonList(citations))
                 .evidenceJson(writeJsonList(evidence))
+                .retrievedResultsJson(writeRetrievalResults(retrievalResults))
                 .retrievalHit(scores.retrievalHit())
+                .retrievalMetricsApplicable(scores.retrievalMetricsApplicable())
+                .retrievalMetricLevel(scores.retrievalMetricLevel())
+                .recallAtK(scores.recallAtK())
+                .mrrAtK(scores.mrrAtK())
+                .precisionAtK(scores.precisionAtK())
                 .citationCoverage(scores.citationCoverage())
                 .keywordScore(scores.keywordScore())
-                .answerFaithfulness(scores.answerFaithfulness())
+                .citationMarkerCoverage(scores.citationMarkerCoverage())
                 .score(scores.score())
+                .keywordScoreApplicable(scores.keywordScoreApplicable())
+                .citationCoverageApplicable(scores.citationCoverageApplicable())
                 .latencyMs(latencyMs)
                 .errorMessage(errorMessage)
                 .createdAt(LocalDateTime.now())
                 .build();
         evalResultMapper.insert(record);
         return record;
-    }
-
-    /** 汇总一轮全部 case 结果：通过数、各分项均值与失败率。 */
-    private EvalMetricSummaryVO summarize(List<EvalResultRecord> results) {
-        int total = results.size();
-        int passed = (int) results.stream()
-                .filter(item -> "SUCCESS".equals(item.getStatus()))
-                .filter(item -> item.getScore() != null && item.getScore() >= PASS_THRESHOLD)
-                .count();
-        double totalSafe = Math.max(1, total);
-        return EvalMetricSummaryVO.builder()
-                .totalCases(total)
-                .passedCases(passed)
-                .runScore(round(avg(results.stream().map(EvalResultRecord::getScore).toList())))
-                .retrievalHitRate(round(avg(results.stream().map(EvalResultRecord::getRetrievalHit).toList())))
-                .citationCoverageRate(round(avg(results.stream().map(EvalResultRecord::getCitationCoverage).toList())))
-                .answerFaithfulnessScore(round(avg(results.stream().map(EvalResultRecord::getAnswerFaithfulness).toList())))
-                .avgLatencyMs(round(avg(results.stream().map(item -> item.getLatencyMs() == null ? null : item.getLatencyMs().doubleValue()).toList())))
-                .failureRate(round(results.stream().filter(item -> !"SUCCESS".equals(item.getStatus())).count() / totalSafe))
-                .build();
     }
 
     private EvalDatasetRecord requireDataset(String tenant, String datasetId) {
@@ -370,8 +371,13 @@ public class EvaluationService {
                 .passedCases(intOrZero(run.getPassedCases()))
                 .runScore(valueOrZero(run.getRunScore()))
                 .retrievalHitRate(valueOrZero(run.getRetrievalHitRate()))
+                .retrievalMetricsCases(intOrZero(run.getRetrievalMetricsCases()))
+                .retrievalMetricLevel(emptyIfBlank(run.getRetrievalMetricLevel()))
+                .recallAtKRate(valueOrZero(run.getRecallAtKRate()))
+                .mrrAtK(valueOrZero(run.getMrrAtK()))
+                .precisionAtKRate(valueOrZero(run.getPrecisionAtKRate()))
                 .citationCoverageRate(valueOrZero(run.getCitationCoverageRate()))
-                .answerFaithfulnessScore(valueOrZero(run.getAnswerFaithfulnessScore()))
+                .citationMarkerCoverageRate(valueOrZero(run.getCitationMarkerCoverageRate()))
                 .avgLatencyMs(valueOrZero(run.getAvgLatencyMs()))
                 .failureRate(valueOrZero(run.getFailureRate()))
                 .build();
@@ -399,44 +405,48 @@ public class EvaluationService {
                 .answer(record.getAnswerText())
                 .citations(readJsonList(record.getCitationsJson()))
                 .evidence(readJsonList(record.getEvidenceJson()))
+                .retrievedResults(readRetrievalResults(record.getRetrievedResultsJson()))
                 .retrievalHit(valueOrZero(record.getRetrievalHit()))
+                .retrievalMetricsApplicable(Boolean.TRUE.equals(record.getRetrievalMetricsApplicable()))
+                .retrievalMetricLevel(emptyIfBlank(record.getRetrievalMetricLevel()))
+                .recallAtK(valueOrZero(record.getRecallAtK()))
+                .mrrAtK(valueOrZero(record.getMrrAtK()))
+                .precisionAtK(valueOrZero(record.getPrecisionAtK()))
                 .citationCoverage(valueOrZero(record.getCitationCoverage()))
                 .keywordScore(valueOrZero(record.getKeywordScore()))
-                .answerFaithfulness(valueOrZero(record.getAnswerFaithfulness()))
+                .citationMarkerCoverage(valueOrZero(record.getCitationMarkerCoverage()))
                 .score(valueOrZero(record.getScore()))
+                .keywordScoreApplicable(Boolean.TRUE.equals(record.getKeywordScoreApplicable()))
+                .citationCoverageApplicable(Boolean.TRUE.equals(record.getCitationCoverageApplicable()))
                 .latencyMs(record.getLatencyMs() == null ? 0 : record.getLatencyMs())
                 .errorMessage(record.getErrorMessage())
                 .build();
     }
 
-    /** 解析评测用 chatId：用例自带 > 请求前缀拼序号 > 数据集 ID。 */
-    private String resolveChatId(EvalCaseRecord evalCase, EvalRunRequestVO request, int index) {
+    /** 每轮评测追加 runId 前缀，避免固定 chatId 的历史记忆污染下一轮结果。 */
+    private String resolveChatId(String runId, EvalCaseRecord evalCase,
+                                   EvalRunRequestVO request, int index) {
+        String configured;
         if (StringUtils.hasText(evalCase.getChatId())) {
-            return evalCase.getChatId().trim();
+            configured = evalCase.getChatId().trim();
+        } else if (request != null && StringUtils.hasText(request.getChatIdPrefix())) {
+            configured = request.getChatIdPrefix().trim() + "-"
+                    + String.format(Locale.ROOT, "%03d", index + 1);
+        } else {
+            configured = evalCase.getCaseId();
         }
-        if (request != null && StringUtils.hasText(request.getChatIdPrefix())) {
-            return request.getChatIdPrefix().trim() + "-" + String.format(Locale.ROOT, "%03d", index + 1);
-        }
-        return evalCase.getDatasetId();
-    }
-
-    private double avg(List<Double> values) {
-        if (values == null || values.isEmpty()) {
-            return 0.0;
-        }
-        double sum = 0.0;
-        int count = 0;
-        for (Double value : values) {
-            if (value == null) {
-                continue;
-            }
-            sum += value;
-            count++;
-        }
-        return count == 0 ? 0.0 : sum / count;
+        return runId + "-" + configured;
     }
 
     private String writeJsonList(List<String> values) {
+        try {
+            return objectMapper.writeValueAsString(values == null ? List.of() : values);
+        } catch (JsonProcessingException ex) {
+            return "[]";
+        }
+    }
+
+    private String writeRetrievalResults(List<RetrievalResultItem> values) {
         try {
             return objectMapper.writeValueAsString(values == null ? List.of() : values);
         } catch (JsonProcessingException ex) {
@@ -456,16 +466,24 @@ public class EvaluationService {
         }
     }
 
+    private List<RetrievalResultItem> readRetrievalResults(String json) {
+        if (!StringUtils.hasText(json)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<RetrievalResultItem>>() {
+            });
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
+    }
+
     private double valueOrZero(Double value) {
         return value == null ? 0.0 : value;
     }
 
     private int intOrZero(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private double round(double value) {
-        return Math.round(value * 10000.0) / 10000.0;
     }
 
     private String formatTime(LocalDateTime value) {

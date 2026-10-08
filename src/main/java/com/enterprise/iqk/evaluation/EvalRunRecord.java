@@ -42,10 +42,18 @@ public class EvalRunRecord {
     private Double runScore;
     /** 检索命中率均值 */
     private Double retrievalHitRate;
+    /** 配置了期望文档/切片的用例数 */
+    private Integer retrievalMetricsCases;
+    /** document / chunk / mixed / none */
+    private String retrievalMetricLevel;
+    /** 文档或切片级 Recall@K 均值 */
+    private Double recallAtKRate;
+    private Double mrrAtK;
+    private Double precisionAtKRate;
     /** 引用覆盖率均值 */
     private Double citationCoverageRate;
-    /** 答案忠实度均值 */
-    private Double answerFaithfulnessScore;
+    /** 引用标记覆盖率均值 */
+    private Double citationMarkerCoverageRate;
     /** 单 case 平均耗时（毫秒） */
     private Double avgLatencyMs;
     /** 失败（异常或空答案）用例占比 */

@@ -1,0 +1,8 @@
+services:
+  app:
+    volumes:
+      - ../releases/current/app/app.jar:/app/app.jar:ro
+
+  web:
+    volumes:
+      - ../releases/current/web:/usr/share/nginx/html:ro

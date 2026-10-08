@@ -9,11 +9,12 @@ export function metricCard(
   baseline: EvalMetricSummary | undefined,
   unit: 'percent' | 'ms',
   lowerIsBetter = false,
+  applicable = true,
 ): EvalMetricCard {
   const currentValue = current?.[key];
   const baselineValue = baseline?.[key];
-  const hasCurrent = typeof currentValue === 'number';
-  const hasBaseline = typeof baselineValue === 'number';
+  const hasCurrent = applicable && typeof currentValue === 'number';
+  const hasBaseline = applicable && typeof baselineValue === 'number';
   let delta = '';
   let deltaClass = 'neutral';
   if (hasCurrent && hasBaseline) {
@@ -52,6 +53,8 @@ export function formatRunScore(value: number | undefined): string {
 export function normalizeEvalCase(raw: Record<string, unknown>, index: number): EvalCaseCreate {
   const expectedKeywords = raw.expectedKeywords ?? raw.expected_keywords;
   const expectedCitations = raw.expectedCitations ?? raw.expected_citations;
+  const expectedDocumentIds = raw.expectedDocumentIds ?? raw.expected_document_ids;
+  const expectedChunkIds = raw.expectedChunkIds ?? raw.expected_chunk_ids;
   const forbiddenKeywords = raw.forbiddenKeywords ?? raw.forbidden_keywords;
   return {
     caseId: String(raw.caseId ?? raw.id ?? `case-${index + 1}`).trim(),
@@ -60,6 +63,8 @@ export function normalizeEvalCase(raw: Record<string, unknown>, index: number): 
     question: String(raw.question ?? '').trim(),
     expectedKeywords: Array.isArray(expectedKeywords) ? expectedKeywords.map(String) : [],
     expectedCitations: Array.isArray(expectedCitations) ? expectedCitations.map(String) : [],
+    expectedDocumentIds: Array.isArray(expectedDocumentIds) ? expectedDocumentIds.map(String) : [],
+    expectedChunkIds: Array.isArray(expectedChunkIds) ? expectedChunkIds.map(String) : [],
     forbiddenKeywords: Array.isArray(forbiddenKeywords) ? forbiddenKeywords.map(String) : [],
   };
 }

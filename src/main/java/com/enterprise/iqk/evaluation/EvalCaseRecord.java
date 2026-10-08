@@ -38,6 +38,10 @@ public class EvalCaseRecord {
     private String questionText;
     /** 期望命中的引用列表 JSON（sourceType:title:chunkId 片段匹配） */
     private String expectedCitationsJson;
+    /** 期望命中的文档/文件标识列表 JSON，按 title 或 sourceType:title 精确匹配 */
+    private String expectedDocumentIdsJson;
+    /** 期望命中的切片标识列表 JSON，支持 chunkId 或 title:chunkId */
+    private String expectedChunkIdsJson;
     /** 期望答案中出现的关键词列表 JSON */
     private String expectedKeywordsJson;
     /** 禁止出现的关键词列表 JSON：命中即触发幻觉惩罚 */

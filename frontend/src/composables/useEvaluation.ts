@@ -58,11 +58,17 @@ export const evalBaselineRun = computed<EvalRun | null>(() => evalComparison.val
 export const evalMetricCards = computed<EvalMetricCard[]>(() => {
   const current = evalCurrentRun.value?.metrics;
   const baseline = evalBaselineRun.value?.metrics;
+  const hasRetrievalMetrics = (current?.retrievalMetricsCases ?? 0) > 0;
   return [
     metricCard('runScore', '总分', current, baseline, 'percent'),
-    metricCard('retrievalHitRate', '检索命中率', current, baseline, 'percent'),
+    metricCard('recallAtKRate', 'Recall@K', current, baseline, 'percent', false,
+      hasRetrievalMetrics),
+    metricCard('mrrAtK', 'MRR@K', current, baseline, 'percent', false,
+      hasRetrievalMetrics),
+    metricCard('precisionAtKRate', 'Precision@K', current, baseline, 'percent', false,
+      hasRetrievalMetrics),
     metricCard('citationCoverageRate', '引用覆盖率', current, baseline, 'percent'),
-    metricCard('answerFaithfulnessScore', '忠实度', current, baseline, 'percent'),
+    metricCard('citationMarkerCoverageRate', '引用标记覆盖', current, baseline, 'percent'),
     metricCard('avgLatencyMs', '平均耗时', current, baseline, 'ms', true),
     metricCard('failureRate', '失败率', current, baseline, 'percent', true),
   ];

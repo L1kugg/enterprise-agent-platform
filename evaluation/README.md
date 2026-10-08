@@ -8,7 +8,10 @@
 | `dataset.large.json` | Auto-generated | Evaluator contract and optional live regression set |
 | `dataset.deepresearch-doc.json` | 9 cases | DeepResearch test-doc 4-tier difficulty set (driven by `scripts/eval_deepresearch_doc.py`) |
 
-Each case includes `expected_keywords`, `forbidden_keywords`, `category`, and optional `expected_citations`.
+Each case includes `expected_keywords`, `forbidden_keywords`, `category`, and optional
+`expected_citations`. For standard retrieval metrics, a case may also configure
+`expected_document_ids` (document level) or `expected_chunk_ids` (chunk level; preferred
+when both are present).
 
 ## Run Result Archive
 
@@ -44,11 +47,19 @@ The platform Evaluation Studio API persists and displays:
 | Metric | Description |
 |---|---|
 | Retrieval Hit Rate | % of cases where hybrid retrieval returned evidence or matched expected citations |
-| Citation Coverage | Coverage of expected citation tokens in returned citations |
-| Answer Faithfulness | Citation-marker support proxy for final answers |
+| Recall@K | Mean recall of expected documents/chunks in the ordered hybrid Top-K |
+| MRR@K | Mean reciprocal rank of expected documents/chunks in the ordered hybrid Top-K |
+| Precision@K | Share of returned hybrid Top-K entries matching expected documents/chunks |
+| Citation Coverage | Mean coverage across cases that configure expected citations |
+| Citation Marker Coverage | Share of returned citations explicitly marked in the final answer |
 | Average Latency | Average end-to-end evaluation latency per case |
 | Failure Rate | % of failed cases in the run |
 | Run Score | Weighted score across retrieval, citation, keyword, and faithfulness metrics |
+
+Keyword and forbidden-keyword coverage are scored against the final answer only.
+Cases without expected keywords, citations, or expected IDs are marked as not
+applicable instead of contributing full scores. Every run prefixes generated chat IDs
+with its run ID, preventing prior-run memory from leaking into a later evaluation.
 
 ## Live Quality Gate
 

@@ -120,10 +120,12 @@
           <template #default="{ row }">
             <div class="eval-expand">
               <div class="eval-expand-scores">
-                <span>检索命中 {{ formatPercent(row.retrievalHit) }}</span>
-                <span>引用覆盖 {{ formatPercent(row.citationCoverage) }}</span>
-                <span>关键词 {{ formatPercent(row.keywordScore) }}</span>
-                <span>忠实度 {{ formatPercent(row.answerFaithfulness) }}</span>
+                <span>Recall@K {{ formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable) }}</span>
+                <span>MRR@K {{ formatApplicablePercent(row.mrrAtK, row.retrievalMetricsApplicable) }}</span>
+                <span>Precision@K {{ formatApplicablePercent(row.precisionAtK, row.retrievalMetricsApplicable) }}</span>
+                <span>引用覆盖 {{ formatApplicablePercent(row.citationCoverage, row.citationCoverageApplicable) }}</span>
+                <span>关键词 {{ formatApplicablePercent(row.keywordScore, row.keywordScoreApplicable) }}</span>
+                <span>引用标记 {{ formatPercent(row.citationMarkerCoverage) }}</span>
               </div>
               <p class="eval-expand-label">模型回答</p>
               <div class="eval-expand-answer">{{ row.answer || '（无回答）' }}</div>
@@ -146,8 +148,8 @@
         <el-table-column label="得分" width="110">
           <template #default="{ row }">{{ formatPercent(row.score) }}</template>
         </el-table-column>
-        <el-table-column label="引用" width="120">
-          <template #default="{ row }">{{ formatPercent(row.citationCoverage) }}</template>
+        <el-table-column label="Recall@K" width="120">
+          <template #default="{ row }">{{ formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable) }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="120">
           <template #default="{ row }">{{ row.latencyMs }}ms</template>
@@ -187,6 +189,10 @@ const evalCaseDrafts = ref([{ question: '', expected: '', forbidden: '' }]);
 
 function addEvalCase() {
   evalCaseDrafts.value.push({ question: '', expected: '', forbidden: '' });
+}
+
+function formatApplicablePercent(value: number, applicable?: boolean) {
+  return applicable === false ? '-' : formatPercent(value);
 }
 
 function removeEvalCase(index: number) {

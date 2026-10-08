@@ -44,16 +44,29 @@ public class EvalResultRecord {
     private String citationsJson;
     /** 实际证据片段列表 JSON */
     private String evidenceJson;
+    /** 混合检索去重后的有序 Top-K 身份快照 JSON */
+    private String retrievedResultsJson;
     /** 检索命中分 0~1 */
     private Double retrievalHit;
+    /** 是否配置了标准检索指标期望 */
+    private Boolean retrievalMetricsApplicable;
+    /** document / chunk / none */
+    private String retrievalMetricLevel;
+    private Double recallAtK;
+    private Double mrrAtK;
+    private Double precisionAtK;
     /** 引用覆盖分 0~1 */
     private Double citationCoverage;
     /** 关键词命中分 0~1 */
     private Double keywordScore;
-    /** 答案忠实度 0~1 */
-    private Double answerFaithfulness;
+    /** 答案中引用标记覆盖率 0~1 */
+    private Double citationMarkerCoverage;
     /** 加权综合分 0~1（达到 0.70 记为通过） */
     private Double score;
+    /** 关键词/禁用词评分是否适用；false 表示该用例未配置相关期望 */
+    private Boolean keywordScoreApplicable;
+    /** 引用覆盖评分是否适用；false 表示该用例未配置期望引用 */
+    private Boolean citationCoverageApplicable;
     /** 单 case 耗时（毫秒） */
     private Long latencyMs;
     /** 失败原因（成功时为空） */

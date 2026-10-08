@@ -38,21 +38,27 @@ public class EvaluationReportRenderer {
         EvalMetricSummaryVO m = run.getMetrics();
         lines.add("| Run Score | " + pct(m.getRunScore()) + " |");
         lines.add("| Retrieval Hit Rate | " + pct(m.getRetrievalHitRate()) + " |");
+        lines.add("| Retrieval Metric Level | " + m.getRetrievalMetricLevel() + " |");
+        lines.add("| Recall@K | " + pct(m.getRecallAtKRate()) + " |");
+        lines.add("| MRR@K | " + pct(m.getMrrAtK()) + " |");
+        lines.add("| Precision@K | " + pct(m.getPrecisionAtKRate()) + " |");
         lines.add("| Citation Coverage | " + pct(m.getCitationCoverageRate()) + " |");
-        lines.add("| Answer Faithfulness | " + pct(m.getAnswerFaithfulnessScore()) + " |");
+        lines.add("| Citation Marker Coverage | " + pct(m.getCitationMarkerCoverageRate()) + " |");
         lines.add("| Avg Latency | " + String.format(Locale.ROOT, "%.1f ms", m.getAvgLatencyMs()) + " |");
         lines.add("| Failure Rate | " + pct(m.getFailureRate()) + " |");
         lines.add("");
         lines.add("## Cases");
         lines.add("");
-        lines.add("| Case | Status | Score | Retrieval | Citation | Faithfulness | Latency |");
-        lines.add("| --- | --- | ---: | ---: | ---: | ---: | ---: |");
+        lines.add("| Case | Status | Score | Recall@K | MRR@K | Precision@K | Citation | Marker | Latency |");
+        lines.add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
         for (EvalResultVO result : run.getResults()) {
             lines.add("| `" + result.getCaseId() + "` | " + result.getStatus()
                     + " | " + pct(result.getScore())
-                    + " | " + pct(result.getRetrievalHit())
-                    + " | " + pct(result.getCitationCoverage())
-                    + " | " + pct(result.getAnswerFaithfulness())
+                    + " | " + optionalPct(result.getRecallAtK(), result.isRetrievalMetricsApplicable())
+                    + " | " + optionalPct(result.getMrrAtK(), result.isRetrievalMetricsApplicable())
+                    + " | " + optionalPct(result.getPrecisionAtK(), result.isRetrievalMetricsApplicable())
+                    + " | " + optionalPct(result.getCitationCoverage(), result.isCitationCoverageApplicable())
+                    + " | " + pct(result.getCitationMarkerCoverage())
                     + " | " + result.getLatencyMs() + " ms |");
         }
         lines.add("");
@@ -62,5 +68,9 @@ public class EvaluationReportRenderer {
     /** 0~1 分值格式化为百分数文本。 */
     private String pct(double value) {
         return String.format(Locale.ROOT, "%.2f%%", value * 100.0);
+    }
+
+    private String optionalPct(double value, boolean applicable) {
+        return applicable ? pct(value) : "N/A";
     }
 }

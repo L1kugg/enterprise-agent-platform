@@ -15,6 +15,7 @@ import com.enterprise.iqk.retrieval.HybridRetrievalService;
 import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.retrieval.VectorRetriever;
+import com.enterprise.iqk.retrieval.RetrievalResultItem;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.Counter;
@@ -89,6 +90,7 @@ public class HybridRagAnswerService {
             if (retrievedDocs.isEmpty()) {
                 pipelineOutcome = "empty";
                 return HybridRagResult.builder()
+                        .retrievalResults(toRetrievalItems(retrievedDocs))
                         .answer(EMPTY_ANSWER)
                         .citations(List.of())
                         .evidence(List.of())
@@ -112,6 +114,7 @@ public class HybridRagAnswerService {
                         .answer(EMPTY_ANSWER)
                         .citations(List.of())
                         // 提示行借 EvidenceItem.snippet 装载（映射观测载荷时以 snippet 文本呈现，
+                        .retrievalResults(toRetrievalItems(retrievedDocs))
                         // 与主聊天旧单路的空结果提示行同句）
                         .evidence(List.of(EvidenceItem.builder().snippet(EMPTY_EVIDENCE_HINT).build()))
                         .traceId(traceId)
@@ -172,6 +175,7 @@ public class HybridRagAnswerService {
                 log.warn("混合 RAG 生成失败，返回固定兜底文案: chatId={}, reason={}", chatId, ex.toString());
                 return HybridRagResult.builder()
                         .answer(GENERATION_FALLBACK_ANSWER)
+                        .retrievalResults(toRetrievalItems(retrievedDocs))
                         .citations(List.of())
                         .evidence(List.of())
                         .traceId(traceId)
@@ -191,6 +195,7 @@ public class HybridRagAnswerService {
             return HybridRagResult.builder()
                     .answer(answerWithCitations)
                     .citations(citations)
+                    .retrievalResults(toRetrievalItems(retrievedDocs))
                     .evidence(evidence)
                     .traceId(traceId)
                     .memoryUsed(memoryUsedLabels(memorySnapshot))
@@ -351,6 +356,16 @@ public class HybridRagAnswerService {
     }
 
     /** 把检索文档拼成 "[n] source=..., title=..., chunk=..." 编号上下文块，供 prompt 引用。 */
+    private List<RetrievalResultItem> toRetrievalItems(List<ScoredDocument> documents) {
+        return documents == null ? List.of() : documents.stream()
+                .map(document -> new RetrievalResultItem(
+                        document.getSourceType(),
+                        document.getTitle(),
+                        document.getChunkId(),
+                        document.getFinalScore()))
+                .toList();
+    }
+
     private String buildContext(List<ScoredDocument> docs) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < docs.size(); i++) {
@@ -376,6 +391,8 @@ public class HybridRagAnswerService {
         private List<CitationItem> citations;
         /** 判分后的证据列表 */
         private List<EvidenceItem> evidence;
+        /** 混合检索去重后的有序 Top-K 身份快照，用于 Recall/MRR/Precision 评测 */
+        private List<RetrievalResultItem> retrievalResults;
         /** 本次管线追踪 ID，用于日志关联 */
         private String traceId;
         /** 实际注入上下文的记忆标签（type + 内容摘要） */

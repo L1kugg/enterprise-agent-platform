@@ -16,6 +16,10 @@ public class EvalCaseCreateVO {
     private String question;
     /** 期望命中的引用（sourceType:title:chunkId 片段匹配） */
     private List<String> expectedCitations;
+    /** 期望命中的文档/文件标识 */
+    private List<String> expectedDocumentIds;
+    /** 期望命中的切片标识：chunkId 或 title:chunkId */
+    private List<String> expectedChunkIds;
     /** 期望答案中出现的关键词 */
     private List<String> expectedKeywords;
     /** 禁止出现的关键词：命中即按幻觉惩罚 */

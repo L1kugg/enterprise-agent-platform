@@ -124,7 +124,7 @@ curl -X POST "$BASE_URL/ai/evaluation/datasets" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -H "X-Tenant-Id: $TENANT_ID" \
-  -d '{"name":"热作业安全冒烟集","cases":[{"caseId":"case-001","question":"动火作业前需要什么许可?","expectedKeywords":["动火作业许可"]}]}'
+  -d '{"name":"热作业安全冒烟集","cases":[{"caseId":"case-001","question":"动火作业前需要什么许可?","expectedKeywords":["动火作业许可"],"expectedDocumentIds":["safety-policy.md"]}]}'
 
 # 列出评测集 / 删除评测集（同一事务内级联清理结果 → 运行 → 用例 → 数据集，回执带各层条数）
 curl "$BASE_URL/ai/evaluation/datasets" \
@@ -148,6 +148,10 @@ curl "$BASE_URL/ai/evaluation/datasets/<datasetId>/comparison" \
 curl "$BASE_URL/ai/evaluation/runs/<runId>/report" \
   -H "X-API-Key: $API_KEY" -H "X-Tenant-Id: $TENANT_ID"
 ```
+
+`expectedDocumentIds` enables document-level `Recall@K / MRR@K / Precision@K`;
+`expectedChunkIds` enables the stricter chunk-level version and takes precedence
+when both are configured.
 
 ## 用量统计
 

@@ -161,12 +161,21 @@ export interface TenantCostTrendPoint {
   costUsd: number;
 }
 
+export interface RetrievalResultItem {
+  sourceType: string;
+  title: string;
+  chunkId: string;
+  score: number;
+}
+
 export interface EvalCaseCreate {
   caseId?: string;
   category?: string;
   chatId?: string;
   question: string;
   expectedCitations?: string[];
+  expectedDocumentIds?: string[];
+  expectedChunkIds?: string[];
   expectedKeywords?: string[];
   forbiddenKeywords?: string[];
 }
@@ -205,8 +214,13 @@ export interface EvalMetricSummary {
   passedCases: number;
   runScore: number;
   retrievalHitRate: number;
+  retrievalMetricsCases: number;
+  retrievalMetricLevel: string;
+  recallAtKRate: number;
+  mrrAtK: number;
+  precisionAtKRate: number;
   citationCoverageRate: number;
-  answerFaithfulnessScore: number;
+  citationMarkerCoverageRate: number;
   avgLatencyMs: number;
   failureRate: number;
 }
@@ -219,11 +233,19 @@ export interface EvalResult {
   answer: string;
   citations: string[];
   evidence: string[];
+  retrievedResults: RetrievalResultItem[];
   retrievalHit: number;
+  retrievalMetricsApplicable: boolean;
+  retrievalMetricLevel: string;
+  recallAtK: number;
+  mrrAtK: number;
+  precisionAtK: number;
   citationCoverage: number;
   keywordScore: number;
-  answerFaithfulness: number;
+  citationMarkerCoverage: number;
   score: number;
+  keywordScoreApplicable?: boolean;
+  citationCoverageApplicable?: boolean;
   latencyMs: number;
   errorMessage?: string;
 }

@@ -30,6 +30,7 @@ class EvaluationServiceTest {
                 mock(HybridRagAnswerService.class),
                 new ObjectMapper(),
                 mock(EvaluationScorer.class),
+                new EvaluationSummaryCalculator(),
                 mock(EvaluationReportRenderer.class));
     }
 
