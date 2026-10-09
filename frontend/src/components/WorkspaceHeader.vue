@@ -216,7 +216,7 @@ const platformSubtitle = computed(() => platformCopy[platformSection.value]?.[1]
 
 .expand-col-btn:hover {
   color: var(--ui-text);
-  border-color: rgba(14, 116, 144, 0.4);
+  border-color: rgba(49, 93, 235, 0.4);
 }
 
 h2 {

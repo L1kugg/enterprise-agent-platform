@@ -91,7 +91,7 @@ import { formatTime } from '../utils/format';
 }
 
 .branch-item.active {
-  border-color: rgba(14, 116, 144, 0.45);
+  border-color: rgba(49, 93, 235, 0.45);
 }
 
 .branch-line {

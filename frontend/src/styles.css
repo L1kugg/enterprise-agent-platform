@@ -6,20 +6,20 @@
 :root {
   --ui-text: #17222e;
   --ui-muted: #5b6878;
-  --ui-accent: #0e7490;
-  --ui-accent-strong: #0f766e;
+  --ui-accent: #315DEB;
+  --ui-accent-strong: #274ABC;
   --ui-border: rgba(23, 34, 46, 0.13);
   --ui-card: rgba(255, 255, 255, 0.86);
   --ui-panel: rgba(240, 245, 248, 0.8);
 
-  /* Element Plus 品牌对齐：默认蓝换成产品 teal，消除自定义件与组件库的色差 */
-  --el-color-primary: #0e7490;
-  --el-color-primary-light-3: #3d97ab;
-  --el-color-primary-light-5: #6fb4c3;
-  --el-color-primary-light-7: #a4d0da;
-  --el-color-primary-light-8: #c2dfe6;
-  --el-color-primary-light-9: #e6f1f4;
-  --el-color-primary-dark-2: #0b5c73;
+  /* Element Plus 品牌对齐：主色统一为 #315DEB，消除自定义件与组件库的色差 */
+  --el-color-primary: #315DEB;
+  --el-color-primary-light-3: #6f8ef1;
+  --el-color-primary-light-5: #98aef5;
+  --el-color-primary-light-7: #c1cef9;
+  --el-color-primary-light-8: #d6dffb;
+  --el-color-primary-light-9: #eaeffd;
+  --el-color-primary-dark-2: #274abc;
   --el-border-radius-base: 8px;
   --el-font-family: 'IBM Plex Sans', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif;
 }
@@ -27,19 +27,19 @@
 html.dark {
   --ui-text: #e5edf3;
   --ui-muted: #93a3b5;
-  --ui-accent: #38bdf8;
-  --ui-accent-strong: #2dd4bf;
+  --ui-accent: #6f8ef1;
+  --ui-accent-strong: #315deb;
   --ui-border: rgba(148, 163, 184, 0.22);
   --ui-card: rgba(13, 20, 32, 0.86);
   --ui-panel: rgba(22, 31, 47, 0.78);
 
-  --el-color-primary: #2dd4bf;
-  --el-color-primary-light-3: #4ddcc9;
-  --el-color-primary-light-5: #7be7d8;
-  --el-color-primary-light-7: #a9f0e5;
-  --el-color-primary-light-8: #c0f4ec;
-  --el-color-primary-light-9: #e8fbf7;
-  --el-color-primary-dark-2: #14b8a6;
+  --el-color-primary: #6f8ef1;
+  --el-color-primary-light-3: #9ab0f5;
+  --el-color-primary-light-5: #b7c7f8;
+  --el-color-primary-light-7: #d4ddfb;
+  --el-color-primary-light-8: #e2e8fc;
+  --el-color-primary-light-9: #f1f4fe;
+  --el-color-primary-dark-2: #5972c1;
 }
 
 *,
@@ -59,13 +59,13 @@ body {
   font-family: var(--el-font-family);
   color: var(--ui-text);
   background:
-    radial-gradient(1200px 480px at 88% -12%, rgba(14, 116, 144, 0.07), transparent 62%),
+    radial-gradient(1200px 480px at 88% -12%, rgba(49, 93, 235, 0.07), transparent 62%),
     linear-gradient(180deg, #f8fafb 0%, #f1f5f7 100%);
 }
 
 html.dark body {
   background:
-    radial-gradient(1100px 420px at 85% -10%, rgba(45, 212, 191, 0.06), transparent 60%),
+    radial-gradient(1100px 420px at 85% -10%, rgba(111, 142, 241, 0.06), transparent 60%),
     linear-gradient(180deg, #0a111d 0%, #0d1524 100%);
 }
 

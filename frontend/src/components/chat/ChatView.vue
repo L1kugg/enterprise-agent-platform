@@ -530,7 +530,7 @@ import {
   place-items: center;
   font-size: 11px;
   font-weight: 700;
-  background: linear-gradient(150deg, #0f766e, #0369a1);
+  background: linear-gradient(150deg, #274abc, #315deb);
   color: #f8fafc;
 }
 
