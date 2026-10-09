@@ -46,14 +46,14 @@ public class BuiltinToolRuntime implements AgentRuntime {
     @Override
     public AgentObservation execute(AgentAction action) {
         long startedNs = System.nanoTime();
-        Object payload = switch (action.action()) {
+        Map<String, Object> payload = switch (action.action()) {
             case "create_task" -> executeCreateTask(action);
             case "rag_search" -> executeRagSearch(action);
             case "query_database" -> executeDatabaseQuery(action);
             default -> Map.of("status", "error", "message", "unsupported action: " + action.action());
         };
-        if (payload instanceof Map<?, ?> mapPayload && "error".equals(mapPayload.get("status"))) {
-            Object message = mapPayload.get("message");
+        if ("error".equals(payload.get("status"))) {
+            Object message = payload.get("message");
             return AgentObservation.error(source(), message == null ? "action failed" : String.valueOf(message),
                     elapsedMs(startedNs));
         }
