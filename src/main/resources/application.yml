@@ -216,9 +216,17 @@ app:
       # 瞬时故障（网络异常/5xx）在适配器层重试的次数与退避基数，0 表示关闭重试
       retry-attempts: ${APP_AGENT_HARNESS_MCP_RETRY_ATTEMPTS:2}
       retry-backoff-ms: ${APP_AGENT_HARNESS_MCP_RETRY_BACKOFF_MS:200}
-      # SSRF 白名单：解析到私有/回环地址的主机默认一律拒绝，需在此显式放行
-      # （逗号分隔配多个，".example.com" 形式按后缀匹配整段域）
+      # SSRF 白名单：只收窄可访问的主机范围（逗号分隔，".example.com" 形式按后缀
+      # 匹配整段域）。命中白名单不豁免任何地址检查——解析到回环/私有网段的地址
+      # 必须在 allowed-internal-addresses 中按"主机+端口+网段"逐条显式授权。
       allowed-hosts: ${APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS:mcp-weather}
+      # 内部地址显式授权（无按环境一键放行的开关，生产同理需逐条声明）：
+      # weather MCP 是 compose 服务名 mcp-weather，经 Docker 内置 DNS 解析到容器网段
+      # （默认 172.16.0.0/12），故按其服务名 + 端口 + 网段显式授权
+      allowed-internal-addresses:
+        - host: mcp-weather
+          port: 9101
+          cidrs: ["172.16.0.0/12"]
       servers:
         # 天气 MCP 翻译壳：compose 服务 mcp-weather（deploy/docker-compose.prod.yml），
         # 桥接 Open-Meteo 免费天气 API；本地无该容器时调用会在 supports() 处报未注册，不影响其它功能

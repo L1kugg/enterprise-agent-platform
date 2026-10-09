@@ -56,6 +56,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
+        <!-- MCP HTTP 出站专用：连接管理器支持自定义 DnsResolver，
+             使 SSRF 校验通过的地址即实际连接地址（真 DNS 固定，JDK HttpClient 无此能力）。
+             版本由 Spring Boot 3.4 BOM 管理。 -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>

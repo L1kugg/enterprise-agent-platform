@@ -45,7 +45,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | `TrustedActionService.java` | 受信动作：高危操作（如写库）先出预览，确认后执行，token 清理 |
 | `BuiltinToolRuntime.java` | 内置动作执行：create_task/rag_search/query_database（rag_search 内部调 `rag/HybridRagAnswerService` 四路混合，citations 映射回 `source=..., chunk=...` 文本、载荷键 query/answer/citations/evidence/weights 与旧单路一致；query_database 内部调 `tools/DatabaseQueryTools`，租户从 action.tenantId() 服务端注入） |
 | `WorkspaceRuntime.java` | 工作区动作：文件读写/搜索/受限 shell，mvn/git/ripgrep 白名单，文件大小与搜索结果截断 |
-| `McpToolAdapter.java` / `HttpMcpToolAdapter.java` / `McpToolRuntime.java` | MCP 出站桥接：手拼 JSON-RPC 2.0 `tools/call`，JDK HttpClient 直连；SSRF 防护（拒绝 RFC1918/回环/云元数据地址 + allowedHosts 白名单）、响应体 2 MiB 上限、瞬时故障退避重试（重试不过模型、不烧 token）。已接首个真实工具：天气（详见下方"MCP 工具调用全链路"） |
+| `McpToolAdapter.java` / `HttpMcpToolAdapter.java` / `McpToolRuntime.java` | MCP 出站桥接：手拼 JSON-RPC 2.0 `tools/call`，Apache HttpClient 5 直连（连接点 DNS 固定防重绑定）；SSRF 防护（allowedHosts 白名单只收窄主机范围 + 回环/私有/云元数据地址须经 allowed-internal-addresses 按"主机+端口+网段"逐条授权 + 重定向禁用）、响应体 2 MiB 上限（流式有界读取）、瞬时故障退避重试（重试不过模型、不烧 token）。已接首个真实工具：天气（详见下方"MCP 工具调用全链路"） |
 | `HarnessPayloadSanitizer.java` | 观测载荷消毒裁剪（防工具返回值撑爆上下文） |
 | `HarnessEventRecorder.java` / `AgentObservation.java` | 执行留痕与观测结构 |
 | `UnifiedDiffService.java` | 结构化 diff 输出（受信动作预览用） |
@@ -63,13 +63,13 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | ③ schema 注册（mcp_call 非 trustedOnly） | `agent/harness/ActionSchemaRegistry.java`：required=server/tool/arguments、riskLevel=external、trustedOnly=false、plannerHint=天气用法（①②均由本表单一来源生成，受信边界见下） |
 | ④ 统一入口 + 策略守卫 | `agent/harness/AgentHarnessService.execute()` → `ActionPolicyGuard.evaluate()`（六道检验：schema 存在 / disabled-actions 熔断 / 租户动作白名单 / 受信要求 / 必填字段 / schema 外未知字段） |
 | ⑤ 运行时分发 | `agent/harness/McpToolRuntime.execute()`：从 actionInput 取 server/tool/arguments → 按 supports(server,tool) 选适配器 → 壳返回 status=error 即转错误观测，成功包成 `{"server","tool","result"}` 观测 |
-| ⑥ HTTP 桥接 | `agent/harness/HttpMcpToolAdapter.execute()`：组 JSON-RPC `tools/call` → SSRF 复检（`isSafeBaseUrl`，拼 URI 前后再查一次）→ 按工具超时请求（瞬时故障本层线性退避重试）→ 2 MiB 上限 → 解析回执 |
+| ⑥ HTTP 桥接 | `agent/harness/HttpMcpToolAdapter.execute()`：组 JSON-RPC `tools/call` → SSRF 预检（`isSafeBaseUrl`，拼 URI 前后再查一次）→ 按工具超时请求（瞬时故障本层线性退避重试；连接点 `PinningDnsResolver` 对解析结果做权威授权校验后才交给 socket）→ 2 MiB 有界读取 → 解析回执 |
 | ⑦ 翻译壳（部署物） | `mcp-weather/mcp_weather.py`：`POST /mcp/tools/call` → Open-Meteo geocode（城市名→经纬度，中文可查）+ forecast（实况 + 当日温度/天气码中文化）→ 含 summary 的中文摘要；查无城市/上游故障回 `{"status":"error","message":...}`（HTTP 恒 200，避免被当网络故障重试）。`deploy/docker-compose.prod.yml` 的 `mcp-weather` 服务（python:3.12-slim，端口 127.0.0.1:9101 仅回环，脚本卷挂载免自定义镜像） |
-| ⑧ 配置 | `application.yml` `app.agent-harness.mcp.servers.weather`：base-url 指容器名 `http://mcp-weather:9101`（本地无此容器时 supports() 判未注册、不影响其它功能）+ `allowed-hosts` 放行容器名（否则 SSRF 护栏拒一切私有地址）+ 工具超时 8s（覆盖壳内 geocode+forecast 串行） |
+| ⑧ 配置 | `application.yml` `app.agent-harness.mcp.servers.weather`：base-url 指容器名 `http://mcp-weather:9101`（本地无此容器时 supports() 判未注册、不影响其它功能）+ `allowed-hosts` 收窄容器名 + `allowed-internal-addresses` 按 `mcp-weather:9101@172.16.0.0/12` 显式授权容器网段（白名单命中不豁免地址检查，内网地址必须逐条授权）+ 工具超时 8s（覆盖壳内 geocode+forecast 串行） |
 
 **完整调用链**：用户问天气 → 规划器输出 mcp_call JSON → ② 白名单放行 → ④ 守卫放行 → ⑤ McpToolRuntime 选适配器 → ⑥ HttpMcpToolAdapter 发 JSON-RPC → ⑦ 壳查 Open-Meteo → 观测回填 ReAct 轨迹 → 模型 finish 作答。standard 与 workflow 两条 ReAct 引擎均可用。
 
-**受信边界**：mcp_call 与 workspace 写/壳动作不同——只读外部查询，风险由 SSRF 校验、allowed-hosts、2 MiB 上限、按工具超时兜底，故 trustedOnly=false、聊天循环直接调用；`TrustedActionService` 的 preview/execute 两段式流程依旧只收 trustedOnly 动作（对 mcp_call 报 "action does not require trusted runtime"，属设计使然）。运维熔断开关：`app.agent-harness.disabled-actions`、租户动作白名单。
+**受信边界**：mcp_call 与 workspace 写/壳动作不同——只读外部查询，风险由 SSRF 校验（白名单收窄 + 内部地址显式授权 + 连接点 DNS 固定 + 禁重定向）、2 MiB 上限、按工具超时兜底，故 trustedOnly=false、聊天循环直接调用；`TrustedActionService` 的 preview/execute 两段式流程依旧只收 trustedOnly 动作（对 mcp_call 报 "action does not require trusted runtime"，属设计使然）。运维熔断开关：`app.agent-harness.disabled-actions`、租户动作白名单。
 
 **测试**：`agent/harness/HttpMcpToolAdapterTest`（SSRF/重试/上限）、`McpToolRuntimeTest`（分发与错误转换）、`ActionPolicyGuardTest`（mcp_call 无受信标记可调）、`HarnessEvaluationTest`（harness 全链）、`service/ReactDecisionParserTest`（mcp_call 解析放行）、`PlannerActionCatalogTest`（注册表 → 提示词/白名单生成）。
 
