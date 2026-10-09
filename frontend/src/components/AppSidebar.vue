@@ -3,7 +3,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">AI</div>
       <div>
-        <strong>AISWare 渊思</strong>
+        <strong>Enterprise Agent Platform</strong>
         <small>AI Agent Platform</small>
       </div>
     </div>
