@@ -2,7 +2,7 @@
 
 ## 概述
 
-Model Context Protocol (MCP) 是 Anthropic 定义的开放协议，标准化了 LLM 与外部工具/数据源之间的交互层。KnowledgeOps Agent 当前的工具调用（`CourseTools` 等）通过 Spring AI `@Tool` 注解硬编码在进程内。MCP 桥接的目标是：**将工具边界从进程内扩展到进程外，同时保持多租户隔离和审计能力不变**。
+Model Context Protocol (MCP) 是 Anthropic 定义的开放协议，标准化了 LLM 与外部工具/数据源之间的交互层。KnowledgeOps Agent 当前的内置工具（`BuiltinToolRuntime` 等）硬编码在进程内。MCP 桥接的目标是：**将工具边界从进程内扩展到进程外，同时保持多租户隔离和审计能力不变**。
 
 核心价值：
 
@@ -74,7 +74,7 @@ flowchart LR
 ```
 ReAct Loop
   └─ ToolCallingLayer.invokeTool(toolName, args)
-       ├─ 内置工具 → CourseTools / HybridRetrievalService（现有路径）
+       ├─ 内置工具 → BuiltinToolRuntime / HybridRagAnswerService（现有路径）
        └─ MCP 工具 → McpToolProxy.call(serverId, toolName, args)
                           → JSON-RPC → MCP Server → 返回结果
 ```

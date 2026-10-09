@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 动作 schema 注册表：集中声明全部 12 个动作（builtin 5 + mcp_call 1 + workspace 6）。
+ * 动作 schema 注册表：集中声明全部 10 个动作（builtin 3 + mcp_call 1 + workspace 6）。
  * 构造器一次性注册、之后只读（LinkedHashMap + 读取时不可变拷贝），
  * 线程安全依赖"构造期写完、运行期只读"的单例初始化语义。
  * 两条 ReAct 链路的规划器提示词动作列表与解析白名单均由 {@link PlannerActionCatalog}
@@ -19,7 +19,7 @@ import java.util.Set;
 public class ActionSchemaRegistry {
     private final Map<String, ActionSchema> schemas = new LinkedHashMap<>();
 
-    /** 构造期一次性注册全部动作：builtin 5 个（读学校/读课程/预约/RAG 检索/主库只读查询）、mcp_call 1 个、workspace 6 个（列文件/读文件/搜文本/提补丁/应用补丁/跑命令） */
+    /** 构造期一次性注册全部动作：builtin 3 个（任务创建/RAG 检索/主库只读查询）、mcp_call 1 个、workspace 6 个（列文件/读文件/搜文本/提补丁/应用补丁/跑命令） */
     public ActionSchemaRegistry() {
         register(new ActionSchema("create_task", "builtin",
                 Set.of("title", "description"),

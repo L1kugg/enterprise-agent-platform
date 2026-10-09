@@ -24,7 +24,7 @@ model decision
 | `ActionPolicyGuard` | 对模型请求的 action 做白名单、schema、trusted runtime 校验 |
 | `AgentHarnessService` | 选择 runtime、执行 action、生成 observation、写入 action 事件 |
 | `AgentRuntime` | runtime 扩展接口 |
-| `BuiltinToolRuntime` | 执行当前内置工具：课程、预约、RAG 检索、主库只读查询 |
+| `BuiltinToolRuntime` | 执行当前内置工具：任务创建、RAG 检索、主库只读查询 |
 | `McpToolRuntime` | 通过 `McpToolAdapter` 白名单适配器调用 MCP 工具 |
 | `WorkspaceRuntime` | 在项目根目录内执行受限的文件、搜索、写入和命令动作 |
 | `TrustedActionService` | 生成受信 runtime 的 preview、一次性确认 token 与 execute 入口 |
@@ -35,9 +35,7 @@ model decision
 
 `BuiltinToolRuntime` 当前支持：
 
-- `query_school`
-- `query_course`
-- `add_course_reservation`
+- `create_task`
 - `rag_search`
 - `query_database`（模型生成 SQL 的只读查询：`SqlReadOnlyGuard` 正则守卫 + 租户占位符校验（业务表过滤只能写 `tenant_id = '__TENANT__'`，服务端执行前替换为当前租户，出现真实租户字面值一律拒绝）+ 只读会话/超时/行数与单元格截断多层防御）
 
@@ -49,9 +47,6 @@ Harness 当前注册的 action：
 
 | Action | Runtime | 信任级别 | 必填输入 |
 |---|---|---|---|
-| `query_school` | builtin | default | - |
-| `query_course` | builtin | default | - |
-| `add_course_reservation` | builtin | default | `course`, `studentName`, `contactInfo`, `school` |
 | `rag_search` | builtin | default | - |
 | `query_database` | builtin | default | `sql` |
 | `mcp_call` | mcp | trusted | `server`, `tool`, `arguments` |

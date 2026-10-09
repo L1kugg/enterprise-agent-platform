@@ -2,7 +2,6 @@ package com.enterprise.iqk.config;
 
 import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
-import com.enterprise.iqk.tools.CourseTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
@@ -33,12 +32,10 @@ public class CommonConfiguration {
     @Bean
     public ChatClient serviceChatClient(OpenAiChatModel model,
                                         ChatMemory chatMemory,
-                                        CourseTools courseTools,
                                         MemoryInjectionAdvisor memoryInjectionAdvisor) {
         return ChatClient
                 .builder(model)
                 .defaultSystem(SystemConstants.CUSTOMER_SERVICE_SYSTEM)
-                .defaultTools(courseTools)
                 .defaultAdvisors(new PassThroughLoggerAdvisor())//帮我记录日志
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())//增强器，MessageChatMemoryAdvisor：帮我们存储对话的上下文
                 .defaultAdvisors(memoryInjectionAdvisor)//记忆注入（同 chatClient）

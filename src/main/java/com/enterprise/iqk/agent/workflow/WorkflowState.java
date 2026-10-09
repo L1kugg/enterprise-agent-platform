@@ -39,7 +39,7 @@ public enum WorkflowState {
     public static WorkflowState forAction(String action) {
         return switch (action == null ? "finish" : action) {
             case "rag_search" -> SEARCHING;
-            case "query_database", "query_school", "query_course", "mcp_call" -> RETRIEVING;
+            case "query_database", "mcp_call" -> RETRIEVING;
             default -> WRITING;
         };
     }

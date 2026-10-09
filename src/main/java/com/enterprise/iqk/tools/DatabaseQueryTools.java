@@ -73,7 +73,7 @@ public class DatabaseQueryTools {
         return instrumentedQuery(sql, tenantId, config);
     }
 
-    /** 全程计时模板：守卫/租户拒绝与异常都计 error 状态，与 CourseTools 的 tool.query.latency 同构。 */
+    /** 全程计时模板：守卫/租户拒绝与异常都计 error 状态，发布 tool.query.latency 指标。 */
     private Map<String, Object> instrumentedQuery(String sql, String tenantId,
                                                   AgentHarnessProperties.DatabaseQuery config) {
         Timer.Sample sample = Timer.start(meterRegistry);

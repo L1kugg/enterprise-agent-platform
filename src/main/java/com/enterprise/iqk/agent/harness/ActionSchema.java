@@ -7,7 +7,7 @@ import java.util.Set;
  * 是策略守卫校验输入、事件记录标注风险等级、载荷脱敏的统一依据。
  */
 public record ActionSchema(
-        /** 动作名（小写，如 query_course / workspace_read_file） */
+        /** 动作名（小写，如 rag_search / workspace_read_file） */
         String action,
         /** 归属的 runtime（builtin / mcp / workspace），用于分发 */
         String runtime,
