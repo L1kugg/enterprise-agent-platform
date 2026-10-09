@@ -51,7 +51,7 @@ export interface MessageMetric {
 }
 
 export type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
-export type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'admin' | 'usage';
+export type ConsoleView = 'chat' | 'evaluation' | 'knowledge' | 'platform' | 'admin' | 'usage';
 
 export interface EvalMetricCard {
   key: keyof EvalMetricSummary;

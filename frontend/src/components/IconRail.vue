@@ -36,7 +36,17 @@
           <span>知识库</span>
         </button>
       </el-tooltip>
-      <el-tooltip v-if="isAdmin" content="管理员文档总览" placement="right" :show-after="300">
+      <el-tooltip v-if="isAdmin" content="平台基础配置" placement="right" :show-after="300">
+        <button
+          type="button"
+          class="rail-btn"
+          :class="{ active: activeView === 'platform' }"
+          @click="activateView('platform')"
+        >
+          <el-icon :size="18"><Connection /></el-icon>
+          <span>平台</span>
+        </button>
+      </el-tooltip>      <el-tooltip v-if="isAdmin" content="管理员文档总览" placement="right" :show-after="300">
         <button
           type="button"
           class="rail-btn"
@@ -74,7 +84,7 @@
 // 图标栏：模板与样式从 App.vue 原文搬入，行为零变化。
 // 页签状态/切换在 useGlobalUi + useViewActivation 单例；"设置"按钮直接打开
 // SettingsDialog 的开关。管理员页签按 isAdmin 显隐。
-import { ChatDotRound, DataAnalysis, FolderOpened, Notebook, Setting, TrendCharts } from '@element-plus/icons-vue';
+import { ChatDotRound, Connection, DataAnalysis, FolderOpened, Notebook, Setting, TrendCharts } from '@element-plus/icons-vue';
 import { activeView, opsDialogVisible } from '../composables/useGlobalUi';
 import { isAdmin } from '../composables/useAuthState';
 import { activateView } from '../composables/useViewActivation';

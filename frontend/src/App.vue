@@ -6,7 +6,7 @@
     class="app-shell"
     :class="{ 'shell-with-sessions': sessionColVisible }"
   >
-    <IconRail />
+    <AppSidebar />
 
     <SessionSidebar />
 
@@ -16,6 +16,8 @@
       <ChatView v-if="activeView === 'chat'" />
 
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
+
+      <PlatformView v-else-if="isAdmin && activeView === 'platform'" />
 
       <AdminView v-else-if="isAdmin && activeView === 'admin'" />
 
@@ -36,12 +38,13 @@
 import AuthGate from './components/AuthGate.vue';
 import BranchDrawer from './components/BranchDrawer.vue';
 import ChatView from './components/chat/ChatView.vue';
-import IconRail from './components/IconRail.vue';
+import AppSidebar from './components/AppSidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import UsageView from './components/usage/UsageView.vue';
 import AdminView from './components/admin/AdminView.vue';
 import EvaluationView from './components/evaluation/EvaluationView.vue';
 import KnowledgeView from './components/knowledge/KnowledgeView.vue';
+import PlatformView from './components/platform/PlatformView.vue';
 import WorkspaceHeader from './components/WorkspaceHeader.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
 import { onBeforeUnmount, onMounted } from 'vue';
@@ -71,6 +74,7 @@ import {
   loadKnowledgeJobs,
   stopKnowledgePolling,
 } from './composables/useKnowledge';
+import { loadPlatformOverview } from './composables/usePlatformAssets';
 import {
   dismissComposerUploadChip,
   stopComposerUploadPolling,
@@ -118,6 +122,10 @@ onMounted(() => {
     void loadEvalDatasets();
   }
 
+  if (activeView.value === 'platform' && isAdmin.value) {
+    void loadPlatformOverview();
+  }
+
   if (activeView.value === 'knowledge') {
     void loadKnowledgeJobs();
     void loadKnowledgeDocuments();
@@ -148,7 +156,7 @@ onBeforeUnmount(() => {
      就把整页撑高，聊天区滚到底再往下滚，整页跟着滚、输入框下方露出大片空白。 */
   height: 100vh;
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   color: var(--ui-text);
@@ -156,7 +164,7 @@ onBeforeUnmount(() => {
 
 /* 聊天页且未折叠时，会话栏占中间一列；其它页签内容区占满整行 */
 .app-shell.shell-with-sessions {
-  grid-template-columns: 64px 260px minmax(0, 1fr);
+  grid-template-columns: 236px 260px minmax(0, 1fr);
 }
 
 .workspace {
@@ -171,14 +179,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1160px) {
   .app-shell.shell-with-sessions {
-    grid-template-columns: 64px 224px minmax(0, 1fr);
+    grid-template-columns: 210px 224px minmax(0, 1fr);
   }
 }
 
 @media (max-width: 980px) {
   .app-shell,
   .app-shell.shell-with-sessions {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
   }
 }
 </style>

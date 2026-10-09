@@ -29,7 +29,11 @@
       <h2>知识库</h2>
       <p class="workspace-sub">上传文档 → 自动切分入库 → 参与全库检索</p>
     </div>
-    <div v-else-if="activeView === 'admin'">
+    <div v-else-if="activeView === 'platform'">
+      <p class="workspace-kicker">Workspace</p>
+      <h2>{{ platformTitle }}</h2>
+      <p class="workspace-sub">{{ platformSubtitle }}</p>
+    </div>    <div v-else-if="activeView === 'admin'">
       <p class="workspace-kicker">Admin Documents</p>
       <h2>文档总览</h2>
       <p class="workspace-sub">跨租户查看所有用户上传的文档</p>
@@ -97,6 +101,11 @@
         >设为基线</el-button
       >
     </div>
+    <div v-else class="head-actions">
+      <el-tag size="small" effect="plain">{{ role || 'GUEST' }}</el-tag>
+      <span class="stream-detail">{{ tenantInput || 'public' }}</span>
+      <el-button size="small" @click="opsDialogVisible = true">个人设置</el-button>
+    </div>
   </header>
 </template>
 
@@ -106,10 +115,14 @@
 // 状态全部来自 useGlobalUi/useChatState/useSessions/useEvaluation 单例，
 // 无需 props/emits。"展开会话栏"按钮直接改 sessionColCollapsed（与会话栏共享）。
 import { CaretRight } from '@element-plus/icons-vue';
+import { computed } from 'vue';
+import { role, tenantInput } from '../composables/useAuthState';
+import { platformSection } from '../composables/usePlatformAssets';
 import {
   activeView,
   branchDrawerVisible,
   darkMode,
+  opsDialogVisible,
   sessionColCollapsed,
 } from '../composables/useGlobalUi';
 import {
@@ -140,6 +153,18 @@ import {
   markCurrentEvalRunBaseline,
   runSelectedEvalDataset,
 } from '../composables/useEvaluation';
+const platformCopy = {
+  overview: ['平台总览', '当前租户资源配置与最近更新'],
+  agents: ['智能体', '配置基本信息、模型、资源编排与执行策略'],
+  workflows: ['工作流', '管理工作流配置并兼容既有 JSON 图结构'],
+  tools: ['工具管理', '表单式 API、代码式 API 与 SQL 工具'],
+  knowledge: ['知识库', '文档上传、解析状态与分段检索'],
+  'safety-guards': ['安全防护', '过滤主题、阻止消息与生效状态'],
+  'model-services': ['模型服务', '模型连接配置、脱敏展示与连接测试'],
+  databases: ['系统管理', '第三方数据库配置'],
+} as const;
+const platformTitle = computed(() => platformCopy[platformSection.value]?.[0] ?? '平台配置');
+const platformSubtitle = computed(() => platformCopy[platformSection.value]?.[1] ?? '');
 </script>
 
 <style scoped>

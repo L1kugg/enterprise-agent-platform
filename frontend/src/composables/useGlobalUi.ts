@@ -9,11 +9,11 @@ import { persistState, readBootstrap, registerPersistSlice } from './persistence
 
 const bootstrap = readBootstrap();
 
-// 全部合法视图（同时也是地址栏路径名：/chat /evaluation /knowledge /admin /usage）。
+// 全部合法视图（同时也是地址栏路径名：/chat /evaluation /knowledge /platform /admin /usage）。
 // 视图与地址栏的单向镜像同步不引 vue-router：activeView 仍是唯一状态源，
 // watch 里 pushState、popstate 里回写；nginx 的 try_files 已把任意路径回退到
 // index.html，刷新/直达/分享链接天然可用。
-const CONSOLE_VIEWS: readonly ConsoleView[] = ['chat', 'evaluation', 'knowledge', 'admin', 'usage'];
+const CONSOLE_VIEWS: readonly ConsoleView[] = ['chat', 'evaluation', 'knowledge', 'platform', 'admin', 'usage'];
 
 function isConsoleView(value: unknown): value is ConsoleView {
   return CONSOLE_VIEWS.includes(value as ConsoleView);

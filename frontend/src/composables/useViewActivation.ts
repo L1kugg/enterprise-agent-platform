@@ -13,6 +13,7 @@ import {
   loadKnowledgeJobs,
 } from './useKnowledge';
 import { loadAdminDocuments } from './useAdmin';
+import { loadPlatformOverview } from './usePlatformAssets';
 import { loadUsageTrend } from './useUsage';
 
 export function activateView(view: ConsoleView): void {
@@ -24,6 +25,9 @@ export function activateView(view: ConsoleView): void {
   if (view === 'knowledge' && !knowledgeLoading.value) {
     void loadKnowledgeJobs();
     void loadKnowledgeDocuments();
+  }
+  if (view === 'platform' && isAdmin.value) {
+    void loadPlatformOverview();
   }
   if (view === 'admin' && isAdmin.value) {
     void loadAdminDocuments();
