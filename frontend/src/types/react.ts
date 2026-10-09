@@ -89,6 +89,8 @@ export interface SessionState {
   workspaceId: string;
   activeBranchId: string;
   branches: SessionBranch[];
+  handoffSummary?: string;
+  handoffGeneratedAt?: number;
 }
 
 export interface BranchCompareRequest {

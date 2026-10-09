@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 
 import {
   compareSessionBranches,
+  generateSessionHandoff,
   listSessionStates,
   mergeSessionBranches,
   saveSessionState,
@@ -376,7 +377,7 @@ export async function renameSession(sessionId: string): Promise<void> {
   if (!newName || newName === session.title) {
     return;
   }
-  session.title = newName;
+      session.title = newName;
   session.updatedAt = Date.now();
   persistState();
   if (canUseRemoteSync.value) {
@@ -386,6 +387,46 @@ export async function renameSession(sessionId: string): Promise<void> {
       const message = error instanceof Error ? error.message : '会话重命名同步失败';
       ElMessage.error(message);
     }
+  }
+}
+
+export async function generateHandoffSummary(sessionId: string): Promise<void> {
+  const session = getSession(sessionId);
+  if (!session) {
+    return;
+  }
+  let summary = '';
+  try {
+    const normalized = normalizeRemoteSession(
+      await generateSessionHandoff(sessionId, authContext()),
+    );
+    summary = normalized.handoffSummary ?? '';
+    const index = sessions.value.findIndex((item) => item.id === sessionId);
+    if (index >= 0) {
+      sessions.value[index] = normalized;
+    }
+    if (activeSessionId.value === sessionId) {
+      loadSession(sessionId);
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '交接摘要生成失败');
+    return;
+  }
+  if (!summary) {
+    ElMessage.warning('交接摘要为空');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(summary);
+    await ElMessageBox.alert(summary, '交接摘要已复制', {
+      confirmButtonText: '完成',
+      customStyle: { maxWidth: 'min(920px, 92vw)', whiteSpace: 'pre-wrap' },
+    });
+  } catch {
+    await ElMessageBox.alert(summary, '交接摘要', {
+      confirmButtonText: '完成',
+      customStyle: { maxWidth: 'min(920px, 92vw)', whiteSpace: 'pre-wrap' },
+    });
   }
 }
 

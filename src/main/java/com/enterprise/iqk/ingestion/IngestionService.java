@@ -9,6 +9,7 @@ import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
+import com.enterprise.iqk.retrieval.KeywordIndexStore;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.HashUtils;
@@ -68,6 +69,7 @@ public class IngestionService {
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
     private final GraphExtractionService graphExtractionService;
+    private final KeywordIndexStore keywordIndexStore;
     private final SimpleVectorStoreSnapshotPersister snapshotPersister;
 
     /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
@@ -177,6 +179,7 @@ public class IngestionService {
                 .and(builder.eq("tenant_id", normalizedTenantId), builder.eq("chat_id", chatId))
                 .build();
         vectorStore.delete(scope);
+        int keywordRows = keywordIndexStore.deleteByChat(normalizedTenantId, chatId);
         // 图谱数据按同一 chatId 作用域联动清理；失败只留孤儿边不中止文档删除
         // （读路径 getNeighbors 对悬空边已容忍：实体查不到就跳过）。
         try {
@@ -194,6 +197,8 @@ public class IngestionService {
             }
         }
         ingestionJobMapper.deleteByChatIdAndTenant(normalizedTenantId, chatId);
+        log.info("keyword index cleanup: tenant={}, chatId={}, rows={}",
+                normalizedTenantId, chatId, keywordRows);
         log.info("ingestion document deleted: tenant={}, chatId={}, jobs={}, files={}",
                 normalizedTenantId, chatId, jobs.size(), removedFiles);
         return new ArrayList<>(removedFiles);
@@ -355,6 +360,7 @@ public class IngestionService {
     private List<Document> processPdfJob(IngestionJob job) {
         List<Document> chunks = parseAndSplit(job);
         vectorStore.add(chunks);
+        keywordIndexStore.indexAll(TenantContext.normalize(job.getTenantId()), chunks);
         snapshotPersister.persistIfNeeded(vectorStore);
         return chunks;
     }

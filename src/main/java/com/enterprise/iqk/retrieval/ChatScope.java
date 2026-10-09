@@ -2,6 +2,7 @@ package com.enterprise.iqk.retrieval;
 
 import org.springframework.ai.document.Document;
 import org.springframework.util.StringUtils;
+import java.util.List;
 
 /**
  * 会话软作用域：知识库按租户共享，chat_id 不再做检索硬过滤。
@@ -33,6 +34,27 @@ public final class ChatScope {
             return score;
         }
         return clamp01(score + BOOST);
+    }
+
+    /** ScoredDocument 版本的会话软作用域加分。 */
+    public static double boost(double score, ScoredDocument doc, String chatId) {
+        if (doc == null || !StringUtils.hasText(chatId) || doc.getMetadata() == null) {
+            return score;
+        }
+        Object docChat = doc.getMetadata().get("chat_id");
+        if (docChat == null || !chatId.equals(docChat.toString())) {
+            return score;
+        }
+        return clamp01(score + BOOST);
+    }
+
+    /** Apply the same bounded chat-scope boost to ScoredDocument results. */
+    public static List<ScoredDocument> boostAll(List<ScoredDocument> docs, String chatId) {
+        if (docs == null || docs.isEmpty()) {
+            return List.of();
+        }
+        docs.forEach(doc -> doc.setRetrievalScore(boost(doc.getRetrievalScore(), doc, chatId)));
+        return docs;
     }
 
     /** 夹紧到 [0,1]，NaN/无穷按 0 处理。 */

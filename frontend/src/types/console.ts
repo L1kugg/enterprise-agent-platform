@@ -34,6 +34,8 @@ export interface SessionRecord {
   workspaceId: string;
   activeBranchId: string;
   branches: SessionBranch[];
+  handoffSummary?: string;
+  handoffGeneratedAt?: number;
 }
 
 export interface BranchTreeItem {

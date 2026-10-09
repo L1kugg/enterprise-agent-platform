@@ -81,16 +81,20 @@ public class EvaluationScorer {
                 standardScores.mrrAtK(), standardScores.precisionAtK());
     }
 
-    /** 命中率：期望项在待检文本（已小写）中的出现比例。 */
+    /** 标准检索指标优先级：切片期望 > 文档期望 > 兼容旧 expected_citations。 */
     private StandardRetrievalScores standardRetrievalScores(EvalCaseRecord evalCase,
                                                             List<RetrievalResultItem> results) {
         List<String> expectedChunks = readJsonList(evalCase.getExpectedChunkIdsJson());
         List<String> expectedDocuments = readJsonList(evalCase.getExpectedDocumentIdsJson());
+        List<String> expectedCitations = readJsonList(evalCase.getExpectedCitationsJson());
         if (!expectedChunks.isEmpty()) {
             return calculate(expectedChunks, results == null ? List.of() : results, "chunk");
         }
         if (!expectedDocuments.isEmpty()) {
             return calculate(expectedDocuments, results == null ? List.of() : results, "document");
+        }
+        if (!expectedCitations.isEmpty()) {
+            return calculate(expectedCitations, results == null ? List.of() : results, "citation");
         }
         return new StandardRetrievalScores(false, "none", 0.0, 0.0, 0.0);
     }
@@ -134,6 +138,9 @@ public class EvaluationScorer {
         String fullKey = normalize(item.sourceType() + ":" + item.title() + ":" + item.chunkId());
         if ("document".equals(level)) {
             return expected.equals(title) || expected.equals(sourceTitle);
+        }
+        if ("citation".equals(level)) {
+            return fullKey.contains(expected) || sourceTitle.contains(expected) || title.contains(expected);
         }
         return expected.equals(chunk) || expected.equals(title + ":" + chunk) || expected.equals(fullKey);
     }

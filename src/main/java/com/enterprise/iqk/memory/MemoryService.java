@@ -34,6 +34,7 @@ public class MemoryService {
     private final MemoryItemMapper itemMapper;
     private final MemoryEventMapper eventMapper;
     private final ObjectMapper objectMapper;
+    private final MemoryRelevanceScorer relevanceScorer;
 
     // ── 保存 ─────────────────────────────────────────────────────
 
@@ -125,46 +126,82 @@ public class MemoryService {
      * 使记忆从写入、召回到失效的全程都可以在 memory_event 里追溯。
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId) {
-        return buildContext(tenantId, userId, true);
+        return buildContext(tenantId, userId, "", true);
+    }
+
+    public MemoryContextSnapshot buildContext(String tenantId, String userId, boolean includeShort) {
+        return buildContext(tenantId, userId, "", includeShort);
+    }
+
+    public MemoryContextSnapshot buildContext(String tenantId, String userId, String query) {
+        return buildContext(tenantId, userId, query, true);
     }
 
     /**
-     * 可裁剪变体：includeShort=false 时跳过 short 层的查询与拼装。
-     * 供已挂 ChatMemory advisor 的链路使用 —— 会话内近况已由 advisor
-     * 保真注入，short 摘要再进一次会让同一信息双份进入 prompt。
+     * Query-aware memory context. A larger candidate pool is fetched, ranked by
+     * current-query relevance, recency, and confidence, then capped by per-layer
+     * budgets. includeShort=false avoids duplicating ChatMemory-backed history.
      */
-    public MemoryContextSnapshot buildContext(String tenantId, String userId, boolean includeShort) {
-        List<MemoryItemRecord> shortMem = includeShort ? queryShortMemory(tenantId, userId, 5) : List.of();
-        List<MemoryItemRecord> longMem = queryLongMemory(tenantId, userId, 10);
-        List<MemoryItemRecord> facts = queryFactMemory(tenantId, 0.7, 5);
-
-        List<MemoryItemRecord> recalled = new java.util.ArrayList<>(shortMem);
-        recalled.addAll(longMem);
-        recalled.addAll(facts);
-        recalled.forEach(m -> emitEvent(m.getMemoryId(), "USE", "recalled into generation context"));
+    public MemoryContextSnapshot buildContext(String tenantId, String userId,
+                                               String query, boolean includeShort) {
+        String tenant = TenantContext.normalize(tenantId);
+        List<MemoryItemRecord> shortMem = includeShort
+                ? relevanceScorer.select(queryShortMemory(tenant, userId, 30), query, "short", 4)
+                : List.of();
+        List<MemoryItemRecord> selectedLongMem = relevanceScorer.select(
+                queryLongMemory(tenant, userId, 40), query, "long", 5);
+        List<MemoryItemRecord> selectedFacts = relevanceScorer.select(
+                queryFactMemory(tenant, 0.7, 30), query, "fact", 4);
 
         StringBuilder context = new StringBuilder();
-        if (!longMem.isEmpty()) {
-            context.append("用户长期记忆:\n");
-            for (MemoryItemRecord m : longMem) {
-                context.append("- ").append(m.getContent()).append("\n");
-            }
-            context.append("\n");
-        }
-        if (!shortMem.isEmpty()) {
-            context.append("近期对话要点:\n");
-            for (MemoryItemRecord m : shortMem) {
-                context.append("- ").append(m.getContent()).append("\n");
-            }
-            context.append("\n");
-        }
-        if (!facts.isEmpty()) {
-            context.append("可信事实:\n");
-            for (MemoryItemRecord m : facts) {
-                context.append("- ").append(m.getContent()).append("\n");
-            }
-        }
+        List<MemoryItemRecord> longMem = appendLayer(context, "用户长期记忆:", selectedLongMem, 1200);
+        shortMem = appendLayer(context, "近期对话要点:", shortMem, 1000);
+        List<MemoryItemRecord> facts = appendLayer(context, "可信事实:", selectedFacts, 1000);
+        List<MemoryItemRecord> recalled = new java.util.ArrayList<>(longMem);
+        recalled.addAll(shortMem);
+        recalled.addAll(facts);
+        recalled.forEach(m -> emitEvent(m.getMemoryId(), "USE", "recalled into generation context"));
         return new MemoryContextSnapshot(context.toString(), shortMem, longMem, facts);
+    }
+
+    private List<MemoryItemRecord> appendLayer(StringBuilder context,
+                                                String label,
+                                                List<MemoryItemRecord> memories,
+                                                int charBudget) {
+        if (memories == null || memories.isEmpty()) {
+            return List.of();
+        }
+        context.append(label).append("\n");
+        List<MemoryItemRecord> included = new ArrayList<>();
+        int remaining = charBudget;
+        for (MemoryItemRecord memory : memories) {
+            int before = context.length();
+            appendMemory(context, memory);
+            int consumed = context.length() - before;
+            if (consumed > remaining) {
+                context.setLength(before);
+                break;
+            }
+            included.add(memory);
+            remaining -= consumed;
+        }
+        context.append("\n");
+        return List.copyOf(included);
+    }
+
+    private void appendMemory(StringBuilder context, MemoryItemRecord memory) {
+        String content = memory.getContent() == null ? "" : memory.getContent().replaceAll("\\s+", " ").trim();
+        if (content.length() > 400) {
+            content = content.substring(0, 400) + "…";
+        }
+        context.append("- ");
+        if (StringUtils.hasText(memory.getSource()) || memory.getConfidence() != null) {
+            context.append("[")
+                    .append("confidence=").append(memory.getConfidence() == null ? "unknown" : memory.getConfidence())
+                    .append(", source=").append(memory.getSource() == null ? "unknown" : memory.getSource())
+                    .append("] ");
+        }
+        context.append(content).append("\n");
     }
 
     // ── 维护 ──────────────────────────────────────────────────────

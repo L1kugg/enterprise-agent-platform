@@ -6,8 +6,10 @@ import com.enterprise.iqk.domain.vo.BranchCompareResultVO;
 import com.enterprise.iqk.domain.vo.BranchMergeRequestVO;
 import com.enterprise.iqk.domain.vo.BranchMergeResultVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
+import com.enterprise.iqk.domain.vo.SessionHandoffRequestVO;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.AgentSessionService;
+import com.enterprise.iqk.service.SessionHandoffService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AgentSessionController {
     private final AgentSessionService agentSessionService;
+    private final SessionHandoffService sessionHandoffService;
 
     @GetMapping
     public PagedResult<AgentSessionStateVO> list(@RequestParam(value = "page", defaultValue = "1") int page,
@@ -54,6 +57,12 @@ public class AgentSessionController {
     public AgentSessionStateVO setArchived(@PathVariable("sessionId") String sessionId,
                                            @RequestParam("value") boolean value) {
         return agentSessionService.setArchived(TenantContext.currentTenantId(), sessionId, value);
+    }
+
+    @PostMapping("/{sessionId}/handoff")
+    public AgentSessionStateVO handoff(@PathVariable("sessionId") String sessionId,
+                                       @RequestBody(required = false) SessionHandoffRequestVO request) {
+        return sessionHandoffService.generate(TenantContext.currentTenantId(), sessionId, request);
     }
 
     @PostMapping("/{sessionId}/branches/compare")

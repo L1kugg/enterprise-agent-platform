@@ -8,6 +8,7 @@ import org.springframework.ai.chat.client.advisor.api.AdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,8 @@ public class MemoryInjectionAdvisor implements BaseAdvisor {
             boolean includeShort = Boolean.parseBoolean(
                     String.valueOf(request.context().getOrDefault(MEMORY_INCLUDE_SHORT_KEY, "false")));
             MemoryService.MemoryContextSnapshot snapshot = memoryService.buildContext(
-                    String.valueOf(tenantId), String.valueOf(userKey), includeShort);
+                    String.valueOf(tenantId), String.valueOf(userKey), currentUserQuery(request),
+                    includeShort);
             if (snapshot == null || !StringUtils.hasText(snapshot.contextText())) {
                 return request;
             }
@@ -68,6 +70,15 @@ public class MemoryInjectionAdvisor implements BaseAdvisor {
             log.warn("记忆注入失败（不影响生成）: user={}, reason={}", userKey, ex.toString());
             return request;
         }
+    }
+
+    private String currentUserQuery(ChatClientRequest request) {
+        return request.prompt().getInstructions().stream()
+                .filter(UserMessage.class::isInstance)
+                .map(UserMessage.class::cast)
+                .reduce((first, second) -> second)
+                .map(Message::getText)
+                .orElse("");
     }
 
     @Override

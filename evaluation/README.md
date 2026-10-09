@@ -12,6 +12,8 @@ Each case includes `expected_keywords`, `forbidden_keywords`, `category`, and op
 `expected_citations`. For standard retrieval metrics, a case may also configure
 `expected_document_ids` (document level) or `expected_chunk_ids` (chunk level; preferred
 when both are present).
+Legacy cases that only configure `expected_citations` are evaluated at the more general
+`citation` level by substring-matching the ordered Top-K citation keys.
 
 ## Run Result Archive
 

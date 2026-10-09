@@ -120,6 +120,8 @@ export function normalizeSession(raw: unknown): SessionRecord {
       typeof candidate.workspaceId === 'string' ? candidate.workspaceId : DEFAULT_WORKSPACE,
     activeBranchId,
     branches,
+    handoffSummary: typeof candidate.handoffSummary === 'string' ? candidate.handoffSummary : undefined,
+    handoffGeneratedAt: typeof candidate.handoffGeneratedAt === 'number' ? candidate.handoffGeneratedAt : undefined,
   };
 }
 

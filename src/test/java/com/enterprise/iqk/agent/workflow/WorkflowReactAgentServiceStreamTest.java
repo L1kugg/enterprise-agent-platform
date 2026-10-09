@@ -76,7 +76,7 @@ class WorkflowReactAgentServiceStreamTest {
                 .thenReturn(AgentStepRecord.builder().stepId("step-1").taskId("task-1").build());
         when(harness.execute(any(AgentAction.class)))
                 .thenReturn(AgentObservation.success("builtin", Map.of("rows", 2), 3));
-        when(memoryService.buildContext(anyString(), anyString())).thenReturn(null);
+        when(memoryService.buildContext(anyString(), anyString(), anyString())).thenReturn(null);
         ModelRouter modelRouter = mock(ModelRouter.class);
         when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false,

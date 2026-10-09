@@ -105,7 +105,7 @@ class ReactAgentServiceTest {
         MemoryService memoryService = mock(MemoryService.class);
         MemoryItemRecord profile = MemoryItemRecord.builder()
                 .memoryId("mem-l1").type("long").content("画像: 用户是 Java 后端开发者").build();
-        when(memoryService.buildContext(anyString(), anyString())).thenReturn(
+        when(memoryService.buildContext(anyString(), anyString(), anyString())).thenReturn(
                 new MemoryService.MemoryContextSnapshot(
                         "用户长期记忆:\n- 画像: 用户是 Java 后端开发者\n",
                         List.of(), List.of(profile), List.of()));
@@ -164,7 +164,7 @@ class ReactAgentServiceTest {
                 new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false, "profile_match", "", "", null)
         );
         MemoryService memoryService = mock(MemoryService.class);
-        when(memoryService.buildContext(anyString(), anyString()))
+        when(memoryService.buildContext(anyString(), anyString(), anyString()))
                 .thenThrow(new RuntimeException("memory down"));
 
         ReactAgentService service = new ReactAgentService(

@@ -62,14 +62,16 @@ flowchart TD
 - 向量维度：1024（text-embedding-v4）
 
 ### KeywordRetriever（关键词检索）
+- 独立索引：`retrieval_keyword_chunk` MySQL FULLTEXT（ngram parser），
+  入库时与 pgvector 同步写入；文档删除时同步清理
+- 检索优先走 MySQL `MATCH ... AGAINST`，独立于 pgvector 可用性；
+  V22 前的存量文档暂走旧向量候选池重排，逐步回填
 - 候选池：租户级、相似度阈值放开为 0（ACCEPT_ALL）、池扩到 max(topK×4, 40)
   ——嵌入距离远但词面精确命中的文档也能进入候选
 - 打分：标题召回分（权重 0.6）+ 内容召回分（权重 0.4），
   分母 = 查询 token 数（查询词有多大比例命中，长文档不被稀释）
 - 切词 CJK 感知：中文连续段切字符 2-gram（LexicalMatcher），
   拉丁/数字 token 整体保留——中文查询不再"整句单 token 必空"
-- 诚实边界：候选仍来自向量库（无独立倒排索引），本路是
-  "向量候选池上的词法重排"；独立 BM25/全文索引是演进方向
 
 ### GraphRetriever（图谱检索）
 - 实体名/别名搜索
@@ -82,9 +84,10 @@ flowchart TD
 
 ## 融合策略
 
-1. **加权评分**：每个检索器结果乘以来源权重
-2. **内容去重**：前 200 字符 fingerprint，保留最高分
-3. **降序排序**：按 finalScore 排序取 topK
+1. **Weighted RRF**：`finalScore = Σ(sourceWeight / (rrfK + rank))`，
+   默认 `rrfK=60`；只比较各路排名，不比较不同检索器原始分的量纲
+2. **跨路去重**：同内容指纹在多路命中时累计 RRF 分，代表文档保留更高原始检索分
+3. **降序排序**：按 RRF finalScore 排序取 topK；不再强制来源轮转配额
 
 ## 证据评分
 

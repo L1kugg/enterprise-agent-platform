@@ -83,7 +83,8 @@ public class ReactAgentService {
         // short/long/fact 全量注入 —— 会话前情、用户画像与租户可信事实
         // 都会影响动作选择与最终措辞。user 键取认证主体，匿名回落 chatId。
         String memoryUserKey = UserContext.currentUserId(request.getChatId());
-        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
+        MemoryService.MemoryContextSnapshot memorySnapshot =
+                recallMemory(tenantId, memoryUserKey, request.getPrompt());
 
         for (int step = 1; step <= MAX_STEPS; step++) {
             long stepStartNs = System.nanoTime(); // 每步掐表，轨迹记录真实耗时
@@ -142,7 +143,8 @@ public class ReactAgentService {
                     boolean usedFallback = false;
                     // 记忆召回（尽力而为，循环外一次）：与同步链路同构
                     String memoryUserKey = UserContext.currentUserId(request.getChatId());
-                    MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
+                    MemoryService.MemoryContextSnapshot memorySnapshot =
+                            recallMemory(tenantId, memoryUserKey, request.getPrompt());
 
                     for (int step = 1; step <= MAX_STEPS; step++) {
                         long stepStartNs = System.nanoTime(); // 每步掐表，轨迹记录真实耗时
@@ -378,9 +380,9 @@ public class ReactAgentService {
     }
 
     /** 记忆召回：任何失败返回 null，按"无记忆可用"降级，绝不中断 ReAct 主链路。 */
-    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey) {
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey, String query) {
         try {
-            return memoryService.buildContext(tenantId, userKey);
+            return memoryService.buildContext(tenantId, userKey, query);
         } catch (Exception ex) {
             log.warn("记忆召回失败（不影响 ReAct 链路）: user={}, reason={}", userKey, ex.toString());
             return null;

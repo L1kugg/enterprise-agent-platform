@@ -34,7 +34,7 @@ class MemoryInjectionAdvisorTest {
 
     @Test
     void injectsMemoryAsLeadingSystemMessageWithoutTouchingUserText() {
-        when(memoryService.buildContext("tenant-1", "user-1", false)).thenReturn(
+        when(memoryService.buildContext("tenant-1", "user-1", "缓存穿透怎么防", false)).thenReturn(
                 new MemoryService.MemoryContextSnapshot(
                         "用户长期记忆:\n- 画像: 用户是 Java 后端开发者\n",
                         List.of(), List.of(), List.of()));
@@ -52,12 +52,12 @@ class MemoryInjectionAdvisorTest {
                 .contains("Java 后端开发者");
         assertThat(messages.get(1).getText()).isEqualTo("缓存穿透怎么防");
         // 默认不带 short 层（挂 ChatMemory 的链路防双份）
-        verify(memoryService).buildContext("tenant-1", "user-1", false);
+        verify(memoryService).buildContext("tenant-1", "user-1", "缓存穿透怎么防", false);
     }
 
     @Test
     void forwardsIncludeShortFlagWhenExplicitlyRequested() {
-        when(memoryService.buildContext(anyString(), anyString(), anyBoolean())).thenReturn(
+        when(memoryService.buildContext(anyString(), anyString(), anyString(), anyBoolean())).thenReturn(
                 new MemoryService.MemoryContextSnapshot("近期对话要点:\n- Q: x", List.of(), List.of(), List.of()));
 
         advisor.before(request(Map.of(
@@ -65,7 +65,7 @@ class MemoryInjectionAdvisorTest {
                 MemoryInjectionAdvisor.MEMORY_USER_KEY, "user-1",
                 MemoryInjectionAdvisor.MEMORY_INCLUDE_SHORT_KEY, "true")), null);
 
-        verify(memoryService).buildContext("tenant-1", "user-1", true);
+        verify(memoryService).buildContext("tenant-1", "user-1", "缓存穿透怎么防", true);
     }
 
     @Test
@@ -80,7 +80,7 @@ class MemoryInjectionAdvisorTest {
 
     @Test
     void recallFailureDegradesToOriginalRequest() {
-        when(memoryService.buildContext(anyString(), anyString(), anyBoolean()))
+        when(memoryService.buildContext(anyString(), anyString(), anyString(), anyBoolean()))
                 .thenThrow(new RuntimeException("memory down"));
         ChatClientRequest original = request(Map.of(
                 MemoryInjectionAdvisor.MEMORY_TENANT_KEY, "tenant-1",
@@ -98,7 +98,7 @@ class MemoryInjectionAdvisorTest {
                 MemoryInjectionAdvisor.MEMORY_USER_KEY, ""));
         assertThat(advisor.before(blankUser, null)).isSameAs(blankUser);
         // 空快照（无记忆可用）也透传
-        when(memoryService.buildContext(eq("tenant-1"), eq("user-1"), anyBoolean())).thenReturn(
+        when(memoryService.buildContext(eq("tenant-1"), eq("user-1"), anyString(), anyBoolean())).thenReturn(
                 new MemoryService.MemoryContextSnapshot("", List.of(), List.of(), List.of()));
         ChatClientRequest emptySnapshot = request(Map.of(
                 MemoryInjectionAdvisor.MEMORY_TENANT_KEY, "tenant-1",

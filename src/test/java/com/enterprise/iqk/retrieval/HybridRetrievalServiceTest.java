@@ -50,6 +50,7 @@ class HybridRetrievalServiceTest {
         webSearchProperties.setEnabled(webEnabled);
         return new HybridRetrievalService(vectorRetriever, keywordRetriever, graphRetriever, webRetriever,
                 webSearchProperties, registry, timeoutMs, poolSize, queueCapacity,
+                60,
                 weights.vectorWeight(), weights.keywordWeight(), weights.graphWeight(), weights.webWeight());
     }
 
@@ -101,7 +102,7 @@ class HybridRetrievalServiceTest {
     }
 
     @Test
-    void deduplicatesByContentFingerprintAndSortsByFinalScore() {
+    void fusesDuplicateContentAcrossLanesWithWeightedRrf() {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
 
         when(vectorRetriever.retrieve("q", "tenant", "chat"))
@@ -118,8 +119,8 @@ class HybridRetrievalServiceTest {
         // 原始文档 3 条，去重后按内容指纹只剩 2 条
         assertThat(result.totalBeforeDedup()).isEqualTo(3);
         assertThat(result.totalAfterDedup()).isEqualTo(2);
-        // 相同内容时，vector 0.9 * 0.40 = 0.36
-        // 胜过 keyword 0.5 * 0.25 = 0.125
+        // RRF：同内容同时出现在 vector rank 1 和 keyword rank 1，
+        // 权重相加后胜过 keyword 路唯一的 rank 1。
         assertThat(result.documents()).extracting(ScoredDocument::getDocId)
                 .containsExactly("vec-1", "kw-2");
         assertThat(result.documents().get(0).getFinalScore()).isGreaterThan(
@@ -211,11 +212,11 @@ class HybridRetrievalServiceTest {
     }
 
     @Test
-    void topKCutReservesSlotsForLowerWeightSources() {
+    void rrfUsesRelevanceAcrossLanesInsteadOfSourceQuota() {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
 
-        // 向量路 3 条高分证据（0.9*0.40=0.36），图谱路 1 条（0.85*0.20=0.17）：
-        // 全局 topK=2 会把图谱完全挤出；按来源轮转配额图谱必占一席
+        // RRF 使用每路排名，不使用来源轮转配额：topK=2 时向量两段排名更靠前，
+        // 低相关的图谱单路命中不再强制占用名额。
         when(vectorRetriever.retrieve("q", "tenant", "chat"))
                 .thenReturn(List.of(
                         doc("vec-1", "vector", "vector chunk one", 0.9),
@@ -230,7 +231,7 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 2);
 
         assertThat(result.documents()).extracting(ScoredDocument::getDocId)
-                .containsExactlyInAnyOrder("vec-1", "graph-1");
+                .containsExactly("vec-1", "vec-2");
         // 最终仍按 finalScore 降序
         assertThat(result.documents().get(0).getFinalScore())
                 .isGreaterThanOrEqualTo(result.documents().get(1).getFinalScore());

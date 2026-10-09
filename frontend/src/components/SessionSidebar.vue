@@ -81,6 +81,11 @@
                 <el-icon :size="12"><Edit /></el-icon>
               </button>
             </el-tooltip>
+            <el-tooltip content="生成交接摘要" placement="bottom" :show-after="300">
+              <button type="button" aria-label="生成交接摘要" @click.stop="generateHandoffSummary(session.id)">
+                <el-icon :size="12"><DocumentCopy /></el-icon>
+              </button>
+            </el-tooltip>
             <el-tooltip
               :content="session.pinned ? '取消置顶' : '置顶'"
               placement="bottom"
@@ -135,7 +140,7 @@
 // 显隐开关 sessionColVisible / 折叠状态 sessionColCollapsed 在 useGlobalUi
 // （折叠按钮在这里，展开按钮在顶栏，所以折叠状态归全局而不是本组件）。
 // 列表/筛选状态与全部会话动作在 useSessions 单例，无需 props/emits。
-import { Box, CaretLeft, Delete, Download, Edit, Top, Upload } from '@element-plus/icons-vue';
+import { Box, CaretLeft, Delete, DocumentCopy, Download, Edit, Top, Upload } from '@element-plus/icons-vue';
 import {
   sessionColCollapsed,
   sessionColVisible,
@@ -149,6 +154,7 @@ import {
   cloudSyncing,
   createAndSwitchSession,
   filteredSessions,
+  generateHandoffSummary,
   loadSessionsFromCloud,
   removeSession,
   renameSession,

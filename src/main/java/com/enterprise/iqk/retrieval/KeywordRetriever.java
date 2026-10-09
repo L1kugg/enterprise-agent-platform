@@ -15,6 +15,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
+ * Keyword lane now uses an independent MySQL FULLTEXT index first. Vector-candidate
+ * reranking remains only as a fallback for documents created before V22.
  * 关键词检索器：在向量库候选池上做词面精确匹配重排，与 VectorRetriever 的语义排序互补，
  * 捕获语义搜索可能遗漏的精确词命中（术语、错误码、编号等）。
  * 三个修复点：
@@ -32,6 +34,7 @@ import java.util.stream.Collectors;
 public class KeywordRetriever {
 
     private final VectorStore vectorStore;
+    private final KeywordIndexStore keywordIndexStore;
     private final MeterRegistry meterRegistry;
 
     /**
@@ -43,6 +46,12 @@ public class KeywordRetriever {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
+            List<ScoredDocument> indexed = keywordIndexStore.search(query, tenantId, chatId, topK);
+            if (!indexed.isEmpty()) {
+                outcome = "success";
+                return indexed;
+            }
+
             // 候选池：租户级 + 相似度阈值放开，让词面精确命中但语义距离远的文档也能入选
             String filter = filterExpression(tenantId);
             List<Document> docs = vectorStore.similaritySearch(

@@ -41,6 +41,7 @@ class IngestionServiceGraphHookTest {
                 mock(IngestionQueue.class),
                 mock(FileSafetyScanner.class),
                 graphExtractionService,
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties())
         );
     }

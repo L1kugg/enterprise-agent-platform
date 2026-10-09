@@ -31,7 +31,8 @@ class KeywordRetrieverTest {
                         .text("课程预约怎么办理")
                         .metadata(Map.of("file_name", "course.pdf", "chat_id", "chat-9"))
                         .build()));
-        KeywordRetriever retriever = new KeywordRetriever(vectorStore, new SimpleMeterRegistry());
+        KeywordRetriever retriever = new KeywordRetriever(vectorStore,
+                mock(KeywordIndexStore.class), new SimpleMeterRegistry());
 
         List<ScoredDocument> docs = retriever.retrieve("预约", "tenant", "chat-1", 5);
 
@@ -50,7 +51,8 @@ class KeywordRetrieverTest {
                                 + "此外还有缓存击穿与缓存雪崩，共同构成缓存系统的三大经典问题。")
                         .metadata(Map.of("file_name", "cache.pdf"))
                         .build()));
-        KeywordRetriever retriever = new KeywordRetriever(vectorStore, new SimpleMeterRegistry());
+        KeywordRetriever retriever = new KeywordRetriever(vectorStore,
+                mock(KeywordIndexStore.class), new SimpleMeterRegistry());
 
         List<ScoredDocument> docs = retriever.retrieve("redis 缓存 穿透", "tenant", "chat-1", 5);
 
@@ -67,7 +69,8 @@ class KeywordRetrieverTest {
                         .metadata(Map.of("file_name", "a.pdf", "chat_id", "chat-1")).build(),
                 Document.builder().text("redis 部署手册")
                         .metadata(Map.of("file_name", "b.pdf", "chat_id", "chat-9")).build()));
-        KeywordRetriever retriever = new KeywordRetriever(vectorStore, new SimpleMeterRegistry());
+        KeywordRetriever retriever = new KeywordRetriever(vectorStore,
+                mock(KeywordIndexStore.class), new SimpleMeterRegistry());
 
         List<ScoredDocument> docs = retriever.retrieve("redis 部署", "tenant", "chat-1", 5);
 
@@ -79,7 +82,8 @@ class KeywordRetrieverTest {
 
     @Test
     void filterIsTenantScopedWithoutChatId() {
-        KeywordRetriever retriever = new KeywordRetriever(mock(VectorStore.class), new SimpleMeterRegistry());
+        KeywordRetriever retriever = new KeywordRetriever(mock(VectorStore.class),
+                mock(KeywordIndexStore.class), new SimpleMeterRegistry());
 
         // 知识库按租户共享：过滤表达式不得再含 chat_id（否则跨会话/临时会话检索必空）
         assertThat(retriever.filterExpression("tenant-1")).isEqualTo("tenant_id == \"tenant-1\"");
@@ -89,7 +93,8 @@ class KeywordRetrieverTest {
     void emptyQueryReturnsNoResults() {
         VectorStore vectorStore = mock(VectorStore.class);
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
-        KeywordRetriever retriever = new KeywordRetriever(vectorStore, new SimpleMeterRegistry());
+        KeywordRetriever retriever = new KeywordRetriever(vectorStore,
+                mock(KeywordIndexStore.class), new SimpleMeterRegistry());
 
         assertThat(retriever.retrieve("   ", "tenant", "chat-1", 5)).isEmpty();
     }

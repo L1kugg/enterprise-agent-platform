@@ -258,6 +258,8 @@ public class AgentSessionService {
         payload.setActiveBranchId(defaultText(record.getActiveBranchId(), payload.getActiveBranchId()));
         payload.setUpdatedAt(record.getUpdatedAt() == null ? System.currentTimeMillis() : record.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
         payload.setBranches(payload.getBranches() == null ? new ArrayList<>() : payload.getBranches());
+        payload.setHandoffSummary(payload.getHandoffSummary());
+        payload.setHandoffGeneratedAt(payload.getHandoffGeneratedAt());
         return payload;
     }
 
@@ -272,6 +274,8 @@ public class AgentSessionService {
         state.setArchived(Boolean.TRUE.equals(payload.getArchived()));
         state.setWorkspaceId(defaultText(payload.getWorkspaceId(), "default"));
         state.setActiveBranchId(payload.getActiveBranchId());
+        state.setHandoffSummary(payload.getHandoffSummary());
+        state.setHandoffGeneratedAt(payload.getHandoffGeneratedAt());
         state.setBranches(payload.getBranches() == null ? new ArrayList<>() : payload.getBranches());
         if (!StringUtils.hasText(state.getActiveBranchId()) && !state.getBranches().isEmpty()) {
             state.setActiveBranchId(state.getBranches().get(0).getId());

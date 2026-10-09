@@ -147,7 +147,7 @@ public class HybridRagAnswerService {
             // Step 4.5: 召回记忆（用户画像 / 近期会话要点 / 高置信事实）
             // 注入生成上下文。尽力而为：召回失败只记日志，绝不中断 RAG 管线。
             MemoryService.MemoryContextSnapshot memorySnapshot =
-                    recallMemory(normalizedTenantId, chatId);
+                    recallMemory(normalizedTenantId, chatId, prompt);
             String memorySection = memorySnapshot != null
                     && StringUtils.hasText(memorySnapshot.contextText())
                     ? "\n\n已知记忆:\n" + memorySnapshot.contextText().trim() : "";
@@ -282,9 +282,9 @@ public class HybridRagAnswerService {
     }
 
     /** 记忆召回：任何失败都返回 null，按"无记忆可用"降级。 */
-    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String chatId) {
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String chatId, String query) {
         try {
-            return memoryService.buildContext(tenantId, chatId);
+            return memoryService.buildContext(tenantId, chatId, query);
         } catch (Exception ex) {
             log.warn("记忆召回失败（不影响 RAG 管线）: chatId={}, reason={}", chatId, ex.toString());
             return null;

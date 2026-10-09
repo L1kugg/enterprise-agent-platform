@@ -60,7 +60,7 @@
 | `queryLongMemory()` | 查询用户长期记忆 |
 | `queryTaskMemory()` | 按 taskId 查询任务记忆 |
 | `queryFactMemory()` | 按置信度阈值查询事实 |
-| `buildContext()` | 构建记忆上下文（全量三层，拼接到 user prompt 末尾"已知记忆"段） |
+| `buildContext()` | 按当前问题构建记忆上下文：候选池经相关度、时间衰减与置信度排序后注入 |
 | `buildContext(…, includeShort)` | 可裁剪变体：已挂 ChatMemory 的链路跳过 short 层，避免同信息双份 |
 | `cleanExpiredMemories()` | 定时清理过期记忆（每天 3am） |
 
@@ -76,7 +76,7 @@
 ## 目标记忆召回流程
 
 1. 用户发起请求
-2. `buildContext(tenantId, userKey)` 检索相关记忆（user 键 = 认证主体，`UserContext.currentUserId(fallback)` 从 SecurityContext 解析，匿名回落 chatId —— 画像按人存、跨会话可召回）
+2. `buildContext(tenantId, userKey, query)` 检索相关记忆（user 键 = 认证主体，`UserContext.currentUserId(fallback)` 从 SecurityContext 解析，匿名回落 chatId —— 画像按人存、跨会话可召回）。排序公式为 `relevance × 0.60~0.70 + confidence × 0.15~0.25 + recency × 0.05~0.25`；short/fact 设置词面相关度下限，long 保留用户画像基线，各层有注入条数与字符预算。
 3. 召回内容注入 LLM 上下文。两种方式：
    - **advisor 注入（推荐）**：`MemoryInjectionAdvisor` 在请求组装期把记忆快照作为独立 SystemMessage 插入 prompt 首部 —— 不改写 user 消息文本，MessageChatMemoryAdvisor 持久化的仍是原始对话，会话历史不会逐轮累积记忆段；每次调用重新召回，注入的永远是最新的唯一一份。调用方以 advisor 参数 `memory.tenantId` + `memory.userId` 显式 opt-in，未传参的链路零影响
    - **手工拼段（react/评测链路）**：拼进 user prompt 末尾的"已知记忆"段。这两条链路无 ChatMemory，拼进 user prompt 不会被持久化重放，无累积问题
@@ -92,7 +92,7 @@
 | react（/ai/react/chat） | short + long + fact | 手工拼段 | planner 无 ChatMemory，全量注入规划与成稿 prompt；成稿后写回 short（读写双侧闭环），响应带 memoryUsed |
 | 客服（/ai/service） | long + fact | advisor 注入 | serviceChatClient 默认 advisor |
 | PDF RAG（/ai/pdf/chat） | long + fact | advisor 注入 | RagAnswerService 生成调用传参 |
-| 工作流 ReAct（v2） | long + fact | advisor 注入 | callModel/callModelStream 传参；匿名（无 user 键）时 advisor 自动透传不注入 |
+| 工作流 ReAct（v2） | short + long + fact | 手工拼段 | 循环外按当前 prompt 一次召回并注入 planner prompt，避免 advisor 与手工拼段重复注入同一批记忆 |
 | 深度研究（/ai/research） | task 层结论 | planner prompt 注入 | DeepResearchService 召回租户内最近 5 条任务结论给拆题参考，避免重复已解决的问题 |
 
 ## 自动过期

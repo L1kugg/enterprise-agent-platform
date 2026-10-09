@@ -26,7 +26,7 @@ class EvaluationScorerTest {
                 "高温风险处置建议见引用 [1]",
                 List.of("vector:heat-policy:chunk-1"),
                 List.of("高温风险包括中暑、脱水与慢病加重。"),
-                List.of(),
+                List.of(new RetrievalResultItem("vector", "heat-policy", "chunk-1", 0.9)),
                 false
         );
 
@@ -85,7 +85,8 @@ class EvaluationScorerTest {
 
         EvaluationScorer.CaseScores scores = scorer.scoreCase(
                 evalCase, "预算为 102 万元 [1]。", List.of("vector:report:chunk-1"),
-                List.of("错误结论属于另一份干扰文档。"), List.of(), false);
+                List.of("错误结论属于另一份干扰文档。"),
+                List.of(new RetrievalResultItem("vector", "report", "chunk-1", 0.9)), false);
 
         assertThat(scores.keywordScore()).isEqualTo(1.0);
         assertThat(scores.citationMarkerCoverage()).isEqualTo(1.0);
@@ -136,5 +137,25 @@ class EvaluationScorerTest {
         assertThat(scores.recallAtK()).isEqualTo(1.0);
         assertThat(scores.mrrAtK()).isEqualTo(0.5);
         assertThat(scores.precisionAtK()).isEqualTo(0.3333);
+    }
+
+    @Test
+    void shouldFallbackToExpectedCitationsForLegacyDatasets() throws Exception {
+        EvalCaseRecord evalCase = EvalCaseRecord.builder()
+                .expectedCitationsJson(objectMapper.writeValueAsString(List.of("report-a")))
+                .build();
+        List<RetrievalResultItem> results = List.of(
+                new RetrievalResultItem("keyword", "noise.md", "chunk-1", 0.9),
+                new RetrievalResultItem("vector", "report-a.md", "chunk-2", 0.8)
+        );
+
+        EvaluationScorer.CaseScores scores = scorer.scoreCase(
+                evalCase, "答案", List.of(), List.of(), results, false);
+
+        assertThat(scores.retrievalMetricsApplicable()).isTrue();
+        assertThat(scores.retrievalMetricLevel()).isEqualTo("citation");
+        assertThat(scores.recallAtK()).isEqualTo(1.0);
+        assertThat(scores.mrrAtK()).isEqualTo(0.5);
+        assertThat(scores.precisionAtK()).isEqualTo(0.5);
     }
 }

@@ -72,7 +72,7 @@ class HybridRagAnswerServiceMemoryTest {
         when(ragProperties.getTemperature()).thenReturn(0.7);
         // 无关线兜底：不桩则为 0.0，门槛静默失效——必须与生产语义一致
         when(ragProperties.getFallbackScoreFloor()).thenReturn(0.30);
-        when(memoryService.buildContext("tenant-1", "chat-1")).thenReturn(snapshot);
+        when(memoryService.buildContext("tenant-1", "chat-1", "缓存穿透怎么防")).thenReturn(snapshot);
 
         ChatClient chatClient = mock(ChatClient.class);
         requestSpec = mock(ChatClient.ChatClientRequestSpec.class, RETURNS_SELF);
@@ -116,7 +116,7 @@ class HybridRagAnswerServiceMemoryTest {
     @Test
     void recallFailureDegradesToNoMemoryWithoutBreakingPipeline() {
         setUp("答案 [1]", null);
-        when(memoryService.buildContext("tenant-1", "chat-1"))
+        when(memoryService.buildContext("tenant-1", "chat-1", "缓存穿透怎么防"))
                 .thenThrow(new RuntimeException("memory down"));
 
         HybridRagAnswerService.HybridRagResult result =

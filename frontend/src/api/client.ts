@@ -440,6 +440,26 @@ export async function setSessionArchived(
   return payload;
 }
 
+export async function generateSessionHandoff(
+  sessionId: string,
+  auth?: AuthContext,
+): Promise<SessionState> {
+  const response = await fetch(resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/handoff`), {
+    credentials: 'include',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
+    },
+    body: JSON.stringify({}),
+  });
+  const payload = await parseJsonSafely<SessionState>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '交接摘要生成失败');
+  }
+  return payload;
+}
+
 export async function compareSessionBranches(
   sessionId: string,
   request: BranchCompareRequest,

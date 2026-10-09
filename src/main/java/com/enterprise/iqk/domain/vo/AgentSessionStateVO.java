@@ -16,4 +16,6 @@ public class AgentSessionStateVO {
     private String workspaceId;
     private String activeBranchId;
     private List<AgentSessionBranchVO> branches;
+    private String handoffSummary;
+    private Long handoffGeneratedAt;
 }

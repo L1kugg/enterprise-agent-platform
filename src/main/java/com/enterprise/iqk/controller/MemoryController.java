@@ -6,6 +6,7 @@ import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -105,6 +106,12 @@ public class MemoryController {
                     request.confidence() == null ? DEFAULT_FACT_MIN_CONFIDENCE : request.confidence());
             default -> throw new IllegalArgumentException("不支持的记忆类型: " + request.type());
         };
+    }
+
+    /** 删除租户内指定记忆；不存在或不属于当前租户时静默返回。 */
+    @DeleteMapping("/{memoryId}")
+    public void delete(@PathVariable("memoryId") String memoryId) {
+        memoryService.deleteMemory(TenantContext.currentTenantId(), memoryId);
     }
 
     /** 记忆保存请求体。 */

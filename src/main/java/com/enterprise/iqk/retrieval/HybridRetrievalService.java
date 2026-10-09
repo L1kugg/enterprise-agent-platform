@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.security.MessageDigest;
@@ -33,10 +32,11 @@ import java.util.stream.Stream;
 
 /**
  * 混合检索核心服务：向量 / 关键词 / 图谱 / 网络四路并行召回，
- * 各路结果按来源权重加权（finalScore = retrievalScore × 权重），再按内容指纹去重、
- * 取 topK。权重来自 app.retrieval.weights.* 配置（结果回带归一化后的实际权重）。
- * topK 截断按来源轮转配额：每轮各健康路出一条本路最高分，避免低权重路
- * （如图谱）的证据被高权重路整体挤出、永远不可见。
+ * 各路结果使用 Weighted Reciprocal Rank Fusion（RRF）融合：
+ * finalScore = sum(sourceWeight / (k + rank))，来源权重仍来自
+ * app.retrieval.weights.*，RRF 常数来自 app.retrieval.rrf-k。
+ * RRF 不比较不同检索器的原始分数量纲，只使用每路排名，因此比直接相乘更稳定；
+ * 多路同时命中并排名靠前的内容自然胜出，不再使用来源轮转配额。
  * 设计要点：各源均为阻塞 IO，跑在专用线程池上以免拖垮公共 ForkJoinPool；
  * 单路故障（异常/超时/被拒）降级返回空列表并计入按路指标（retrieval.source.requests），
  * 结果携带 degradedSources、整体 outcome 标注 degraded / degraded-empty，
@@ -62,6 +62,8 @@ public class HybridRetrievalService {
     private final long sourceTimeoutMs;
     /** 单路任务队列容量，打满即拒绝（saturated），防无界堆积 */
     private final int queueCapacity;
+    /** Weighted RRF 常数：越大越平滑，默认 60 是 IR 领域常用值 */
+    private final int rrfK;
 
     // 各检索来源执行的是阻塞 IO；若在 ForkJoinPool.commonPool() 上运行，
     // 可能导致 JVM 中其他并行流饥饿，因此使用专用线程池。
@@ -81,10 +83,11 @@ public class HybridRetrievalService {
                                    @Value("${app.retrieval.source-timeout-ms:3000}") long sourceTimeoutMs,
                                    @Value("${app.retrieval.pool-size:16}") int poolSize,
                                    @Value("${app.retrieval.queue-capacity:64}") int queueCapacity,
+                                   @Value("${app.retrieval.rrf-k:60}") int rrfK,
                                    @Value("${app.retrieval.weights.vector:0.40}") double vectorWeight,
                                    @Value("${app.retrieval.weights.keyword:0.25}") double keywordWeight,
                                    @Value("${app.retrieval.weights.graph:0.20}") double graphWeight,
-                                   @Value("${app.retrieval.weights.web:0.15}") double webWeight) {
+                                    @Value("${app.retrieval.weights.web:0.15}") double webWeight) {
         this.vectorRetriever = vectorRetriever;
         this.keywordRetriever = keywordRetriever;
         this.graphRetriever = graphRetriever;
@@ -93,6 +96,7 @@ public class HybridRetrievalService {
         this.meterRegistry = meterRegistry;
         this.sourceTimeoutMs = sourceTimeoutMs;
         this.queueCapacity = Math.max(1, queueCapacity);
+        this.rrfK = Math.max(1, rrfK);
         this.configuredWeights = new HybridWeights(vectorWeight, keywordWeight, graphWeight, webWeight);
         this.retrievalExecutor = new ThreadPoolExecutor(Math.max(1, poolSize), Math.max(1, poolSize),
                 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(this.queueCapacity), runnable -> {
@@ -186,13 +190,8 @@ public class HybridRetrievalService {
                     .map(RouteResult::source)
                     .toList();
 
-            // 按内容指纹去重
-            List<ScoredDocument> deduped = deduplicate(allDocs);
-
-            // 按加权得分降序排序
-            deduped.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
-
-            List<ScoredDocument> top = selectTopAcrossSources(deduped, topK);
+            List<ScoredDocument> top = reciprocalRankFusion(routes, normalized);
+            List<ScoredDocument> topKDocuments = top.stream().limit(topK).toList();
 
             outcome = resolveOutcome(top, degradedSources);
             if (!degradedSources.isEmpty()) {
@@ -200,7 +199,7 @@ public class HybridRetrievalService {
                 log.warn("hybrid retrieval degraded routes: {}, query='{}'",
                         degradedSources, query);
             }
-            return new HybridRetrievalResult(top, allDocs.size(), deduped.size(), degradedSources, normalized);
+            return new HybridRetrievalResult(topKDocuments, allDocs.size(), top.size(), degradedSources, normalized);
         } finally {
             sample.stop(Timer.builder("retrieval.hybrid.latency")
                     .tag("outcome", outcome)
@@ -217,46 +216,50 @@ public class HybridRetrievalService {
         return top.isEmpty() ? "degraded-empty" : "degraded";
     }
 
+    /**
+     * Weighted Reciprocal Rank Fusion. Original retrieval scores stay on the
+     * documents for evidence diagnostics; finalScore contains the fused rank score.
+     */
+    private List<ScoredDocument> reciprocalRankFusion(List<RouteResult> routes, HybridWeights weights) {
+        Map<String, Double> rrfScores = new LinkedHashMap<>();
+        Map<String, ScoredDocument> representatives = new LinkedHashMap<>();
+
+        for (RouteResult route : routes) {
+            double weight = switch (route.source()) {
+                case "vector" -> weights.vectorWeight();
+                case "keyword" -> weights.keywordWeight();
+                case "graph" -> weights.graphWeight();
+                case "web" -> weights.webWeight();
+                default -> 0.0;
+            };
+            java.util.Set<String> seenInRoute = new java.util.HashSet<>();
+            int rank = 0;
+            for (ScoredDocument doc : route.docs()) {
+                String fingerprint = fingerprint(doc);
+                if (!seenInRoute.add(fingerprint)) {
+                    continue;
+                }
+                rank++;
+                rrfScores.merge(fingerprint, weight / (rrfK + rank), Double::sum);
+                representatives.merge(fingerprint, doc, (current, candidate) ->
+                        candidate.getRetrievalScore() > current.getRetrievalScore() ? candidate : current);
+            }
+        }
+
+        List<ScoredDocument> fused = representatives.entrySet().stream()
+                .peek(entry -> entry.getValue().setFinalScore(rrfScores.getOrDefault(entry.getKey(), 0.0)))
+                .map(Map.Entry::getValue)
+                .sorted(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed())
+                .toList();
+        return List.copyOf(fused);
+    }
+
     /** 将各文档原始检索分乘以来源权重写入 finalScore，返回同一列表 */
     private List<ScoredDocument> applyWeight(List<ScoredDocument> docs, double weight) {
         for (ScoredDocument d : docs) {
             d.setFinalScore(d.getRetrievalScore() * weight);
         }
         return docs;
-    }
-
-    /**
-     * topK 截断按来源轮转配额：把去重后的候选（已按 finalScore 降序）按来源分桶，
-     * 每轮各来源出一条本路最高分，直到取满 topK 或无候选；最终仍按 finalScore 降序返回。
-     * 若不做配额，低权重路（如图谱）即使有高分证据也会被高权重路（如向量）
-     * 整体挤出 topK，四路融合退化为"只有向量"。
-     */
-    private List<ScoredDocument> selectTopAcrossSources(List<ScoredDocument> sorted, int topK) {
-        if (sorted.size() <= topK) {
-            return sorted;
-        }
-        Map<String, List<ScoredDocument>> bySource = new LinkedHashMap<>();
-        for (ScoredDocument d : sorted) {
-            bySource.computeIfAbsent(d.getSourceType() != null ? d.getSourceType() : "unknown",
-                    key -> new ArrayList<>()).add(d);
-        }
-        List<ScoredDocument> selected = new ArrayList<>();
-        boolean progressed = true;
-        while (selected.size() < topK && progressed) {
-            progressed = false;
-            for (List<ScoredDocument> lane : bySource.values()) {
-                if (lane.isEmpty()) {
-                    continue;
-                }
-                selected.add(lane.remove(0));
-                progressed = true;
-                if (selected.size() == topK) {
-                    break;
-                }
-            }
-        }
-        selected.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
-        return selected;
     }
 
     /**
@@ -326,19 +329,6 @@ public class HybridRetrievalService {
                 .description("Hybrid retrieval per-source outcomes")
                 .register(meterRegistry)
                 .increment();
-    }
-
-    /** 按内容指纹去重，同指纹保留 finalScore 更高者，整体保持首次出现顺序 */
-    private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {
-        Map<String, ScoredDocument> seen = new LinkedHashMap<>();
-        for (ScoredDocument d : docs) {
-            String fingerprint = fingerprint(d);
-            ScoredDocument existing = seen.get(fingerprint);
-            if (existing == null || d.getFinalScore() > existing.getFinalScore()) {
-                seen.put(fingerprint, d);
-            }
-        }
-        return new ArrayList<>(seen.values());
     }
 
     /** 生成去重指纹：内容折叠空白后取前 200 个字符（null 内容按空串处理） */

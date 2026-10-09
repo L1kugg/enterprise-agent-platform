@@ -59,6 +59,16 @@
               placeholder="期望关键词（逗号分隔），如：高温,风险"
             />
             <el-input
+              v-model="draft.expectedDocuments"
+              size="small"
+              placeholder="期望文档（可选，逗号分隔），用于 Recall/MRR/Precision"
+            />
+            <el-input
+              v-model="draft.expectedChunks"
+              size="small"
+              placeholder="期望切片（可选，逗号分隔），如 report.md:chunk-2"
+            />
+            <el-input
               v-model="draft.forbidden"
               size="small"
               placeholder="禁用关键词（可选，逗号分隔）"
@@ -96,6 +106,12 @@
           <small v-if="metric.delta" :class="metric.deltaClass">{{ metric.delta }}</small>
         </div>
       </div>
+      <p
+        v-if="(evalCurrentRun?.metrics.retrievalMetricsCases ?? 0) === 0"
+        class="eval-metric-note"
+      >
+        Recall@K / MRR@K / Precision@K 显示为 -：评测题未配置期望文档、切片或引用。
+      </p>
 
       <div class="eval-run-grid">
         <div class="eval-run-summary">
@@ -185,10 +201,22 @@ import { ref, watch } from 'vue';
 
 // 结构化题目编辑器：业务用户不写 JSON，表单填完一键生成；JSON 模式保留给高级用户
 const evalEditorMode = ref<'form' | 'json'>('json');
-const evalCaseDrafts = ref([{ question: '', expected: '', forbidden: '' }]);
+const evalCaseDrafts = ref([{
+  question: '',
+  expected: '',
+  expectedDocuments: '',
+  expectedChunks: '',
+  forbidden: '',
+}]);
 
 function addEvalCase() {
-  evalCaseDrafts.value.push({ question: '', expected: '', forbidden: '' });
+  evalCaseDrafts.value.push({
+    question: '',
+    expected: '',
+    expectedDocuments: '',
+    expectedChunks: '',
+    forbidden: '',
+  });
 }
 
 function formatApplicablePercent(value: number, applicable?: boolean) {
@@ -215,6 +243,12 @@ function syncDraftsToJson() {
       chatId: `eval-case-${i + 1}`,
       question: d.question.trim(),
       expectedKeywords: splitCsv(d.expected),
+      ...(splitCsv(d.expectedDocuments).length
+        ? { expectedDocumentIds: splitCsv(d.expectedDocuments) }
+        : {}),
+      ...(splitCsv(d.expectedChunks).length
+        ? { expectedChunkIds: splitCsv(d.expectedChunks) }
+        : {}),
       ...(splitCsv(d.forbidden).length ? { forbiddenKeywords: splitCsv(d.forbidden) } : {}),
     }));
   evalDatasetJson.value = JSON.stringify(cases, null, 2);
@@ -230,6 +264,10 @@ watch(evalEditorMode, (mode) => {
       evalCaseDrafts.value = parsed.map((c) => ({
         question: String(c.question ?? ''),
         expected: Array.isArray(c.expectedKeywords) ? c.expectedKeywords.join(',') : '',
+        expectedDocuments: Array.isArray(c.expectedDocumentIds)
+          ? c.expectedDocumentIds.join(',')
+          : '',
+        expectedChunks: Array.isArray(c.expectedChunkIds) ? c.expectedChunkIds.join(',') : '',
         forbidden: Array.isArray(c.forbiddenKeywords) ? c.forbiddenKeywords.join(',') : '',
       }));
     }
@@ -375,6 +413,12 @@ watch(evalEditorMode, (mode) => {
   display: grid;
   grid-template-columns: repeat(6, minmax(112px, 1fr));
   gap: 8px;
+}
+
+.eval-metric-note {
+  margin: -2px 0 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
 }
 
 .eval-run-grid {

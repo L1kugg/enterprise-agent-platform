@@ -26,7 +26,8 @@ class MemoryServiceTenantIsolationTest {
     void setUp() {
         itemMapper = mock(MemoryItemMapper.class);
         eventMapper = mock(MemoryEventMapper.class);
-        service = new MemoryService(itemMapper, eventMapper, new ObjectMapper());
+        service = new MemoryService(itemMapper, eventMapper, new ObjectMapper(),
+                new MemoryRelevanceScorer());
     }
 
     @Test
@@ -36,11 +37,11 @@ class MemoryServiceTenantIsolationTest {
         MemoryItemRecord longMemory = MemoryItemRecord.builder().content("backend engineer").build();
         MemoryItemRecord shortMemory = MemoryItemRecord.builder().content("prefers Java").build();
         MemoryItemRecord factMemory = MemoryItemRecord.builder().content("uses Spring Boot").build();
-        when(itemMapper.findByUserAndType("tenant-a", "user-1", "short", 5))
+        when(itemMapper.findByUserAndType("tenant-a", "user-1", "short", 30))
                 .thenReturn(List.of(shortMemory));
-        when(itemMapper.findByUserAndType("tenant-a", "user-1", "long", 10))
+        when(itemMapper.findByUserAndType("tenant-a", "user-1", "long", 40))
                 .thenReturn(List.of(longMemory));
-        when(itemMapper.findByTypeAndConfidence("tenant-a", "fact", 0.7, 5))
+        when(itemMapper.findByTypeAndConfidence("tenant-a", "fact", 0.7, 30))
                 .thenReturn(List.of(factMemory));
 
         MemoryService.MemoryContextSnapshot context = service.buildContext("tenant-a", "user-1");
@@ -58,9 +59,9 @@ class MemoryServiceTenantIsolationTest {
     void buildContextWithoutShortSkipsShortLayerEntirely() {
         MemoryItemRecord longMemory = MemoryItemRecord.builder().content("backend engineer").build();
         MemoryItemRecord factMemory = MemoryItemRecord.builder().content("uses Spring Boot").build();
-        when(itemMapper.findByUserAndType("tenant-a", "user-1", "long", 10))
+        when(itemMapper.findByUserAndType("tenant-a", "user-1", "long", 40))
                 .thenReturn(List.of(longMemory));
-        when(itemMapper.findByTypeAndConfidence("tenant-a", "fact", 0.7, 5))
+        when(itemMapper.findByTypeAndConfidence("tenant-a", "fact", 0.7, 30))
                 .thenReturn(List.of(factMemory));
 
         // includeShort=false：挂 ChatMemory 的链路用，short 层连查都不查（省一次 DB 往返）

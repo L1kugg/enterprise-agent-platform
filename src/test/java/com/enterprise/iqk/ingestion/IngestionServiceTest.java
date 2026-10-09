@@ -47,6 +47,7 @@ class IngestionServiceTest {
                 queue,
                 scanner,
                 org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(vectorStoreProperties)
         );
     }

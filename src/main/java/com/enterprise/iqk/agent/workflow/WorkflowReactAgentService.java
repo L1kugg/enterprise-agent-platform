@@ -9,7 +9,6 @@ import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.llm.ModelCallGuard;
 import com.enterprise.iqk.llm.ModelRouter;
-import com.enterprise.iqk.memory.MemoryInjectionAdvisor;
 import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.util.AnswerStreamSupport;
 import com.enterprise.iqk.security.TenantContext;
@@ -77,7 +76,8 @@ public class WorkflowReactAgentService {
         List<ReactTraceStepVO> trace = new ArrayList<>();
         String rollingContext = "";
         String memoryUserKey = UserContext.currentUserId(request.getChatId());
-        MemoryService.MemoryContextSnapshot memorySnapshot = recallMemory(tenantId, memoryUserKey);
+        MemoryService.MemoryContextSnapshot memorySnapshot =
+                recallMemory(tenantId, memoryUserKey, request.getPrompt());
         String knownMemory = memoryBlock(memorySnapshot);
 
         try {
@@ -157,7 +157,8 @@ public class WorkflowReactAgentService {
                             tenantId, new ArrayList<>(), new AtomicReference<>(""),
                             new AtomicReference<>(""), firstTokenMs, outcomeRef, startedNs,
                             new AtomicReference<>(WorkflowState.PLANNING),
-                            memoryBlock(recallMemory(tenantId, UserContext.currentUserId(request.getChatId()))));
+                            memoryBlock(recallMemory(tenantId,
+                                    UserContext.currentUserId(request.getChatId()), request.getPrompt())));
                     return stepFlux(state, 1).concatWith(finalAnswerFlux(state));
                 })
                 .onErrorResume(ex -> {
@@ -366,8 +367,6 @@ public class WorkflowReactAgentService {
         tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         String output = modelCallGuard.call("workflow", () -> agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
-                // 记忆注入：认证主体为 user 键（匿名时空键不注入），advisor 组装期插"已知记忆"system 消息
-                .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
                 .system(system).user(user).call().content());
         long outputTokens = tenantCostService.estimateTokens(output);
         tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
@@ -384,7 +383,6 @@ public class WorkflowReactAgentService {
         AtomicBoolean recorded = new AtomicBoolean(false);
         return modelCallGuard.streaming("workflow", agentChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
-                .advisors(a -> a.param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, tenantId).param(MemoryInjectionAdvisor.MEMORY_USER_KEY, UserContext.currentUserId("")))
                 .system(system).user(user).stream().content())
                 .doOnNext(collector::append)
                 .doFinally(sig -> {
@@ -405,9 +403,9 @@ public class WorkflowReactAgentService {
     }
 
     /** 记忆召回（读侧）：失败返回 null，按无记忆降级，绝不中断工作流主链路 */
-    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey) {
+    private MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey, String query) {
         try {
-            return memoryService.buildContext(tenantId, userKey);
+            return memoryService.buildContext(tenantId, userKey, query);
         } catch (Exception ex) {
             log.warn("记忆召回失败（不影响工作流引擎）: user={}, reason={}", userKey, ex.toString());
             return null;
