@@ -103,9 +103,18 @@ public class AgentWorkflowEngine {
                 Map.of("status", status, "latencyMs", latencyMs));
     }
 
-    /** 任务终态落库并发 TASK_COMPLETED 事件；仅 finalStatus==DONE 时触发任务结论记忆写入，FAILED 不写。 */
+    /**
+     * 任务终态落库并发 TASK_COMPLETED 事件；仅 finalStatus==DONE 时触发任务结论记忆写入，FAILED 不写。
+     * 收尾 SQL 带非终态守卫：更新 0 行说明任务已被并发路径收尾（取消/回收/另一分支），
+     * 此时告警跳过——不发事件、不写记忆，绝不覆盖并发方已写入的终态。
+     */
     public void completeTask(String taskId, WorkflowState finalStatus, String finalOutput) {
-        taskMapper.completeTask(taskId, finalStatus.name(), finalOutput);
+        int updated = taskMapper.completeTask(taskId, finalStatus.name(), finalOutput);
+        if (updated == 0) {
+            log.warn("Task {} final status {} skipped: already terminal (lost race with concurrent finalize)",
+                    taskId, finalStatus);
+            return;
+        }
         emitEvent(taskId, null, "TASK_COMPLETED",
                 Map.of("status", finalStatus.name()));
         if (finalStatus == WorkflowState.DONE) {
@@ -134,9 +143,16 @@ public class AgentWorkflowEngine {
         }
     }
 
-    /** 将任务置为 FAILED（final_output 记录错误信息）并发 TASK_FAILED 事件。 */
+    /**
+     * 将任务置为 FAILED（final_output 记录错误信息）并发 TASK_FAILED 事件。
+     * 与 completeTask 同款守卫：任务已终态（如并发分支已写 DONE）时 0 行命中，告警跳过，不覆盖。
+     */
     public void failTask(String taskId, String errorMessage) {
-        taskMapper.completeTask(taskId, WorkflowState.FAILED.name(), errorMessage);
+        int updated = taskMapper.completeTask(taskId, WorkflowState.FAILED.name(), errorMessage);
+        if (updated == 0) {
+            log.warn("Task {} FAILED skipped: already terminal (lost race with concurrent finalize)", taskId);
+            return;
+        }
         emitEvent(taskId, null, "TASK_FAILED", Map.of("error", errorMessage));
     }
 
@@ -156,15 +172,19 @@ public class AgentWorkflowEngine {
 
     // ── 状态管理 ─────────────────────────────────────────
 
-    /** 经 canTransitionTo 守卫后更新状态并发 STATE_CHANGED 事件；非法转移或已终态只告警、不抛错。 */
+    /**
+     * 经 canTransitionTo 守卫后以 CAS 方式更新状态并发 STATE_CHANGED 事件；
+     * 非法转移或库内状态与预期 from 不一致（并发分支已转移/已终态）只告警、不抛错、不落库。
+     */
     public void transitionStatus(String taskId, WorkflowState from, WorkflowState to) {
         if (!from.canTransitionTo(to)) {
             log.warn("Invalid state transition: {} -> {} for task {}", from, to, taskId);
             return;
         }
-        int updated = taskMapper.updateStatus(taskId, to.name());
+        int updated = taskMapper.updateStatus(taskId, from.name(), to.name());
         if (updated == 0) {
-            log.warn("State transition had no effect: task {} already in terminal state", taskId);
+            log.warn("State transition {} -> {} skipped for task {}: DB state differs from expected "
+                    + "(concurrent transition or already terminal)", from, to, taskId);
             return;
         }
         emitEvent(taskId, null, "STATE_CHANGED",

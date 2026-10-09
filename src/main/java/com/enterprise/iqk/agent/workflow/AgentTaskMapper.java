@@ -34,10 +34,18 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskRecord> {
                                               @Param("offset") long offset,
                                               @Param("limit") int limit);
 
-    @Update("UPDATE agent_task SET status = #{status}, updated_at = NOW() WHERE task_id = #{taskId}")
-    int updateStatus(@Param("taskId") String taskId, @Param("status") String status);
+    /**
+     * CAS 式状态推进：仅当库内状态仍等于预期 from 状态时才更新，
+     * 使 Java 层状态机校验与落库成为原子操作（并发分支各自通过校验后
+     * 不再互相覆盖，输家更新 0 行由引擎层告警跳过）。
+     */
+    @Update("UPDATE agent_task SET status = #{toStatus}, updated_at = NOW() WHERE task_id = #{taskId} AND status = #{fromStatus}")
+    int updateStatus(@Param("taskId") String taskId,
+                     @Param("fromStatus") String fromStatus,
+                     @Param("toStatus") String toStatus);
 
-    @Update("UPDATE agent_task SET status = #{status}, final_output = #{finalOutput}, updated_at = NOW() WHERE task_id = #{taskId}")
+    /** 守卫式收尾：仅当任务仍在非终态时写入终态与 final_output（与 failIfNotTerminal 同款守卫），防 DONE/FAILED 被并发覆盖。 */
+    @Update("UPDATE agent_task SET status = #{status}, final_output = #{finalOutput}, updated_at = NOW() WHERE task_id = #{taskId} AND status NOT IN ('DONE', 'FAILED')")
     int completeTask(@Param("taskId") String taskId,
                      @Param("status") String status,
                      @Param("finalOutput") String finalOutput);

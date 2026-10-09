@@ -93,7 +93,7 @@ class AgentWorkflowEngineTenantIsolationTest {
         assertThat(step.getThought()).isEqualTo("reason");
         assertThat(step.getAction()).isEqualTo("search");
         verify(taskMapper).insert(task);
-        verify(taskMapper).updateStatus(task.getTaskId(), WorkflowState.PLANNING.name());
+        verify(taskMapper).updateStatus(task.getTaskId(), WorkflowState.CREATED.name(), WorkflowState.PLANNING.name());
         verify(stepMapper).insert(step);
         verify(stepMapper).updateById(step);
         verify(taskMapper).completeTask(task.getTaskId(), WorkflowState.DONE.name(), "final answer");
@@ -167,6 +167,9 @@ class AgentWorkflowEngineTenantIsolationTest {
                 .chatId("chat-9")
                 .build();
         when(taskMapper.findByTaskId("task-mem")).thenReturn(task);
+        // 收尾 SQL 带非终态守卫，mock 默认 0 行会触发引擎的竞态跳过路径，需置 1 行表示任务确实被本次收尾
+        when(taskMapper.completeTask("task-mem", WorkflowState.DONE.name(), "final report")).thenReturn(1);
+        when(taskMapper.completeTask("task-mem", WorkflowState.FAILED.name(), "boom")).thenReturn(1);
 
         engine.completeTask("task-mem", WorkflowState.DONE, "final report");
         engine.completeTask("task-mem", WorkflowState.FAILED, "boom");
@@ -182,17 +185,39 @@ class AgentWorkflowEngineTenantIsolationTest {
     void rejectsInvalidStateTransitionWithoutPersisting() {
         engine.transitionStatus("task-illegal", WorkflowState.CREATED, WorkflowState.DONE);
 
-        verify(taskMapper, never()).updateStatus("task-illegal", WorkflowState.DONE.name());
+        verify(taskMapper, never()).updateStatus("task-illegal", WorkflowState.CREATED.name(), WorkflowState.DONE.name());
         verifyNoInteractions(eventMapper);
     }
 
     @Test
     void skipsEventWhenTransitionAffectsZeroRows() {
-        when(taskMapper.updateStatus("task-stale", WorkflowState.PLANNING.name())).thenReturn(0);
+        // CAS 守卫：库内状态已不是预期 from（并发分支已转移/已终态）时 0 行命中，跳过事件
+        when(taskMapper.updateStatus("task-stale", WorkflowState.CREATED.name(), WorkflowState.PLANNING.name())).thenReturn(0);
 
         engine.transitionStatus("task-stale", WorkflowState.CREATED, WorkflowState.PLANNING);
 
-        verify(taskMapper).updateStatus("task-stale", WorkflowState.PLANNING.name());
+        verify(taskMapper).updateStatus("task-stale", WorkflowState.CREATED.name(), WorkflowState.PLANNING.name());
+        verifyNoInteractions(eventMapper);
+    }
+
+    @Test
+    void completeTaskDoesNotOverwriteTaskFinalizedConcurrently() {
+        // 收尾 SQL 守卫 0 行命中（任务已被并发路径置终态）：不发事件、不写结论记忆
+        when(taskMapper.completeTask("task-race", WorkflowState.DONE.name(), "late answer")).thenReturn(0);
+
+        engine.completeTask("task-race", WorkflowState.DONE, "late answer");
+
+        verifyNoInteractions(eventMapper);
+        verifyNoInteractions(taskConclusionMemoryRecorder);
+    }
+
+    @Test
+    void failTaskDoesNotOverwriteTaskFinalizedConcurrently() {
+        // 守卫 0 行命中（任务已被并发路径置 DONE/FAILED）：不发 TASK_FAILED 事件，不覆盖既有终态
+        when(taskMapper.completeTask("task-race", WorkflowState.FAILED.name(), "late error")).thenReturn(0);
+
+        engine.failTask("task-race", "late error");
+
         verifyNoInteractions(eventMapper);
     }
 
