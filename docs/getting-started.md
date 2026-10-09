@@ -1,6 +1,6 @@
 # 快速开始
 
-本指南介绍如何在本地通过 Docker Compose 运行 KnowledgeOps Agent，并核验最重要的运行时入口。
+本指南介绍如何在本地通过 Docker Compose 运行 Enterprise Agent Platform，并核验最重要的运行时入口。
 
 ## 前置条件
 
@@ -11,8 +11,8 @@
 ## 启动完整技术栈
 
 ```bash
-git clone https://github.com/however-yir/knowledgeops-agent.git
-cd knowledgeops-agent
+git clone https://github.com/L1kugg/enterprise-agent-platform.git
+cd enterprise-agent-platform
 ./scripts/demo.sh
 ```
 

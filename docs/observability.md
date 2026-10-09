@@ -1,6 +1,6 @@
 # 可观测性
 
-KnowledgeOps Agent 通过 Prometheus + Grafana + Loki + Tempo 实现全链路可观测。
+Enterprise Agent Platform 通过 Prometheus + Grafana + Loki + Tempo 实现全链路可观测。
 
 ## 快速启动
 

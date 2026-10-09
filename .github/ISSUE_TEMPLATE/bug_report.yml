@@ -1,12 +1,12 @@
 name: Bug report
-description: Report a reproducible problem in KnowledgeOps Agent.
+description: Report a reproducible problem in Enterprise Agent Platform.
 title: "fix: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve KnowledgeOps Agent. Please include enough detail for maintainers to reproduce the issue.
+        Thanks for helping improve Enterprise Agent Platform. Please include enough detail for maintainers to reproduce the issue.
   - type: textarea
     id: summary
     attributes:

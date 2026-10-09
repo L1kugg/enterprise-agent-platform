@@ -1,5 +1,5 @@
 groups:
-  - name: knowledgeops-agent-alerts
+  - name: enterprise-agent-platform-alerts
     rules:
       - alert: HighHttpP95Latency
         expr: histogram_quantile(0.95, sum(rate(http_requests_latency_seconds_bucket[5m])) by (le)) > 1.5
@@ -9,7 +9,7 @@ groups:
         annotations:
           summary: "High p95 latency"
           description: "p95 latency is above 1.5s for 5 minutes."
-          runbook_url: "https://github.com/however-yir/knowledgeops-agent/docs/operations.md"
+          runbook_url: "https://github.com/L1kugg/enterprise-agent-platform/docs/operations.md"
 
       - alert: Http5xxRateHigh
         expr: |
@@ -23,7 +23,7 @@ groups:
         annotations:
           summary: "HTTP 5xx error rate high"
           description: "5xx ratio exceeded 5% in the last 5 minutes."
-          runbook_url: "https://github.com/however-yir/knowledgeops-agent/docs/operations.md"
+          runbook_url: "https://github.com/L1kugg/enterprise-agent-platform/docs/operations.md"
 
       - alert: IngestionFailureRateHigh
         expr: rate(ingestion_jobs_finished_total{status="failed"}[5m]) > 0.05

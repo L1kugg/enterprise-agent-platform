@@ -1,23 +1,23 @@
-# KnowledgeOps Agent | 企业级 Spring AI RAG 平台 | 智能问答与知识运营平台
+# Enterprise Agent Platform | 企业级 Spring AI RAG 平台 | 智能问答与知识运营平台
 
-[![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/however-yir/knowledgeops-agent)](https://github.com/however-yir/knowledgeops-agent/releases)
+[![CI](https://github.com/L1kugg/enterprise-agent-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/L1kugg/enterprise-agent-platform/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/L1kugg/enterprise-agent-platform)](https://github.com/L1kugg/enterprise-agent-platform/releases)
 [![Docs](https://img.shields.io/badge/docs-Repository-blue)](docs/index.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
+[![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/L1kugg/enterprise-agent-platform/pkgs/container/enterprise-agent-platform)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.1.7-green?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
-> **矩阵角色：** `knowledgeops-agent` 是平台基线：企业级 Spring AI RAG、Agent 工作流状态、记忆持久化基础能力、证据链、租户隔离、安全与可观测性。[`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) 等业务 Agent 构建在这一层之上。
+> **矩阵角色：** `enterprise-agent-platform` 是平台基线：企业级 Spring AI RAG、Agent 工作流状态、记忆持久化基础能力、证据链、租户隔离、安全与可观测性。[`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) 等业务 Agent 构建在这一层之上。
 >
 > **Spring AI 基线：** 已运行在 `1.1.7` 稳定线（Maven Central）；从 `1.0.0-M6` 完成迁移的历史计划与 breaking changes 清单留档在 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
-KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
+Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
 
 > 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
 
 ![RAG Evaluation Studio report](docs/assets/evaluation-report-studio.png)
 
-![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
+![Enterprise Agent Platform demo](docs/assets/screenshots/demo.gif)
 
 ## 为什么它不止是一个 Demo
 
@@ -44,13 +44,13 @@ KnowledgeOps Agent 是一个面向生产的平台原型，基于 Spring AI 构�
 
 ## 架构一览
 
-![KnowledgeOps Agent architecture](docs/assets/architecture-overview.svg)
+![Enterprise Agent Platform architecture](docs/assets/architecture-overview.svg)
 
 ## 5 分钟验证路径
 
 ```bash
-git clone https://github.com/however-yir/knowledgeops-agent.git
-cd knowledgeops-agent
+git clone https://github.com/L1kugg/enterprise-agent-platform.git
+cd enterprise-agent-platform
 ./scripts/demo.sh
 ```
 
@@ -82,7 +82,7 @@ make demo-down
 
 - 文档索引：[docs/index.md](docs/index.md)
 - 证据包：[docs/evidence/README.md](docs/evidence/README.md)
-- 最新发布：[v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- 最新发布：[v1.0.0](https://github.com/L1kugg/enterprise-agent-platform/releases/tag/v1.0.0)
 - 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
 - 可复现 Demo 脚本：[docs/demo-script.md](docs/demo-script.md)
 - 运维手册：[docs/operations.md](docs/operations.md)
@@ -90,12 +90,12 @@ make demo-down
 
 ## 矩阵角色
 
-KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + RAG + 记忆 + 图谱的企业 AI 平台”**，作为 **tianji-ai-agent（智能客服/课程顾问）** 的能力底座。
+Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 Agent + RAG + 记忆 + 图谱的企业 AI 平台”**，作为 **tianji-ai-agent（智能客服/课程顾问）** 的能力底座。
 
 | 项目 | 定位 | 关系 |
 |---|---|---|
-| **KnowledgeOps Agent** | 多 Agent + RAG + 记忆 + 图谱的企业 AI 平台 | 提供 RAG/记忆/图谱/DeepResearch API |
-| **tianji-ai-agent** | CloudAgent 智能客服/课程顾问应用 | 调用 KnowledgeOps 平台能力 |
+| **Enterprise Agent Platform** | 多 Agent + RAG + 记忆 + 图谱的企业 AI 平台 | 提供 RAG/记忆/图谱/DeepResearch API |
+| **tianji-ai-agent** | CloudAgent 智能客服/课程顾问应用 | 调用 Enterprise Agent Platform 平台能力 |
 
 完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)。
 
@@ -110,7 +110,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 - 证据链接
 - 矩阵角色
 - 项目定位
-- 为什么选择 KnowledgeOps Agent？
+- 为什么选择 Enterprise Agent Platform？
 - 企业级能力矩阵
 - 技术栈与版本基线
 - 架构总览
@@ -148,9 +148,9 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 
 ---
 
-## 为什么选择 KnowledgeOps Agent？
+## 为什么选择 Enterprise Agent Platform？
 
-| 能力 | KnowledgeOps Agent | 典型 RAG demo | 典型 Spring AI 示例 |
+| 能力 | Enterprise Agent Platform | 典型 RAG demo | 典型 Spring AI 示例 |
 |---|---|---|---|
 | 可部署的完整技术栈 | Spring Boot API、Vue 控制台、MySQL、Redis/RabbitMQ、pgvector、Docker Compose | 通常只有 API 或 notebook 级别 | 通常只聚焦单个框架特性 |
 | 租户感知的安全 | API Key、JWT、Refresh Token、RBAC、由认证身份派生的租户范围、审计日志、限流 | 很少包含 | 为清晰起见通常省略 |
@@ -355,12 +355,12 @@ docker compose up --build -d
 
 `docker-compose.yml` 默认包含：
 
-- `knowledgeops-agent`（应用）
-- `knowledgeops-agent-mysql`
-- `knowledgeops-agent-redis`
-- `knowledgeops-agent-rabbitmq`
-- `knowledgeops-agent-tempo-lite`
-- `knowledgeops-agent-web`（Vue3 + Element Plus + Nginx）
+- `enterprise-agent-platform`（应用）
+- `enterprise-agent-platform-mysql`
+- `enterprise-agent-platform-redis`
+- `enterprise-agent-platform-rabbitmq`
+- `enterprise-agent-platform-tempo-lite`
+- `enterprise-agent-platform-web`（Vue3 + Element Plus + Nginx）
 
 观察栈独立文件：
 
@@ -527,7 +527,7 @@ docker compose -f docker-compose.observability.yml up -d
 ### 日志
 
 - JSON 结构化日志（含 `request_id` / `trace_id` / `tenant_id` / `chat_id`）
-- 默认文件：`logs/knowledgeops-agent.log`
+- 默认文件：`logs/enterprise-agent-platform.log`
 
 ### 链路追踪
 
@@ -668,7 +668,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
 - [x] 前端工程化（ESLint / Prettier / vue-tsc）
 - [x] Grafana 预置仪表盘 + 增强告警规则
-- [ ] tianji-ai-agent KnowledgeOpsClient 端到端联调
+- [ ] tianji-ai-agent Enterprise Agent PlatformClient 端到端联调
 - [ ] 检索重排策略可插拔实现（LLM-as-reranker）
 - [ ] Memory REST API 与默认 Agent/RAG 主链路接入
 - [ ] Redis/其他共享后端的分布式限流

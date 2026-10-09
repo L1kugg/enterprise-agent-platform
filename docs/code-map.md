@@ -289,7 +289,7 @@ Agent    service/ReactAgentService ──► agent/harness/（动作执行 + 策
 | 骨架组件 | `components/`：AuthGate、IconRail、SessionSidebar、WorkspaceHeader、SettingsDialog、BranchDrawer | 纯展示；状态/动作直接从单例组合式函数导入，无 props/emits |
 | 页面组件 | `components/chat/ChatView.vue`（消息流虚拟滚动 + 输入区，最后拆、整块搬）、`components/knowledge/`、`components/admin/`、`components/usage/`、`components/evaluation/` | 显隐条件留在 App.vue 的组件标签上（EvaluationView 保持裸 `v-else`：非管理员误入 admin 视图时渲染评测页的兜底语义） |
 | 状态组合式函数 | `composables/`（persistence + useAuthState/useGlobalUi/useChatState/useChatViewport/useUsage/useEvaluation/useKnowledge/useAdmin/useComposerUpload/useSessions/useResearch/useChatEngine/useAuthActions/useViewActivation） | 模块顶层 ref = 无依赖迷你 store；**硬规则**：watch/生命周期不进 `useXxx()`，只放各模块 `registerXxxEffects()` 由 App.vue 各调一次；页面组件不自带 onMounted 拉数据（切页卸载重挂会重复请求），懒加载统一在 useViewActivation。useGlobalUi 的 `registerGlobalUiEffects` 额外负责 activeView ↔ 地址栏同步（watch → pushState、popstate → 回写，无 vue-router） |
-| 持久化 | `composables/persistence.ts` | 不反向依赖功能模块；各模块顶层 `registerPersistSlice(key, getter)` 注册自己的切片，`persistState()` 聚合写 `localStorage['knowledgeops-agent-react-console-v2']`（key 名不变） |
+| 持久化 | `composables/persistence.ts` | 不反向依赖功能模块；各模块顶层 `registerPersistSlice(key, getter)` 注册自己的切片，`persistState()` 聚合写 `localStorage['enterprise-agent-platform-react-console-v2']`（key 名不变） |
 | 纯函数 | `utils/`：constants、dom、format、evalFormat、models、markdown | markdown.ts 顶层完成 marked + hljs + DOMPurify 初始化（模块副作用随 import 生效），导出 `renderMarkdown` |
 | 共享样式 | `styles/shared.css`（main.ts 在 element-plus CSS 之后导入） | 被 2+ 组件共用的类全局可见；**⚠ 顺序敏感勿重排**：`.kb-main-panel`（flex）与 `.eval-main-panel`（grid）特异性相同、靠源码顺序决胜（知识库主面板两个类同时挂，实际生效的是 grid），响应式覆盖与基础规则同住一个组件 |
 

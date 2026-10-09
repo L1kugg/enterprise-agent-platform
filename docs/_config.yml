@@ -1,6 +1,6 @@
-title: KnowledgeOps Agent
+title: Enterprise Agent Platform
 description: Production-oriented Spring AI platform prototype for RAG, tool calling, async ingestion, JWT/RBAC security, and full observability.
 theme: jekyll-theme-cayman
 show_downloads: true
 github:
-  repository_url: https://github.com/however-yir/knowledgeops-agent
+  repository_url: https://github.com/L1kugg/enterprise-agent-platform

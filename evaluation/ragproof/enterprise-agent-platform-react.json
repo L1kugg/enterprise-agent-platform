@@ -1,14 +1,14 @@
 {
-  "name": "knowledgeops-react-quality",
+  "name": "enterprise-agent-platform-react-quality",
   "dataset": "dataset.jsonl",
   "adapter": {
     "type": "http",
-    "base_url": "${KNOWLEDGEOPS_EVAL_BASE_URL}",
+    "base_url": "${ENTERPRISE_AGENT_PLATFORM_EVAL_BASE_URL}",
     "endpoint": "/ai/react/chat",
     "method": "POST",
     "headers": {
-      "X-API-Key": "${KNOWLEDGEOPS_EVAL_API_KEY}",
-      "X-Tenant-Id": "${KNOWLEDGEOPS_EVAL_TENANT_ID}",
+      "X-API-Key": "${ENTERPRISE_AGENT_PLATFORM_EVAL_API_KEY}",
+      "X-Tenant-Id": "${ENTERPRISE_AGENT_PLATFORM_EVAL_TENANT_ID}",
       "Content-Type": "application/json"
     },
     "json_field": "prompt",

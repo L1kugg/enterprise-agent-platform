@@ -4,10 +4,10 @@
 set -euo pipefail
 
 SERVER="${DEPLOY_SERVER:-ubuntu@82.157.60.115}"
-APP_DIR="${DEPLOY_APP_DIR:-/opt/knowledgeops-agent/deploy}"
-RELEASE_ROOT="${DEPLOY_RELEASE_ROOT:-/opt/knowledgeops-agent/releases}"
+APP_DIR="${DEPLOY_APP_DIR:-/opt/enterprise-agent-platform/deploy}"
+RELEASE_ROOT="${DEPLOY_RELEASE_ROOT:-/opt/enterprise-agent-platform/releases}"
 RELEASE_ID="$(date +%Y%m%d%H%M%S)"
-PACKAGE="/tmp/knowledgeops-artifacts.tar.gz"
+PACKAGE="/tmp/enterprise-agent-platform-artifacts.tar.gz"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 cleanup() {
@@ -25,7 +25,7 @@ else
   mvn -q -DskipTests package
 fi
 
-JAR="$(find target -maxdepth 1 -name 'knowledgeops-agent-*.jar' ! -name '*-sources.jar' | sort | tail -1)"
+JAR="$(find target -maxdepth 1 -name 'enterprise-agent-platform-*.jar' ! -name '*-sources.jar' | sort | tail -1)"
 if [[ -z "$JAR" ]]; then
   echo "Backend jar not found" >&2
   exit 1
@@ -52,13 +52,13 @@ tar -czf "$PACKAGE" -C "$STAGE" app web
 echo "    包大小: $(du -h "$PACKAGE" | cut -f1)"
 
 echo "==> [4/6] 上传产物与 compose override"
-scp -q "$PACKAGE" "$SERVER:/tmp/knowledgeops-artifacts.tar.gz"
+scp -q "$PACKAGE" "$SERVER:/tmp/enterprise-agent-platform-artifacts.tar.gz"
 scp -q deploy/docker-compose.artifacts.yml "$SERVER:/tmp/docker-compose.artifacts.yml"
 
 echo "==> [5/6] 服务器安装 release 并重启 app/web"
 ssh "$SERVER" "RELEASE_ID='$RELEASE_ID' RELEASE_ROOT='$RELEASE_ROOT' APP_DIR='$APP_DIR' bash -s" <<'REMOTE'
 set -euo pipefail
-PACKAGE=/tmp/knowledgeops-artifacts.tar.gz
+PACKAGE=/tmp/enterprise-agent-platform-artifacts.tar.gz
 OVERRIDE=/tmp/docker-compose.artifacts.yml
 RELEASE_DIR="$RELEASE_ROOT/$RELEASE_ID"
 CURRENT="$RELEASE_ROOT/current"
@@ -69,8 +69,8 @@ if [[ -z "$PREVIOUS" ]]; then
   # 首次切到产物部署时，把当前容器内产物抽出来作为回滚基线。
   IMAGE_BASE="$RELEASE_ROOT/image-base"
   sudo mkdir -p "$IMAGE_BASE/app" "$IMAGE_BASE/web"
-  sudo docker cp knowledgeops-agent:/app/app.jar "$IMAGE_BASE/app/app.jar"
-  sudo docker cp knowledgeops-agent-web:/usr/share/nginx/html/. "$IMAGE_BASE/web/"
+  sudo docker cp enterprise-agent-platform:/app/app.jar "$IMAGE_BASE/app/app.jar"
+  sudo docker cp enterprise-agent-platform-web:/usr/share/nginx/html/. "$IMAGE_BASE/web/"
   sudo find "$IMAGE_BASE" -type f -exec chmod a+r {} +
   sudo find "$IMAGE_BASE" -type d -exec chmod a+rx {} +
   PREVIOUS="$IMAGE_BASE"

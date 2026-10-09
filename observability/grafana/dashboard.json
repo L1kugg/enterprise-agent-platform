@@ -1,8 +1,8 @@
 {
   "dashboard": {
-    "title": "KnowledgeOps Agent - Enterprise Dashboard",
-    "uid": "knowledgeops-agent-main",
-    "tags": ["knowledgeops", "enterprise"],
+    "title": "Enterprise Agent Platform - Enterprise Dashboard",
+    "uid": "enterprise-agent-platform-main",
+    "tags": ["enterprise-agent-platform", "enterprise"],
     "timezone": "browser",
     "refresh": "30s",
     "panels": [

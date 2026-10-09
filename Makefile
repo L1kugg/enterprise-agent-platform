@@ -3,9 +3,9 @@
 package:
 	mvn -DskipTests package -q
 
-# jar 模式部署：本地打包并上传 jar（首次需先在服务器 mkdir -p /opt/knowledgeops-agent/target）
+# jar 模式部署：本地打包并上传 jar（首次需先在服务器 mkdir -p /opt/enterprise-agent-platform/target）
 deploy-jar: package
-	scp target/knowledgeops-agent-1.0-SNAPSHOT.jar root@82.157.60.115:/opt/knowledgeops-agent/target/
+	scp target/enterprise-agent-platform-1.0-SNAPSHOT.jar root@82.157.60.115:/opt/enterprise-agent-platform/target/
 
 # 一键发布：jar + 前端源码打成一个包上传并重建容器（等同 bash scripts/publish.sh，输 2 次密码）
 publish:

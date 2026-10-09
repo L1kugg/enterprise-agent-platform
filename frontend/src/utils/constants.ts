@@ -1,8 +1,8 @@
 // 全局常量：从 App.vue 单体拆出，值与原定义逐字一致。
 // STORAGE_KEY 变更会丢老用户的本地数据，动前必三思。
 
-export const STORAGE_KEY = 'knowledgeops-agent-react-console-v2';
-export const LEGACY_STORAGE_KEY = 'knowledgeops-agent-react-console';
+export const STORAGE_KEY = 'enterprise-agent-platform-react-console-v2';
+export const LEGACY_STORAGE_KEY = 'enterprise-agent-platform-react-console';
 export const DEFAULT_SYSTEM_MESSAGE = '你好，我是你的知识库助手。上传文档后直接提问，回答会标注内容出处。';
 export const DEFAULT_WORKSPACE = 'default';
 export const ESTIMATED_ROW_HEIGHT = 156;

@@ -13,7 +13,7 @@ RUN apk upgrade --no-cache && \
 
 USER appuser
 
-COPY --chown=appuser:appgroup target/knowledgeops-agent-*.jar app.jar
+COPY --chown=appuser:appgroup target/enterprise-agent-platform-*.jar app.jar
 
 # Read-only root filesystem support
 VOLUME ["/app/data", "/app/logs"]

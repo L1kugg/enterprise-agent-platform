@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SERVER="ubuntu@82.157.60.115"
-APP_DIR="/opt/knowledgeops-agent"
+APP_DIR="/opt/enterprise-agent-platform"
 PKG_NAME="deploy-update.tar.gz"
 PKG="/tmp/$PKG_NAME"
 
@@ -20,7 +20,7 @@ echo "==> [2/4] 收集发布文件（jar + 前端源码 + 部署配置）"
 # 注意：绝不包含 deploy/.env.production（生产密钥只留在服务器本地）
 rm -f "$PKG"
 tar czf "$PKG" \
-  target/knowledgeops-agent-1.0-SNAPSHOT.jar \
+  target/enterprise-agent-platform-1.0-SNAPSHOT.jar \
   Dockerfile .dockerignore \
   deploy/docker-compose.prod.yml \
   mcp-weather/mcp_weather.py \
@@ -42,4 +42,4 @@ ssh "$SERVER" "set -e; \
 
 echo ""
 echo "✅ 发布完成：http://82.157.60.115:8088 （浏览器 Ctrl+F5 强制刷新看新页面）"
-echo "   看应用日志：ssh $SERVER 'sudo docker logs -f knowledgeops-agent'"
+echo "   看应用日志：ssh $SERVER 'sudo docker logs -f enterprise-agent-platform'"

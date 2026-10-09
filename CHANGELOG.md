@@ -91,7 +91,7 @@
 - PDF 入库从数据库轮询循环切换为队列驱动的 worker 模型。
 - API Key 轮换现在按稳定的 `keyName`（活跃密钥语义）进行，而不是生成临时名称。
 - 向量存储后端默认值调整为面向 pgvector 生产路径。
-- 项目命名与运行时标识统一为企业平台术语（`knowledgeops-agent`）。
+- 项目命名与运行时标识统一为企业平台术语（`enterprise-agent-platform`）。
 - README 与文档升级为以企业部署/架构为核心的文档集。
 - 非 development profile 下应用安全默认启用。
 - 自动入库幂等键现在使用文件内容哈希，替代文件名加文件大小。

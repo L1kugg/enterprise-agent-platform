@@ -1,8 +1,8 @@
-# KnowledgeOps Agent 文档
+# Enterprise Agent Platform 文档
 
-KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，提供租户隔离检索、异步文档摄取、受治理的 Agent 工作流、可审计的安全体系、生产级可观测性以及回归评估。
+Enterprise Agent Platform 是一个企业级 Spring AI RAG 平台，提供租户隔离检索、异步文档摄取、受治理的 Agent 工作流、可审计的安全体系、生产级可观测性以及回归评估。
 
-![KnowledgeOps Agent 架构](assets/architecture-overview.svg)
+![Enterprise Agent Platform 架构](assets/architecture-overview.svg)
 
 ## 按需选择入口
 
@@ -36,7 +36,7 @@ KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，提供租户隔离�
 
 | 分类 | 文档 |
 |---|---|
-| 产品概览 | [项目 README](https://github.com/however-yir/knowledgeops-agent#readme)、[路线图](roadmap.md) |
+| 产品概览 | [项目 README](https://github.com/L1kugg/enterprise-agent-platform#readme)、[路线图](roadmap.md) |
 | 本地评估 | [快速开始](getting-started.md)、[可复现演示脚本](demo-script.md)、[API 使用示例](api-recipes.md) |
 | 架构与部署 | [企业级架构说明](architecture-enterprise.md)、[Agent 工作流](architecture-agent-workflow.md)、[Agent Harness 架构](architecture-agent-harness.md)、[企业级部署指南](deployment-enterprise.md) |
 | 运维 | [运维手册](operations.md)、[分布式与可观测性演练](drills/distributed-and-observability-drill.md)、[Runbook 模板](drills/runbook_template.md) |
@@ -68,7 +68,7 @@ KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，提供租户隔离�
 
 ## 发布与社区
 
-- 最新版本：[v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
-- 路线图里程碑：[v1.1.0](https://github.com/however-yir/knowledgeops-agent/milestone/1)
-- 讨论区：[GitHub Discussions](https://github.com/however-yir/knowledgeops-agent/discussions)
-- 源码仓库：[however-yir/knowledgeops-agent](https://github.com/however-yir/knowledgeops-agent)
+- 最新版本：[v1.0.0](https://github.com/L1kugg/enterprise-agent-platform/releases/tag/v1.0.0)
+- 路线图里程碑：[v1.1.0](https://github.com/L1kugg/enterprise-agent-platform/milestone/1)
+- 讨论区：[GitHub Discussions](https://github.com/L1kugg/enterprise-agent-platform/discussions)
+- 源码仓库：[L1kugg/enterprise-agent-platform](https://github.com/L1kugg/enterprise-agent-platform)

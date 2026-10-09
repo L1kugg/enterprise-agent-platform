@@ -1,6 +1,6 @@
 # Java 对齐报告
 
-本报告记录 Java 版本相对于 KnowledgeOps Agent 三语言（Java、TypeScript、Python）共同对齐目标的就绪情况。
+本报告记录 Java 版本相对于 Enterprise Agent Platform 三语言（Java、TypeScript、Python）共同对齐目标的就绪情况。
 
 ## 范围
 
@@ -24,7 +24,7 @@ Java 版本是功能基线和面向生产的原型。它保留了既有的 Sprin
 | 限流 | 仅单实例 | Bucket4j 内存过滤器；共享 Redis 后端尚未实现 |
 | 健康检查与指标 | 已完成 | `/actuator/health`、`/actuator/prometheus` |
 | Docker 本地部署 | 已完成 | `Dockerfile`、`docker-compose.yml` |
-| Helm 部署 | 已完成 | `helm/knowledgeops-agent` |
+| Helm 部署 | 已完成 | `helm/enterprise-agent-platform` |
 | API 契约测试 | 已完成 | `JavaApiContractTest` |
 | E2E 冒烟 | 已完成 | `scripts/e2e_chat_flow.py` |
 | 性能冒烟 | 已完成 | `performance/k6/chat_ingestion_load.js` |
@@ -76,6 +76,6 @@ mvn -q -DskipTests package
 可选的部署检查：
 
 ```bash
-helm lint helm/knowledgeops-agent
+helm lint helm/enterprise-agent-platform
 docker compose config
 ```

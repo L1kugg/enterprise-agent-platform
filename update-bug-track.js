@@ -10,7 +10,7 @@
 
 const fs = require('fs');
 
-const REPO = 'however-yir/knowledgeops-agent';
+const REPO = 'L1kugg/enterprise-agent-platform';
 const FILE = 'bug_track.json';
 
 // bug id -> [PR number, state, fallback title]

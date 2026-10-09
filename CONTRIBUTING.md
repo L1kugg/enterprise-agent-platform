@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你有兴趣改进 KnowledgeOps Agent！
+感谢你有兴趣改进 Enterprise Agent Platform！
 
 ## 快速上手
 
@@ -69,8 +69,8 @@ npm run lint         # ESLint check
 
 ## 报告问题
 
-- 可复现的问题请使用[缺陷报告模板](https://github.com/however-yir/knowledgeops-agent/issues/new?template=bug_report.yml)
-- 功能建议请使用[功能请求模板](https://github.com/however-yir/knowledgeops-agent/issues/new?template=feature_request.yml)
+- 可复现的问题请使用[缺陷报告模板](https://github.com/L1kugg/enterprise-agent-platform/issues/new?template=bug_report.yml)
+- 功能建议请使用[功能请求模板](https://github.com/L1kugg/enterprise-agent-platform/issues/new?template=feature_request.yml)
 - 安全漏洞请参阅 [SECURITY.md](SECURITY.md)——**不要**创建公开 issue
 
 ## 行为准则

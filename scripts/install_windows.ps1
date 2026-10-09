@@ -6,12 +6,12 @@ Set-Location $RepoRoot
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "[knowledgeops-agent][install][win] $Message" -ForegroundColor Cyan
+    Write-Host "[enterprise-agent-platform][install][win] $Message" -ForegroundColor Cyan
 }
 
 function Fail {
     param([string]$Message)
-    Write-Host "[knowledgeops-agent][install][win][error] $Message" -ForegroundColor Red
+    Write-Host "[enterprise-agent-platform][install][win][error] $Message" -ForegroundColor Red
     exit 1
 }
 
@@ -102,7 +102,7 @@ if ($composeMode -eq "docker-compose-plugin") {
     docker-compose up --build -d
 }
 
-Write-Host "[knowledgeops-agent][install][win] Done." -ForegroundColor Green
+Write-Host "[enterprise-agent-platform][install][win] Done." -ForegroundColor Green
 Write-Host "- Frontend Console: http://localhost:8088"
 Write-Host "- Backend API:      http://localhost:8080"
 Write-Host "- RabbitMQ Console: http://localhost:15672"

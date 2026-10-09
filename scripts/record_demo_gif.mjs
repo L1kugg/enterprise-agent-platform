@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 const repoRoot = process.cwd();
-const defaultFramesDir = path.join(os.tmpdir(), "knowledgeops-agent-demo-gif-frames");
+const defaultFramesDir = path.join(os.tmpdir(), "enterprise-agent-platform-demo-gif-frames");
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {

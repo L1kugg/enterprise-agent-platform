@@ -1,29 +1,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "knowledgeops-agent.fullname" . }}
+  name: {{ include "enterprise-agent-platform.fullname" . }}
   labels:
-    {{- include "knowledgeops-agent.labels" . | nindent 4 }}
+    {{- include "enterprise-agent-platform.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "knowledgeops-agent.selectorLabels" . | nindent 6 }}
+      {{- include "enterprise-agent-platform.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "knowledgeops-agent.selectorLabels" . | nindent 8 }}
+        {{- include "enterprise-agent-platform.selectorLabels" . | nindent 8 }}
         {{- toYaml .Values.podLabels | nindent 8 }}
       annotations:
         {{- toYaml .Values.podAnnotations | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "knowledgeops-agent.serviceAccountName" . }}
+      serviceAccountName: {{ include "enterprise-agent-platform.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ include "knowledgeops-agent.name" . }}
+        - name: {{ include "enterprise-agent-platform.name" . }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -34,9 +34,9 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "knowledgeops-agent.fullname" . }}-config
+                name: {{ include "enterprise-agent-platform.fullname" . }}-config
             - secretRef:
-                name: {{ include "knowledgeops-agent.fullname" . }}
+                name: {{ include "enterprise-agent-platform.fullname" . }}
           env:
             {{- toYaml .Values.extraEnv | nindent 12 }}
           startupProbe:

@@ -1,6 +1,6 @@
 # Spring AI 1.1.7 迁移记录
 
-KnowledgeOps 目前使用 Spring AI `1.1.7` 稳定线，搭配 Spring Boot 3.4.5 与 Java 17。迁移通过 `mvn validate compile` 和 `mvn verify` 验证，无需启动 Docker 或模型服务。
+Enterprise Agent Platform 目前使用 Spring AI `1.1.7` 稳定线，搭配 Spring Boot 3.4.5 与 Java 17。迁移通过 `mvn validate compile` 和 `mvn verify` 验证，无需启动 Docker 或模型服务。
 
 ## 已应用的兼容性调整
 

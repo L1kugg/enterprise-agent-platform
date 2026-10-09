@@ -1,4 +1,4 @@
-# KnowledgeOps Agent 项目技术文档
+# Enterprise Agent Platform 项目技术文档
 
 > 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测。
 
@@ -29,7 +29,7 @@
 
 ### 1.1 项目定位
 
-KnowledgeOps Agent 是一个企业级 Spring AI RAG 平台，不停留在单接口聊天示例，而是把知识入库、检索问答、租户与权限边界、审计可追溯、可观测运维、质量回归放在同一条可验证链路里。
+Enterprise Agent Platform 是一个企业级 Spring AI RAG 平台，不停留在单接口聊天示例，而是把知识入库、检索问答、租户与权限边界、审计可追溯、可观测运维、质量回归放在同一条可验证链路里。
 
 ### 1.2 解决的核心问题
 

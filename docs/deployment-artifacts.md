@@ -5,7 +5,7 @@
 ## 发布流程
 
 1. 本机构建后端 `jar` 与前端 `dist`。
-2. 打包并上传到服务器 `/opt/knowledgeops-agent/releases/<timestamp>`。
+2. 打包并上传到服务器 `/opt/enterprise-agent-platform/releases/<timestamp>`。
 3. 通过 `deploy/docker-compose.artifacts.yml` 把产物挂载进现有容器：
    - 后端：`releases/current/app/app.jar -> /app/app.jar`
    - 前端：`releases/current/web -> /usr/share/nginx/html`

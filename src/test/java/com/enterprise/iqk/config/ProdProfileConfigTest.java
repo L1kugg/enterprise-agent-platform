@@ -123,7 +123,7 @@ class ProdProfileConfigTest {
                 "app.cors.allowed-origins=https://example.com,https://app.example.com",
                 "app.security.enabled=true",
                 "app.security.jwt-secret=a-real-prod-secret-key",
-                "spring.rabbitmq.username=knowledgeops",
+                "spring.rabbitmq.username=enterprise-agent-platform",
                 "spring.rabbitmq.password=not-guest"
         ).run(context -> assertThat(context).hasNotFailed());
     }

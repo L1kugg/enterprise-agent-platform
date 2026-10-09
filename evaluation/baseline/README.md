@@ -1,6 +1,6 @@
 # Evaluation Baseline Dataset
 
-This directory contains the quantitative baseline for the KnowledgeOps Agent evaluation.
+This directory contains the quantitative baseline for the Enterprise Agent Platform evaluation.
 
 ## Metrics
 

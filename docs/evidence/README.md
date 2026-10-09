@@ -1,16 +1,16 @@
-# KnowledgeOps Agent 证据包
+# Enterprise Agent Platform 证据包
 
 本文件汇集了把项目当作可运行 AI 平台来评审时最短的公开证据路径。
 
 ## 运行时证据
 
 - 本地验证路径：`./scripts/demo.sh`
-- 可拉取镜像：`docker pull ghcr.io/however-yir/knowledgeops-agent:latest`
+- 可拉取镜像：`docker pull ghcr.io/L1kugg/enterprise-agent-platform:latest`
 - 容器工作流：`.github/workflows/publish-image.yml`
 - 主 CI：`.github/workflows/ci.yml`
 - 回归工作流：`.github/workflows/nightly-regression.yml`
 - 基线发布：`AI Matrix Baseline 2026.05`
-- 发布版本：`v1.0.0 - KnowledgeOps Agent Platform Prototype`
+- 发布版本：`v1.0.0 - Enterprise Agent Platform Platform Prototype`
 
 ## 产品与架构证据
 
@@ -51,30 +51,30 @@ open evaluation/reports/latest-evaluation-report.md
 - 切换到 `Evaluation`
 - 对比基线与当前指标：检索命中率、引用覆盖率、回答忠实度、平均延迟、失败率、运行评分。
 
-## 跨仓库集成证据（KnowledgeOps → tianji）
+## 跨仓库集成证据（Enterprise Agent Platform → tianji）
 
-以下证据表明"KnowledgeOps→tianji"矩阵链路是可运行的代码路径，而不只是 README 上的一个箭头。
+以下证据表明"Enterprise Agent Platform→tianji"矩阵链路是可运行的代码路径，而不只是 README 上的一个箭头。
 
 ### 前置条件
 
 ```bash
-# 1. Start KnowledgeOps Agent stack
-cd knowledgeops-agent && ./scripts/demo.sh
+# 1. Start Enterprise Agent Platform stack
+cd enterprise-agent-platform && ./scripts/demo.sh
 
 # 2. Start tianji-ai-agent stack (in another terminal)
 cd tianji-ai-agent && bash scripts/quick-start-mac.sh
 
 # 3. Set cross-repo environment variables for tianji
-export TJ_AI_KNOWLEDGEOPS_ENABLED=true
-export TJ_AI_KNOWLEDGEOPS_BASE_URL=http://localhost:8080
-export TJ_AI_KNOWLEDGEOPS_API_KEY=your-api-key
+export TJ_AI_ENTERPRISE_AGENT_PLATFORM_ENABLED=true
+export TJ_AI_ENTERPRISE_AGENT_PLATFORM_BASE_URL=http://localhost:8080
+export TJ_AI_ENTERPRISE_AGENT_PLATFORM_API_KEY=your-api-key
 ```
 
 ### 验证步骤
 
 1. **Web 检索可用**：在 `APP_WEB_SEARCH_ENABLED=true` 且配置了 SearXNG 实例的前提下，发送一个研究类查询 → 确认 `retrieval.web.latency` 指标显示 `outcome=success`（而不是 `disabled` 或 `no-backend`）。
-2. **KnowledgeOpsClient 连通 KnowledgeOps**：在 tianji 中设置 `TJ_AI_KNOWLEDGEOPS_ENABLED=true` 后，发送 KNOWLEDGE 或 RECOMMEND 提示词 → 在 tianji 日志中检查 `KnowledgeOps platform RAG` 或 `KnowledgeOps platform memory` 增强消息。
-3. **兜底生效**：设置 `TJ_AI_KNOWLEDGEOPS_ENABLED=false` 后发送相同提示词 → tianji 的 KnowledgeAgent 与 RecommendAgent 无报错地回退到本地 VectorStore Advisor。
+2. **Enterprise Agent PlatformClient 连通 Enterprise Agent Platform**：在 tianji 中设置 `TJ_AI_ENTERPRISE_AGENT_PLATFORM_ENABLED=true` 后，发送 KNOWLEDGE 或 RECOMMEND 提示词 → 在 tianji 日志中检查 `Enterprise Agent Platform platform RAG` 或 `Enterprise Agent Platform platform memory` 增强消息。
+3. **兜底生效**：设置 `TJ_AI_ENTERPRISE_AGENT_PLATFORM_ENABLED=false` 后发送相同提示词 → tianji 的 KnowledgeAgent 与 RecommendAgent 无报错地回退到本地 VectorStore Advisor。
 4. **两个仓库的 CI 均为绿色**：打开两个仓库最新的 GitHub Actions 运行记录，确认 main 分支推送为 `✓`。
 
 ### 跨仓库 Docker Compose（最小化）
@@ -89,8 +89,8 @@ services:
     environment:
       SEARXNG_BASE_URL: http://localhost:8888/
 
-  knowledgeops:
-    image: ghcr.io/however-yir/knowledgeops-agent:latest
+  enterprise-agent-platform:
+    image: ghcr.io/L1kugg/enterprise-agent-platform:latest
     ports: ["8080:8080"]
     environment:
       SPRING_PROFILES_ACTIVE: dev
@@ -103,9 +103,9 @@ services:
     image: ghcr.io/however-yir/tianji-ai-agent:demo
     ports: ["8094:8094"]
     environment:
-      TJ_AI_KNOWLEDGEOPS_ENABLED: "true"
-      TJ_AI_KNOWLEDGEOPS_BASE_URL: http://knowledgeops:8080
-    depends_on: [knowledgeops]
+      TJ_AI_ENTERPRISE_AGENT_PLATFORM_ENABLED: "true"
+      TJ_AI_ENTERPRISE_AGENT_PLATFORM_BASE_URL: http://enterprise-agent-platform:8080
+    depends_on: [enterprise-agent-platform]
 ```
 
 ### 证据产物
@@ -113,8 +113,8 @@ services:
 | 证据 | 如何验证 |
 |---|---|
 | Web 检索返回结果 | 检查 `retrieval.web.latency` 指标为 `outcome=success` |
-| tianji 连通 KnowledgeOps | 检查 tianji 日志中的 `KnowledgeOps platform RAG` 调试消息 |
-| 无 KnowledgeOps 时的兜底 | 关闭 `TJ_AI_KNOWLEDGEOPS_ENABLED` → Agent 使用本地 Advisor |
+| tianji 连通 Enterprise Agent Platform | 检查 tianji 日志中的 `Enterprise Agent Platform platform RAG` 调试消息 |
+| 无 Enterprise Agent Platform 时的兜底 | 关闭 `TJ_AI_ENTERPRISE_AGENT_PLATFORM_ENABLED` → Agent 使用本地 Advisor |
 | 两个仓库 CI 均为绿色 | 打开两个仓库 `main` 分支最新的 GitHub Actions 运行记录 |
 
 ## 验证清单
@@ -125,5 +125,5 @@ services:
 - 运行一次 Agent 工作流，确认任务/步骤/事件状态可见。
 - 查看 `docs/observability.md` 中的 Prometheus/Grafana/链路追踪文档。
 - 打开最新的 GitHub Actions 运行记录，确认基线 CI 为绿色。
-- *（跨仓库）* 在 KnowledgeOps 运行时，验证 tianji 的 KnowledgeAgent 通过 KnowledgeOpsClient 连通它。
-- *（跨仓库）* 在 KnowledgeOps 停止时，验证 tianji 的 KnowledgeAgent 回退到本地 Advisor。
+- *（跨仓库）* 在 Enterprise Agent Platform 运行时，验证 tianji 的 KnowledgeAgent 通过 Enterprise Agent PlatformClient 连通它。
+- *（跨仓库）* 在 Enterprise Agent Platform 停止时，验证 tianji 的 KnowledgeAgent 回退到本地 Advisor。

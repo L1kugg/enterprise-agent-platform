@@ -4,7 +4,7 @@
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
-    Enterprise Checkstyle configuration for knowledgeops-agent.
+    Enterprise Checkstyle configuration for enterprise-agent-platform.
     Based on Google Java Style with project-specific adjustments.
 -->
 <module name="Checker">

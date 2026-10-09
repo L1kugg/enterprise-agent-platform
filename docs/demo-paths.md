@@ -1,6 +1,6 @@
 # V1 演示路径
 
-三条固定演示链路，覆盖 KnowledgeOps Agent 的全部核心能力。每条链路 3-5 分钟可完成。
+三条固定演示链路，覆盖 Enterprise Agent Platform 的全部核心能力。每条链路 3-5 分钟可完成。
 
 ## 链路一：DeepResearch 行业研究
 
@@ -46,7 +46,7 @@ curl http://localhost:8080/ai/research/tasks/{taskId}/report \
 
 ## 链路二：智能客服（通过 tianji-ai-agent）
 
-**展示能力**：tianji RouteAgent（结构化 JSON 意图识别）→ 9 种子 Agent → Tool Calling → KnowledgeOpsClient（RAG/记忆/图谱）→ SSE 全链路事件
+**展示能力**：tianji RouteAgent（结构化 JSON 意图识别）→ 9 种子 Agent → Tool Calling → Enterprise Agent PlatformClient（RAG/记忆/图谱）→ SSE 全链路事件
 
 **演示步骤**：
 

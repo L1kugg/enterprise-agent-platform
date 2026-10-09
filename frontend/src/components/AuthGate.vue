@@ -5,7 +5,7 @@
       <div class="auth-brand">
         <span class="auth-mark">K</span>
         <div class="auth-heading">
-        <p class="eyebrow">KnowledgeOps Agent</p>
+        <p class="eyebrow">Enterprise Agent Platform</p>
         <h1>{{ authMode === 'login' ? '登录控制台' : '注册新账号' }}</h1>
         </div>
       </div>

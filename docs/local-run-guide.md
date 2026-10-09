@@ -10,8 +10,8 @@
 ## 5 分钟快速启动
 
 ```bash
-git clone https://github.com/however-yir/knowledgeops-agent.git
-cd knowledgeops-agent
+git clone https://github.com/L1kugg/enterprise-agent-platform.git
+cd enterprise-agent-platform
 ./scripts/demo.sh
 ```
 
@@ -35,7 +35,7 @@ cp .env.example .env
 |---|---|---|
 | `OPENAI_API_KEY` | 模型 API 密钥 | 必填 |
 | `OPENAI_BASE_URL` | 模型网关地址 | `https://api.openai.com` |
-| `DB_URL` | MySQL 连接 | `jdbc:mysql://localhost:3306/knowledgeops_agent` |
+| `DB_URL` | MySQL 连接 | `jdbc:mysql://localhost:3306/enterprise_agent_platform` |
 | `APP_VECTOR_STORE_BACKEND` | 向量存储后端 | `pgvector` 或 `simple` |
 | `APP_JWT_SECRET` | JWT 签名密钥 | 生产必填 |
 
@@ -69,11 +69,11 @@ docker compose up --build -d
 
 | 服务 | 端口 | 说明 |
 |---|---|---|
-| knowledgeops-agent | 8080 | Spring Boot 后端 |
-| knowledgeops-agent-mysql | 3306 | MySQL 8.x |
-| knowledgeops-agent-redis | 6379 | Redis 7.x |
-| knowledgeops-agent-rabbitmq | 5672/15672 | RabbitMQ |
-| knowledgeops-agent-web | 8088 | Vue 3 前端 (Nginx) |
+| enterprise-agent-platform | 8080 | Spring Boot 后端 |
+| enterprise-agent-platform-mysql | 3306 | MySQL 8.x |
+| enterprise-agent-platform-redis | 6379 | Redis 7.x |
+| enterprise-agent-platform-rabbitmq | 5672/15672 | RabbitMQ |
+| enterprise-agent-platform-web | 8088 | Vue 3 前端 (Nginx) |
 
 ## 可观测栈（可选）
 
@@ -134,12 +134,12 @@ curl -X POST http://localhost:8080/ai/chat \
 
 ## tianji-ai-agent 联调
 
-KnowledgeOps 作为 tianji 的能力底座时，配置 tianji 的 `application.yml`：
+Enterprise Agent Platform 作为 tianji 的能力底座时，配置 tianji 的 `application.yml`：
 
 ```yaml
 tj:
   ai:
-    knowledgeops:
+    enterprise-agent-platform:
       base-url: http://localhost:8080
       enabled: true
 ```

@@ -19,7 +19,7 @@ class HarnessEvaluationTest {
 
     @Test
     void fixedHarnessCasesCoverBuiltinMcpWorkspaceAndPolicy() throws Exception {
-        Files.writeString(workspace.resolve("README.md"), "knowledgeops harness");
+        Files.writeString(workspace.resolve("README.md"), "enterprise-agent-platform harness");
         AgentHarnessService service = new AgentHarnessService(
                 List.of(fakeBuiltinRuntime(), fakeMcpRuntime(), new WorkspaceRuntime(workspace)),
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
@@ -41,7 +41,7 @@ class HarnessEvaluationTest {
         assertThat(invalid.toMap()).containsEntry("source", "policy");
         assertThat(mcp.toMap()).containsEntry("source", "mcp");
         assertThat(workspaceDenied.toMap()).containsEntry("source", "policy");
-        assertThat(workspaceRead.toMap()).containsEntry("content", "knowledgeops harness");
+        assertThat(workspaceRead.toMap()).containsEntry("content", "enterprise-agent-platform harness");
     }
 
     private AgentRuntime fakeBuiltinRuntime() {

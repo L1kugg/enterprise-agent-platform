@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline contract check for the KnowledgeOps <-> ragproof integration."""
+"""Offline contract check for the Enterprise Agent Platform <-> ragproof integration."""
 
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 
 # 仓库根目录，用于定位 ragproof 契约的适配器配置与策略文件
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "evaluation" / "ragproof" / "knowledgeops-react.json"
+CONFIG_PATH = ROOT / "evaluation" / "ragproof" / "enterprise-agent-platform-react.json"
 POLICY_PATH = ROOT / "evaluation" / "ragproof" / "policy.json"
 
 

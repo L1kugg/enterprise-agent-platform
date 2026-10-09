@@ -1,14 +1,14 @@
 services:
   app:
     build: .
-    image: knowledgeops-agent:latest
-    container_name: knowledgeops-agent
+    image: enterprise-agent-platform:latest
+    container_name: enterprise-agent-platform
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_URL: jdbc:mysql://mysql:3306/enterprise_agent_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
       # IMPORTANT: Replace these defaults with real secrets in production.
       # Use a .env file or CI secrets to set DB_PASSWORD, OPENAI_API_KEY, APP_JWT_SECRET.
@@ -28,8 +28,8 @@ services:
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-knowledgeops}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-knowledgeops-demo-rabbit}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-enterprise-agent-platform}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-enterprise-agent-platform-demo-rabbit}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
     depends_on:
       mysql:
@@ -55,11 +55,11 @@ services:
 
   mysql:
     image: mysql:8.0.36
-    container_name: knowledgeops-agent-mysql
+    container_name: enterprise-agent-platform-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
-      MYSQL_DATABASE: knowledgeops_agent
+      MYSQL_DATABASE: enterprise_agent_platform
     ports:
       - "3306:3306"
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-connections=200", "--innodb-buffer-pool-size=256M"]
@@ -73,7 +73,7 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: knowledgeops-agent-redis
+    container_name: enterprise-agent-platform-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -88,11 +88,11 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: knowledgeops-agent-rabbitmq
+    container_name: enterprise-agent-platform-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-knowledgeops}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-knowledgeops-demo-rabbit}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-enterprise-agent-platform}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-enterprise-agent-platform-demo-rabbit}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -106,7 +106,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.6.1
-    container_name: knowledgeops-agent-tempo-lite
+    container_name: enterprise-agent-platform-tempo-lite
     restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
@@ -119,8 +119,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    image: knowledgeops-agent-web:latest
-    container_name: knowledgeops-agent-web
+    image: enterprise-agent-platform-web:latest
+    container_name: enterprise-agent-platform-web
     restart: unless-stopped
     depends_on:
       app:

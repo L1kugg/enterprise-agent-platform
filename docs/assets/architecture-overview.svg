@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
-  <title id="title">KnowledgeOps Agent enterprise RAG architecture</title>
+  <title id="title">Enterprise Agent Platform RAG architecture</title>
   <desc id="desc">Architecture diagram showing console and API clients, Spring Boot services, async ingestion, vector retrieval, security, persistence, and observability.</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
@@ -32,7 +32,7 @@
   </defs>
 
   <rect width="1280" height="720" fill="url(#bg)"/>
-  <text x="56" y="64" class="title">KnowledgeOps Agent</text>
+  <text x="56" y="64" class="title">Enterprise Agent Platform</text>
   <text x="56" y="94" class="subtitle">Enterprise Spring AI RAG platform with tenant isolation, async ingestion, security, observability, and regression evidence.</text>
 
   <text x="72" y="148" class="band-title">ENTRY POINTS</text>

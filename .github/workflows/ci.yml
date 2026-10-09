@@ -1,4 +1,4 @@
-name: KnowledgeOps CI
+name: Enterprise Agent Platform CI
 
 on:
   push:

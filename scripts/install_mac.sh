@@ -5,11 +5,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 log() {
-  printf '[knowledgeops-agent][install][mac] %s\n' "$1"
+  printf '[enterprise-agent-platform][install][mac] %s\n' "$1"
 }
 
 fail() {
-  printf '[knowledgeops-agent][install][mac][error] %s\n' "$1" >&2
+  printf '[enterprise-agent-platform][install][mac][error] %s\n' "$1" >&2
   exit 1
 }
 
@@ -78,7 +78,7 @@ log "Starting containers..."
 "${COMPOSE_CMD[@]}" up --build -d
 
 cat <<'EOF'
-[knowledgeops-agent][install][mac] Done.
+[enterprise-agent-platform][install][mac] Done.
 - Frontend Console: http://localhost:8088
 - Backend API:      http://localhost:8080
 - RabbitMQ Console: http://localhost:15672

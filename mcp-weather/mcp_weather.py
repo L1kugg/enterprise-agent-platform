@@ -50,7 +50,7 @@ def describe_weather_code(code):
 def fetch_json(url, params):
     query = urllib.parse.urlencode(params)
     req = urllib.request.Request(url + "?" + query,
-                                 headers={"User-Agent": "knowledgeops-mcp-weather/1.0"})
+                                 headers={"User-Agent": "enterprise-agent-platform-mcp-weather/1.0"})
     with urllib.request.urlopen(req, timeout=UPSTREAM_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 

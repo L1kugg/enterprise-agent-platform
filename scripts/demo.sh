@@ -13,12 +13,12 @@ HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-300}"
 HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-5}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
 DEMO_CONTAINERS=(
-  knowledgeops-agent
-  knowledgeops-agent-web
-  knowledgeops-agent-mysql
-  knowledgeops-agent-redis
-  knowledgeops-agent-rabbitmq
-  knowledgeops-agent-tempo-lite
+  enterprise-agent-platform
+  enterprise-agent-platform-web
+  enterprise-agent-platform-mysql
+  enterprise-agent-platform-redis
+  enterprise-agent-platform-rabbitmq
+  enterprise-agent-platform-tempo-lite
 )
 
 compose() {
@@ -26,11 +26,11 @@ compose() {
 }
 
 log() {
-  printf '[knowledgeops-demo] %s\n' "$*"
+  printf '[enterprise-agent-platform-demo] %s\n' "$*"
 }
 
 fail() {
-  printf '[knowledgeops-demo] ERROR: %s\n' "$*" >&2
+  printf '[enterprise-agent-platform-demo] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
@@ -152,7 +152,7 @@ verify_stack() {
 print_success() {
   cat <<EOF
 
-KnowledgeOps Agent demo is ready.
+Enterprise Agent Platform demo is ready.
 
 Frontend console: $WEB_URL
 Backend API:      $API_BASE_URL

@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SERVER="${DEPLOY_SERVER:-ubuntu@82.157.60.115}"
-APP_DIR="${DEPLOY_APP_DIR:-/opt/knowledgeops-agent/deploy}"
-RELEASE_ROOT="${DEPLOY_RELEASE_ROOT:-/opt/knowledgeops-agent/releases}"
+APP_DIR="${DEPLOY_APP_DIR:-/opt/enterprise-agent-platform/deploy}"
+RELEASE_ROOT="${DEPLOY_RELEASE_ROOT:-/opt/enterprise-agent-platform/releases}"
 REQUESTED_RELEASE="${1:-}"
 
 ssh "$SERVER" "REQUESTED_RELEASE='$REQUESTED_RELEASE' RELEASE_ROOT='$RELEASE_ROOT' APP_DIR='$APP_DIR' bash -s" <<'REMOTE'

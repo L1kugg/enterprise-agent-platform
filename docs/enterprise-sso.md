@@ -31,13 +31,13 @@ app:
 
 After SSO is implemented:
 1. User authenticates via corporate IdP
-2. OIDC/SAML token maps to KnowledgeOps tenant + role
+2. OIDC/SAML token maps to Enterprise Agent Platform tenant + role
 3. JWT is issued with tenant-scoped claims
 4. Existing API-key auth continues to work for service accounts
 
 ## Roadmap
 
 - [ ] Implement OIDC Relying Party via `spring-boot-starter-oauth2-client`
-- [ ] Map IdP groups to KnowledgeOps RBAC roles
+- [ ] Map IdP groups to Enterprise Agent Platform RBAC roles
 - [ ] Add SAML SP metadata endpoint
 - [ ] Document Azure AD and Okta quick-start configs

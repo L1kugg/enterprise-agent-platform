@@ -1,6 +1,6 @@
 # 可复现演示脚本
 
-本脚本面向 5 到 8 分钟的本地演示，用于证明 KnowledgeOps Agent 是一个可部署的 Spring AI RAG 平台，而不是单端点演示。
+本脚本面向 5 到 8 分钟的本地演示，用于证明 Enterprise Agent Platform 是一个可部署的 Spring AI RAG 平台，而不是单端点演示。
 
 ## 1. 启动技术栈
 

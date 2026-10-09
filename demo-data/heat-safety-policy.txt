@@ -1,4 +1,4 @@
-KnowledgeOps Demo Policy: Heat Safety Operations
+Enterprise Agent Platform Demo Policy: Heat Safety Operations
 
 Document owner: Operations Risk Office
 Version: 2026.04
@@ -30,7 +30,7 @@ If a worker shows dizziness, confusion, fainting, abnormal sweating, or suspecte
 heat stroke symptoms, the supervisor must stop the task, move the worker to a
 cool area, start first aid, and escalate according to the operations runbook.
 
-5. KnowledgeOps RAG Validation Notes
+5. Enterprise Agent Platform RAG Validation Notes
 
 A compliant RAG answer must cite the source document and the matched chunk. If
 the question cannot be answered from the indexed policy content, the assistant
@@ -59,7 +59,7 @@ auditable rejection depending on the route and credential used.
 
   如果工人出现头晕、意识模糊、晕厥、异常出汗或疑似热射病（中暑）症状，主管必须：立即停止作业、将工人转移至阴凉区域、实施急救，并按照运营手册逐级上报。
 
-  5. KnowledgeOps RAG 验证说明
+  5. Enterprise Agent Platform RAG 验证说明
 
   一个合格的 RAG 回答必须引用来源文档及命中的内容切片。如果问题无法从已入库的政策内容中找到答案，助手必须明确说明“当前知识库没有匹配内容”，并请操作员上传或选择正确的文档。助手不得在没有检索依据的情况下编造政策结论。
 

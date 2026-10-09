@@ -1,8 +1,8 @@
-{{- define "knowledgeops-agent.name" -}}
+{{- define "enterprise-agent-platform.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "knowledgeops-agent.fullname" -}}
+{{- define "enterprise-agent-platform.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -15,22 +15,22 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "knowledgeops-agent.labels" -}}
+{{- define "enterprise-agent-platform.labels" -}}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-app.kubernetes.io/name: {{ include "knowledgeops-agent.name" . }}
+app.kubernetes.io/name: {{ include "enterprise-agent-platform.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
-{{- define "knowledgeops-agent.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "knowledgeops-agent.name" . }}
+{{- define "enterprise-agent-platform.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "enterprise-agent-platform.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "knowledgeops-agent.serviceAccountName" -}}
+{{- define "enterprise-agent-platform.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default (include "knowledgeops-agent.fullname" .) .Values.serviceAccount.name -}}
+{{- default (include "enterprise-agent-platform.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}

@@ -147,7 +147,7 @@ regression report.
 
 ## ragproof External Quality Evaluation
 
-`evaluation/ragproof/knowledgeops-react.json` maps the public
+`evaluation/ragproof/enterprise-agent-platform-react.json` maps the public
 `POST /ai/react/chat` response directly: `answer`, `evidence`, `citations`, and
 the explicit boolean `fallback`. The contract requires `fallback=false`; a
 deterministic degradation is treated as a failed evaluation response rather

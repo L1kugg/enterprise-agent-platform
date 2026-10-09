@@ -33,7 +33,7 @@
 ## 3. 发布流程
 
 1. 构建镜像：
-   - `docker build -t knowledgeops-agent:<tag> .`
+   - `docker build -t enterprise-agent-platform:<tag> .`
 2. 执行数据库迁移（启动时由 Flyway 完成或在流水线阶段执行）。
 3. 部署金丝雀实例。
 4. 验证：

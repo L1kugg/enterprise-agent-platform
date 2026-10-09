@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/however-yir/knowledgeops-agent
+  repository: ghcr.io/L1kugg/enterprise-agent-platform
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -38,7 +38,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: knowledgeops.example.com
+    - host: enterprise-agent-platform.example.com
       paths:
         - path: /
           pathType: Prefix

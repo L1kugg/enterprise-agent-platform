@@ -1,4 +1,4 @@
-# KnowledgeOps Agent 服务器部署指南
+# Enterprise Agent Platform 服务器部署指南
 
 > 面向场景：一台 Linux 服务器（2C4G 起步，推荐 4C8G），使用 Docker Compose 一键部署完整栈。
 > 交付物：`deploy/docker-compose.prod.yml` + `deploy/.env.production.example`（本指南配套生成）。
@@ -32,17 +32,17 @@ docker compose version
 方式 A：git 拉取（推荐）
 
 ```bash
-git clone https://github.com/however-yir/knowledgeops-agent.git
-cd knowledgeops-agent
+git clone https://github.com/L1kugg/enterprise-agent-platform.git
+cd enterprise-agent-platform
 ```
 
 方式 B：本地打包上传（当前是本地修改版）
 
 ```bash
 # 本地（Windows PowerShell，在项目根目录）
-tar -czf knowledgeops-agent.tar.gz --exclude=node_modules --exclude=target --exclude=logs --exclude=.git .
+tar -czf enterprise-agent-platform.tar.gz --exclude=node_modules --exclude=target --exclude=logs --exclude=.git .
 # 上传到服务器后解压
-tar -xzf knowledgeops-agent.tar.gz -C /opt/knowledgeops-agent
+tar -xzf enterprise-agent-platform.tar.gz -C /opt/enterprise-agent-platform
 ```
 
 ---
@@ -50,7 +50,7 @@ tar -xzf knowledgeops-agent.tar.gz -C /opt/knowledgeops-agent
 ## 三、配置环境变量（关键步骤）
 
 ```bash
-cd /opt/knowledgeops-agent/deploy
+cd /opt/enterprise-agent-platform/deploy
 cp .env.production.example .env.production
 chmod 600 .env.production   # 防止泄露
 vi .env.production
@@ -75,7 +75,7 @@ vi .env.production
 ## 四、启动
 
 ```bash
-cd /opt/knowledgeops-agent/deploy
+cd /opt/enterprise-agent-platform/deploy
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
@@ -122,7 +122,7 @@ curl -s -X POST http://localhost:8080/auth/token \
 ## 六、常用运维命令
 
 ```bash
-cd /opt/knowledgeops-agent/deploy
+cd /opt/enterprise-agent-platform/deploy
 
 # 查看全部服务状态
 docker compose -f docker-compose.prod.yml ps
@@ -186,7 +186,7 @@ sudo certbot --nginx -d your-domain.com
 项目自带完整观察栈，需要时单独拉起：
 
 ```bash
-cd /opt/knowledgeops-agent
+cd /opt/enterprise-agent-platform
 docker compose -f docker-compose.observability.yml up -d
 # Grafana: http://服务器IP:3000（默认 admin/admin，登录后请改密）
 ```
@@ -242,16 +242,16 @@ Dockerfile 已改为"jar 预构建"模式：镜像内不再跑 Maven，只拷贝
 mvn -DskipTests package
 
 # 2. 上传 jar（约 80MB；已配置 make deploy-jar 一键打包上传）
-scp target/knowledgeops-agent-1.0-SNAPSHOT.jar ubuntu@服务器IP:/opt/knowledgeops-agent/target/
+scp target/enterprise-agent-platform-1.0-SNAPSHOT.jar ubuntu@服务器IP:/opt/enterprise-agent-platform/target/
 
 # 3. 服务器重建 app 镜像并替换（秒级，不动数据库和其他容器）
-cd /opt/knowledgeops-agent/deploy
+cd /opt/enterprise-agent-platform/deploy
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build app
 ```
 
 注意：
 
-- jar 文件必须放在服务器的 `/opt/knowledgeops-agent/target/` 下（构建上下文按此路径 COPY），首次使用先 `mkdir -p /opt/knowledgeops-agent/target`
+- jar 文件必须放在服务器的 `/opt/enterprise-agent-platform/target/` 下（构建上下文按此路径 COPY），首次使用先 `mkdir -p /opt/enterprise-agent-platform/target`
 - 改了 `Dockerfile`、`pom.xml` 依赖、前端代码时，把对应源码同步上传后同样执行第 3 步
 - Dockerfile 已切换为 jar 模式，若回退"源码构建"（服务器上直接编译），用 git 恢复历史版 Dockerfile 即可
 

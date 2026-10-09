@@ -1,7 +1,7 @@
 <template>
   <!-- 图标栏：只管"去哪个页面"，所有页签常驻 -->
   <nav class="icon-rail" role="tablist" aria-label="Console views">
-    <div class="rail-brand" title="KnowledgeOps Agent">K</div>
+    <div class="rail-brand" title="Enterprise Agent Platform">K</div>
     <div class="rail-nav">
       <el-tooltip content="聊天" placement="right" :show-after="300">
         <button

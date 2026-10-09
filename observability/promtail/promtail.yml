@@ -9,9 +9,9 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: knowledgeops-agent-logs
+  - job_name: enterprise-agent-platform-logs
     static_configs:
       - targets: [localhost]
         labels:
-          job: knowledgeops-agent
-          __path__: /var/log/knowledgeops-agent/*.log
+          job: enterprise-agent-platform
+          __path__: /var/log/enterprise-agent-platform/*.log

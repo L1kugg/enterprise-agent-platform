@@ -1,0 +1,10 @@
+Enterprise Agent Platform 已安装完成。
+
+服务：
+  {{ include "enterprise-agent-platform.fullname" . }}:{{ .Values.service.port }}
+
+健康检查：
+  /actuator/health
+
+指标：
+  /actuator/prometheus

@@ -52,7 +52,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ## 5. 日志采集
 
-- 应用日志文件：`logs/knowledgeops-agent.log`
+- 应用日志文件：`logs/enterprise-agent-platform.log`
 - Promtail 抓取 `logs/*.log` 并推送到 Loki
 - 链路与请求关联字段：`trace_id`、`request_id`、`chat_id`
 

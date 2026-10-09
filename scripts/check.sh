@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-sudo docker logs knowledgeops-agent 2>&1 | head -5
+sudo docker logs enterprise-agent-platform 2>&1 | head -5
