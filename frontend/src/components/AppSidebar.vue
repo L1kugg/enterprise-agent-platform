@@ -34,7 +34,10 @@
         <el-icon><Cpu /></el-icon><span>模型服务</span>
       </button>
       <button type="button" :class="{active: activeView === 'platform' && platformSection === 'databases'}" @click="goPlatform('databases')">
-        <el-icon><Coin /></el-icon><span>系统管理</span>
+        <el-icon><Coin /></el-icon><span>数据库管理</span>
+      </button>
+      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'system'}" @click="goPlatform('system')">
+        <el-icon><UserFilled /></el-icon><span>系统管理</span>
       </button>
 
       <p class="nav-group">运营分析</p>
@@ -64,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { Avatar, ChatDotRound, Coin, Cpu, DataAnalysis, FolderOpened, Moon, Notebook, Odometer, Setting, SetUp, Share, Lock, Sunny, TrendCharts } from '@element-plus/icons-vue';
+import { Avatar, ChatDotRound, Coin, Cpu, DataAnalysis, FolderOpened, Moon, Notebook, Odometer, Setting, SetUp, Share, Lock, Sunny, TrendCharts, UserFilled } from '@element-plus/icons-vue';
 import { activeView, darkMode, opsDialogVisible } from '../composables/useGlobalUi';
 import { isAdmin } from '../composables/useAuthState';
 import { activateView } from '../composables/useViewActivation';

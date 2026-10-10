@@ -40,7 +40,8 @@ export type PlatformSection =
   | 'knowledge'
   | 'safety-guards'
   | 'model-services'
-  | 'databases';
+  | 'databases'
+  | 'system';
 
 export const platformSection = ref<PlatformSection>('overview');
 export const platformOverview = ref<Record<string, number>>({});
@@ -356,11 +357,15 @@ export function setPlatformSection(section: PlatformSection): void {
     activeView.value = 'knowledge';
     return;
   }
+  // 有专属 Studio 页面的分区由组件自己加载数据，这里只切换状态，
+  // 不再触发通用 JSON 列表请求，避免同一页面重复请求。
   const assetType = sectionAssetTypes[section];
   if (assetType) {
     activePlatformType.value = assetType;
     platformPage.value = 1;
     platformSearch.value = '';
-    void loadPlatformAssets();
+    if (!['agents', 'workflows', 'tools', 'safety-guards', 'model-services', 'databases'].includes(section)) {
+      void loadPlatformAssets();
+    }
   }
 }

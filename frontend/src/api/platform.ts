@@ -4,6 +4,14 @@ import type {
   PlatformAssetPage,
   PlatformAssetType,
   PlatformAssetUpsert,
+  PlatformRole,
+  PlatformRoleUpsert,
+  PlatformUser,
+  PlatformUserUpdate,
+  SafetyGuardTestResult,
+  ToolTestResult,
+  WorkflowGraphConfig,
+  WorkflowTestRunResult,
 } from '../types/platform';
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
@@ -139,5 +147,165 @@ export function testPlatformModel(id: number, auth: AuthContext | undefined) {
   return requestPlatform<PlatformAsset>(`/platform/model-services/${id}/test`, auth, {
     method: 'POST',
     action: '模型连接测试',
+  });
+}
+
+// ---------- 工作流扩展（R6）：导入导出 / 试运行 / 上下线 / 复制 ----------
+
+export function copyPlatformWorkflow(
+  id: number,
+  targetName: string,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<PlatformAsset>(`/platform/workflows/${id}/copy`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ targetName }),
+    action: '工作流复制',
+  });
+}
+
+export function onlinePlatformWorkflow(id: number, auth: AuthContext | undefined) {
+  return requestPlatform<PlatformAsset>(`/platform/workflows/${id}/online`, auth, {
+    method: 'POST',
+    action: '工作流上线',
+  });
+}
+
+export function offlinePlatformWorkflow(id: number, auth: AuthContext | undefined) {
+  return requestPlatform<PlatformAsset>(`/platform/workflows/${id}/offline`, auth, {
+    method: 'POST',
+    action: '工作流下线',
+  });
+}
+
+export function testRunPlatformWorkflow(
+  id: number,
+  input: Record<string, unknown>,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<WorkflowTestRunResult>(`/platform/workflows/${id}/test-run`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ input }),
+    action: '工作流试运行',
+  });
+}
+
+export function exportPlatformWorkflow(id: number, auth: AuthContext | undefined) {
+  return requestPlatform<WorkflowGraphConfig>(`/platform/workflows/${id}/export`, auth, {
+    method: 'GET',
+    action: '工作流导出',
+  });
+}
+
+export function importPlatformWorkflow(
+  body: PlatformAssetUpsert,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<PlatformAsset>('/platform/workflows/import', auth, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    action: '工作流导入',
+  });
+}
+
+// ---------- 工具测试（R7） ----------
+
+export function testPlatformTool(
+  id: number,
+  params: Record<string, unknown>,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<ToolTestResult>(`/platform/tools/${id}/test`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ params }),
+    action: '工具测试',
+  });
+}
+
+// ---------- 安全防护测试（R4） ----------
+
+export function testPlatformSafetyGuard(
+  id: number,
+  text: string,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<SafetyGuardTestResult>(`/platform/safety-guards/${id}/test`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+    action: '安全策略测试',
+  });
+}
+
+// ---------- 数据库连接测试（R10） ----------
+
+export function testPlatformDatabase(id: number, auth: AuthContext | undefined) {
+  return requestPlatform<{ status?: string; latencyMs?: number; error?: string }>(
+    `/platform/databases/${id}/test`,
+    auth,
+    { method: 'POST', action: '数据库连接测试' },
+  );
+}
+
+// ---------- 用户 / 角色管理（R10） ----------
+
+export function listPlatformUsers(
+  auth: AuthContext | undefined,
+  page = 1,
+  pageSize = 20,
+  search?: string,
+) {
+  return requestPlatform<{ items: PlatformUser[]; total: number }>(
+    withQuery('/platform/users', { page, pageSize, search }),
+    auth,
+    { method: 'GET', action: '用户列表加载' },
+  );
+}
+
+export function updatePlatformUser(
+  id: number,
+  body: PlatformUserUpdate,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<PlatformUser>(`/platform/users/${id}`, auth, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    action: '用户信息保存',
+  });
+}
+
+export function listPlatformRoles(auth: AuthContext | undefined) {
+  return requestPlatform<PlatformRole[]>('/platform/roles', auth, {
+    method: 'GET',
+    action: '角色列表加载',
+  });
+}
+
+export function createPlatformRole(
+  body: PlatformRoleUpsert,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<PlatformRole>('/platform/roles', auth, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    action: '角色创建',
+  });
+}
+
+export function updatePlatformRole(
+  id: number,
+  body: PlatformRoleUpsert,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<PlatformRole>(`/platform/roles/${id}`, auth, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    action: '角色保存',
+  });
+}
+
+export async function deletePlatformRole(id: number, auth: AuthContext | undefined) {
+  await requestPlatform<unknown>(`/platform/roles/${id}`, auth, {
+    method: 'DELETE',
+    action: '角色删除',
   });
 }
