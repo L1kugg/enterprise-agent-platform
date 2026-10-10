@@ -2,11 +2,7 @@
   <section class="workflow-studio">
     <!-- 左侧：工作流列表 -->
     <aside class="wf-list panel">
-      <div class="panel-head">
-        <div>
-          <p class="section-label">Workflows</p>
-          <h3>工作流</h3>
-        </div>
+      <div class="panel-head list-head">
         <div class="list-actions">
           <el-input
             v-model="search"

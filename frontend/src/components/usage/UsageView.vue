@@ -2,7 +2,6 @@
   <section class="usage-page">
     <section v-loading="usageLoading" class="eval-main-panel usage-main">
       <div class="knowledge-list-head">
-        <p class="section-label">用量统计（本租户）</p>
         <div class="admin-docs-toolbar">
           <el-select v-model="usageRange" size="small" class="usage-range-select">
             <el-option label="近 7 天" :value="7" />
@@ -69,11 +68,7 @@
           >
             {{ tick.text }}
           </text>
-          <path
-            v-if="usageTrendChart.areaPath"
-            class="area-input"
-            :d="usageTrendChart.areaPath"
-          />
+          <path v-if="usageTrendChart.areaPath" class="area-input" :d="usageTrendChart.areaPath" />
           <polyline class="line-input" :points="usageTrendChart.inputLine" />
           <polyline class="line-output" :points="usageTrendChart.outputLine" />
           <polyline class="line-cost" :points="usageTrendChart.costLine" />
@@ -104,11 +99,7 @@
               :height="usageHoverDay.boxH"
               rx="8"
             />
-            <text
-              class="tooltip-title"
-              :x="usageHoverDay.boxX + 12"
-              :y="usageHoverDay.boxY + 22"
-            >
+            <text class="tooltip-title" :x="usageHoverDay.boxX + 12" :y="usageHoverDay.boxY + 22">
               {{ usageHoverDay.key.replaceAll('-', '/') }}
             </text>
             <circle
@@ -117,11 +108,7 @@
               :cy="usageHoverDay.boxY + 42"
               r="4"
             />
-            <text
-              class="tooltip-text"
-              :x="usageHoverDay.boxX + 26"
-              :y="usageHoverDay.boxY + 46"
-            >
+            <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 46">
               输入：{{ usageHoverDay.input.toLocaleString() }}
             </text>
             <circle
@@ -130,11 +117,7 @@
               :cy="usageHoverDay.boxY + 64"
               r="4"
             />
-            <text
-              class="tooltip-text"
-              :x="usageHoverDay.boxX + 26"
-              :y="usageHoverDay.boxY + 68"
-            >
+            <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 68">
               输出：{{ usageHoverDay.output.toLocaleString() }}
             </text>
             <circle
@@ -143,11 +126,7 @@
               :cy="usageHoverDay.boxY + 86"
               r="4"
             />
-            <text
-              class="tooltip-text"
-              :x="usageHoverDay.boxX + 26"
-              :y="usageHoverDay.boxY + 90"
-            >
+            <text class="tooltip-text" :x="usageHoverDay.boxX + 26" :y="usageHoverDay.boxY + 90">
               成本：${{ usageHoverDay.cost.toFixed(6) }}
             </text>
           </g>
@@ -213,7 +192,6 @@ const usageTableRows = computed(() =>
   usagePoints.value.filter((d) => d.requestCount > 0).sort((a, b) => b.date.localeCompare(a.date)),
 );
 </script>
-
 
 <style scoped>
 /* ---------- 用量统计页 ---------- */

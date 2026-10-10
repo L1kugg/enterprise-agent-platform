@@ -193,3 +193,8 @@
 .kb-auth-alert {
   margin: 8px 0;
 }
+
+/* 各 Studio 左列表面板去掉重复模块名标题后，仅剩搜索/动作行时垂直居中 */
+.panel-head.list-head {
+  align-items: center;
+}

@@ -2,7 +2,6 @@
   <section class="admin-docs-page">
     <section v-loading="adminDocsLoading" class="eval-main-panel admin-docs-main">
       <div class="knowledge-list-head">
-        <p class="section-label">文档总览（跨租户）</p>
         <div class="admin-docs-toolbar">
           <el-input
             v-model="adminDocsSearch"
@@ -27,12 +26,7 @@
       />
       <el-table :data="adminDocs" height="100%" empty-text="还没有任何入库文档">
         <el-table-column prop="tenantId" label="租户" min-width="120" show-overflow-tooltip />
-        <el-table-column
-          prop="sourceName"
-          label="文件名"
-          min-width="180"
-          show-overflow-tooltip
-        />
+        <el-table-column prop="sourceName" label="文件名" min-width="180" show-overflow-tooltip />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
@@ -47,12 +41,7 @@
         <el-table-column label="创建时间" width="150">
           <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column
-          prop="errorMessage"
-          label="错误"
-          min-width="140"
-          show-overflow-tooltip
-        />
+        <el-table-column prop="errorMessage" label="错误" min-width="140" show-overflow-tooltip />
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="danger" link @click="removeAdminDocument(row)"

@@ -1,16 +1,18 @@
 <template>
   <section v-loading="platformOverviewLoading" class="overview-page">
     <section class="overview-hero">
-      <div>
-        <p class="section-label">Workspace Overview</p>
-        <h2>平台总览</h2>
-        <p>基于当前租户真实配置资源统计，未返回的数据不会展示虚构指标。</p>
-      </div>
+      <span class="hero-hint">统计来自当前租户真实配置，未返回的数据不展示虚构指标</span>
       <el-button type="primary" @click="setPlatformSection('agents')">创建智能体</el-button>
     </section>
 
     <section class="overview-grid">
-      <button v-for="card in cards" :key="card.type" class="overview-card" type="button" @click="setPlatformSection(card.section)">
+      <button
+        v-for="card in cards"
+        :key="card.type"
+        class="overview-card"
+        type="button"
+        @click="setPlatformSection(card.section)"
+      >
         <span>{{ card.label }}</span>
         <strong>{{ platformOverview[card.type] ?? 0 }}</strong>
         <small>{{ card.description }}</small>
@@ -57,8 +59,18 @@ const cards = [
   { section: 'workflows', type: 'workflows', label: '工作流', description: '已保存的工作流' },
   { section: 'tools', type: 'tools', label: '工具', description: 'API 与 SQL 工具' },
   { section: 'knowledge', type: 'knowledge-bases', label: '知识库', description: '配置态知识库' },
-  { section: 'safety-guards', type: 'safety-guards', label: '安全防护', description: '主题过滤策略' },
-  { section: 'model-services', type: 'model-services', label: '模型服务', description: '可用模型配置' },
+  {
+    section: 'safety-guards',
+    type: 'safety-guards',
+    label: '安全防护',
+    description: '主题过滤策略',
+  },
+  {
+    section: 'model-services',
+    type: 'model-services',
+    label: '模型服务',
+    description: '可用模型配置',
+  },
 ] as const;
 
 const labels: Record<PlatformAssetType, string> = {
@@ -77,11 +89,13 @@ const typeLabel = (type: PlatformAssetType) => labels[type] ?? type;
 
 onMounted(() => {
   void loadPlatformOverview();
-  void listPlatformAssets('agents', authContext(), 1, 4).then(page => {
-    recent.value = page.items;
-  }).catch(() => {
-    recent.value = [];
-  });
+  void listPlatformAssets('agents', authContext(), 1, 4)
+    .then((page) => {
+      recent.value = page.items;
+    })
+    .catch(() => {
+      recent.value = [];
+    });
 });
 </script>
 
@@ -100,7 +114,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  padding: 20px;
+  padding: 12px 16px;
   border: 1px solid var(--ui-border);
   border-radius: 10px;
   background: var(--ui-card);
@@ -109,6 +123,11 @@ onMounted(() => {
 .overview-hero p {
   margin: 4px 0 0;
   color: var(--ui-muted);
+}
+
+.hero-hint {
+  color: var(--ui-muted);
+  font-size: 13px;
 }
 
 .overview-grid {
@@ -125,7 +144,9 @@ onMounted(() => {
   padding: 15px;
   cursor: pointer;
   color: var(--ui-text);
-  transition: border-color 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 
 .overview-card:hover,

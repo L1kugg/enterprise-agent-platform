@@ -33,7 +33,8 @@
       <p class="workspace-kicker">Workspace</p>
       <h2>{{ platformTitle }}</h2>
       <p class="workspace-sub">{{ platformSubtitle }}</p>
-    </div>    <div v-else-if="activeView === 'admin'">
+    </div>
+    <div v-else-if="activeView === 'admin'">
       <p class="workspace-kicker">Admin Documents</p>
       <h2>文档总览</h2>
       <p class="workspace-sub">跨租户查看所有用户上传的文档</p>
@@ -161,7 +162,7 @@ const platformCopy = {
   knowledge: ['知识库', '文档上传、解析状态与分段检索'],
   'safety-guards': ['安全防护', '过滤主题、阻止消息与生效状态'],
   'model-services': ['模型服务', '模型连接配置、脱敏展示与连接测试'],
-  databases: ['系统管理', '第三方数据库配置'],
+  databases: ['数据库管理', '第三方数据库连接配置、只读策略与连接测试'],
   system: ['系统管理', '用户、角色、权限与资源授权'],
 } as const;
 const platformTitle = computed(() => platformCopy[platformSection.value]?.[0] ?? '平台配置');

@@ -1,11 +1,7 @@
 <template>
   <section class="studio-page">
     <aside class="studio-list panel">
-      <div class="panel-head">
-        <div>
-          <p class="section-label">Model Services</p>
-          <h3>模型服务</h3>
-        </div>
+      <div class="panel-head list-head">
         <div class="list-actions">
           <el-input
             v-model="search"

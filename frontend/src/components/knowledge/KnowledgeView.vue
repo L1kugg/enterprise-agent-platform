@@ -2,10 +2,7 @@
   <section class="knowledge-page">
     <aside class="eval-side-panel">
       <div class="eval-panel-head">
-        <div>
-          <p class="section-label">文档入库</p>
-          <strong>知识库</strong>
-        </div>
+        <p class="section-label">文档入库</p>
       </div>
 
       <el-upload
@@ -83,9 +80,7 @@
               </el-table-column>
               <el-table-column label="状态" width="110">
                 <template #default="{ row }">
-                  <el-tag :type="statusTagType(row.status)" size="small">{{
-                    row.status
-                  }}</el-tag>
+                  <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="切片数" width="80">
@@ -101,11 +96,7 @@
               </el-table-column>
               <el-table-column label="操作" width="80">
                 <template #default="{ row }">
-                  <el-button
-                    size="small"
-                    type="danger"
-                    link
-                    @click="removeKnowledgeDocument(row)"
+                  <el-button size="small" type="danger" link @click="removeKnowledgeDocument(row)"
                     >删除</el-button
                   >
                 </template>
@@ -141,9 +132,7 @@
               />
               <el-table-column label="状态" width="110">
                 <template #default="{ row }">
-                  <el-tag :type="statusTagType(row.status)" size="small">{{
-                    row.status
-                  }}</el-tag>
+                  <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="重试" width="80">
@@ -154,12 +143,7 @@
               <el-table-column label="上传时间" width="120">
                 <template #default="{ row }">{{ formatJobTime(row.createdAt) }}</template>
               </el-table-column>
-              <el-table-column
-                prop="chatId"
-                label="批次"
-                min-width="140"
-                show-overflow-tooltip
-              />
+              <el-table-column prop="chatId" label="批次" min-width="140" show-overflow-tooltip />
               <el-table-column
                 prop="errorMessage"
                 label="错误"
@@ -209,9 +193,7 @@
               class="kb-preview-item"
             >
               <div class="kb-preview-meta">
-                <el-tag size="small" effect="plain">{{
-                  previewSourceLabel(item.source)
-                }}</el-tag>
+                <el-tag size="small" effect="plain">{{ previewSourceLabel(item.source) }}</el-tag>
                 <span class="kb-preview-file">{{ item.fileName }}</span>
                 <span class="kb-preview-score">相关度 {{ item.score }}</span>
               </div>

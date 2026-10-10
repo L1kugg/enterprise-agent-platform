@@ -2,11 +2,7 @@
   <section class="tool-studio">
     <!-- 左侧：工具列表 -->
     <aside class="tool-list panel">
-      <div class="panel-head">
-        <div>
-          <p class="section-label">Tools</p>
-          <h3>工具</h3>
-        </div>
+      <div class="panel-head list-head">
         <div class="list-actions">
           <el-input
             v-model="search"
@@ -45,7 +41,6 @@
     <section class="tool-editor panel">
       <div class="tool-head">
         <div>
-          <p class="section-label">{{ selected?.id ? 'Edit Tool' : 'New Tool' }}</p>
           <h3>{{ form.name || '未命名工具' }}</h3>
         </div>
         <div class="tool-actions">
