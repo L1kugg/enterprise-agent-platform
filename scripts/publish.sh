@@ -6,6 +6,8 @@
 set -euo pipefail
 
 SERVER="ubuntu@82.157.60.115"
+# 家宽上传偶发 stall/断连：SSH 层加保活，避免大包传一半被掐
+SSH_OPTS="-o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o TCPKeepAlive=yes"
 APP_DIR="/opt/enterprise-agent-platform"
 PKG_NAME="deploy-update.tar.gz"
 PKG="/tmp/$PKG_NAME"
@@ -31,10 +33,10 @@ tar czf "$PKG" \
 echo "    包大小：$(ls -lh "$PKG" | awk '{print $5}')"
 
 echo "==> [3/4] 上传到服务器（约 1-5 分钟看家宽上传速度）"
-scp "$PKG" "$SERVER:/tmp/"
+scp $SSH_OPTS "$PKG" "$SERVER:/tmp/"
 
 echo "==> [4/4] 解压并重建容器（构建约 1-3 分钟）"
-ssh "$SERVER" "set -e; \
+ssh $SSH_OPTS "$SERVER" "set -e; \
   sudo mkdir -p $APP_DIR/target; \
   sudo tar xzf /tmp/$PKG_NAME -C $APP_DIR; \
   sudo rm /tmp/$PKG_NAME; \
