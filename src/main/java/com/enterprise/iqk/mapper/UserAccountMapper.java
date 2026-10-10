@@ -2,6 +2,7 @@ package com.enterprise.iqk.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.enterprise.iqk.domain.UserAccount;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -35,4 +36,6 @@ public interface UserAccountMapper extends BaseMapper<UserAccount> {
     int insertUserRole(@Param("userId") Long userId,
                        @Param("roleId") Long roleId,
                        @Param("createdAt") LocalDateTime createdAt);
+    @Delete("DELETE FROM user_roles WHERE user_id = #{userId}")
+    int deleteUserRoles(@Param("userId") Long userId);
 }

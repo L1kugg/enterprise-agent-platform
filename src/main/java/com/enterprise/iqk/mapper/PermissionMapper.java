@@ -17,4 +17,7 @@ public interface PermissionMapper {
             WHERE r.role_name = #{roleName}
             """)
     List<String> findByRoleName(@Param("roleName") String roleName);
+
+    @Select("SELECT permission_name FROM permissions ORDER BY permission_name")
+    List<String> findByAll();
 }

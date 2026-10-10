@@ -1,6 +1,7 @@
 package com.enterprise.iqk.security;
 
 import com.enterprise.iqk.config.properties.SecurityProperties;
+import com.enterprise.iqk.mapper.UserAccountMapper;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -23,7 +24,7 @@ class ApiKeyOrJwtAuthFilterTest {
         props.setEnabled(true);
         ApiKeyAuthService apiKeyAuthService = mock(ApiKeyAuthService.class);
         JwtService jwtService = mock(JwtService.class);
-        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService);
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService, mock(UserAccountMapper.class));
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -46,7 +47,7 @@ class ApiKeyOrJwtAuthFilterTest {
                 .tenantId("tenant-a")
                 .source("api_key")
                 .build());
-        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService);
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService, mock(UserAccountMapper.class));
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
         req.addHeader("X-API-Key", "ak");
@@ -65,7 +66,7 @@ class ApiKeyOrJwtAuthFilterTest {
         SecurityProperties props = new SecurityProperties();
         props.setEnabled(true);
         ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props,
-                mock(ApiKeyAuthService.class), mock(JwtService.class));
+                mock(ApiKeyAuthService.class), mock(JwtService.class), mock(UserAccountMapper.class));
 
         for (String path : List.of("/auth/register", "/auth/login")) {
             MockHttpServletRequest req = new MockHttpServletRequest("POST", path);

@@ -1,6 +1,8 @@
 package com.enterprise.iqk.security;
 
 import com.enterprise.iqk.config.properties.SecurityProperties;
+import com.enterprise.iqk.domain.UserAccount;
+import com.enterprise.iqk.mapper.UserAccountMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +30,7 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
     private final SecurityProperties securityProperties;
     private final ApiKeyAuthService apiKeyAuthService;
     private final JwtService jwtService;
+    private final UserAccountMapper userAccountMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -83,6 +86,10 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
             try {
                 AuthIdentity jwtIdentity = jwtService.parse(token);
                 if (jwtIdentity != null) {
+                    UserAccount account = userAccountMapper.findByUsername(jwtIdentity.getPrincipal());
+                    if (account == null || account.getEnabled() == null || account.getEnabled() != 1) {
+                        return null;
+                    }
                     return jwtIdentity;
                 }
             } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {

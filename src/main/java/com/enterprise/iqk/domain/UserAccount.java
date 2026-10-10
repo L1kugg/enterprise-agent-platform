@@ -26,6 +26,7 @@ public class UserAccount {
     private String username;
     private String passwordHash;
     private String tenantId;
+    private String displayName;
     private Integer enabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -99,7 +99,7 @@ public class PlatformAssetService {
             existing.setName(StringUtils.hasText(name) ? name.trim() : existing.getName());
             existing.setDescription(description == null ? existing.getDescription() :
                     (StringUtils.hasText(description) ? description.trim() : null));
-            existing.setConfigJson(configJson == null ? existing.getConfigJson() : normalizeJson(configJson));
+            existing.setConfigJson(configJson == null ? existing.getConfigJson() : preserveSecrets(existing.getConfigJson(), configJson));
             existing.setStatus(StringUtils.hasText(status) ? status.trim().toUpperCase(Locale.ROOT) : existing.getStatus());
             existing.setParentId(parentId == null ? existing.getParentId() : parentId);
             existing.setUpdatedAt(LocalDateTime.now());
@@ -191,6 +191,25 @@ public class PlatformAssetService {
         }
     }
 
+    /** 编辑表单不回显密钥，因此“缺省/******”都不能覆盖库中原值。 */
+    private String preserveSecrets(String existingJson, String incomingJson) {
+        try {
+            JsonNode existing = readTree(existingJson);
+            ObjectNode incoming = (ObjectNode) objectMapper.readTree(incomingJson);
+            if (existing == null || !existing.isObject()) return normalizeJson(incomingJson);
+            existing.fieldNames().forEachRemaining(field -> {
+                JsonNode oldValue = existing.get(field);
+                JsonNode newValue = incoming.get(field);
+                if (isSecret(field) && oldValue != null && !oldValue.isNull()
+                        && (newValue == null || newValue.isNull() || "******".equals(newValue.asText()))) {
+                    incoming.set(field, oldValue);
+                }
+            });
+            return objectMapper.writeValueAsString(incoming);
+        } catch (IOException | ClassCastException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config must be valid JSON", ex);
+        }
+    }
     private PlatformAsset getOwned(String assetType, Long id) {
         if (id == null || id <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid id");
         PlatformAsset asset = mapper.findByIdAndType(id, TenantContext.currentTenantId(), normalizeType(assetType));
@@ -226,7 +245,7 @@ public class PlatformAssetService {
     private boolean isSecret(String field) {
         String normalized = field.toLowerCase(Locale.ROOT);
         return normalized.contains("apikey") || normalized.contains("api_key") || normalized.contains("secret")
-                || normalized.contains("password") || normalized.contains("token");
+                 || normalized.contains("password") || normalized.contains("credential") || normalized.contains("token");
     }
 
     private static String normalizeType(String assetType) {

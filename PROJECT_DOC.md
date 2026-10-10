@@ -1,6 +1,6 @@
 # Enterprise Agent Platform 项目技术文档
 
-> 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测。
+> 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 Agent 工作流引擎、混合检索（向量+关键词+图谱+Web，Weighted RRF 融合）、知识图谱、长短期记忆、深度研究、企业 RAG、会话分支与交接、平台资产配置基座（八类资产 + Studio 工作台）、租户隔离、异步入库、权限审计、全链路可观测。
 
 ---
 
@@ -14,14 +14,16 @@
 - [6. 四层记忆系统](#6-四层记忆系统)
 - [7. 知识图谱](#7-知识图谱)
 - [8. Agent Harness 工具执行层](#8-agent-harness-工具执行层)
-- [9. 安全体系](#9-安全体系)
-- [10. 容错与兜底](#10-容错与兜底)
-- [11. 可观测性](#11-可观测性)
-- [12. 评测体系](#12-评测体系)
-- [13. 数据库设计](#13-数据库设计)
-- [14. API 概览](#14-api-概览)
-- [15. 部署与运维](#15-部署与运维)
-- [16. 已知局限与改进方向](#16-已知局限与改进方向)
+- [9. 平台资产配置基座与前端工作台](#9-平台资产配置基座与前端工作台)
+- [10. 会话状态、分支与交接](#10-会话状态分支与交接)
+- [11. 安全体系](#11-安全体系)
+- [12. 容错与兜底](#12-容错与兜底)
+- [13. 可观测性](#13-可观测性)
+- [14. 评测体系](#14-评测体系)
+- [15. 数据库设计](#15-数据库设计)
+- [16. API 概览](#16-api-概览)
+- [17. 部署与运维](#17-部署与运维)
+- [18. 已知局限与改进方向](#18-已知局限与改进方向)
 
 ---
 
@@ -38,6 +40,7 @@ Enterprise Agent Platform 是一个企业级 Spring AI RAG 平台，不停留在
 | 对话能力如何稳定落在业务流程中 | Agent 工作流引擎 + ReAct 循环 + 多 Agent 分工 |
 | PDF/文档知识如何接入检索增强链路并保证可追溯 | 异步入库 + 混合检索 + 证据评分 + 引用溯源 |
 | 工具调用如何具备权限边界、审计记录和失败可恢复 | Agent Harness + 策略守卫 + 事件溯源 + 分层容错 |
+| 智能体/工作流/工具等平台配置资源如何管理与治理 | `platform_asset` 八类资产租户隔离 CRUD + 敏感字段脱敏 + Studio 专属工作台 |
 | 如何实现线上可运维 | 全链路指标 + 日志 + 链路追踪 + 告警 + 回归评测闭环 |
 
 ### 1.3 Agent 形态
@@ -140,6 +143,7 @@ CREATED → PLANNING → SEARCHING → RETRIEVING → JUDGING → REFLECTING →
 | 任务管理 | `agent_task` 表记录生命周期 |
 | 步骤追踪 | `agent_step` 持久化输入/输出/耗时/Token 用量 |
 | 事件溯源 | `agent_event` 异步记录所有状态变更，不阻塞主流程 |
+| 并发守卫 | 状态转移经 `canTransitionTo` 守卫后以 CAS 方式更新（乐观锁），防并发分支互相覆盖终态 |
 | 指标采集 | Micrometer Timer/Counter 记录每步延迟和任务整体延迟 |
 
 ### 4.2 单 Agent：ReAct 循环
@@ -198,7 +202,7 @@ PDF 上传
   → 创建 IngestionJob（status=PENDING）
   → 发布到队列（Redis Stream / RabbitMQ / DB 轮询三选一）
   → Worker 消费（多线程，消费者组负载分配）
-      → PagePdfDocumentReader 按页解析
+      → 按格式解析（PDF 走 PagePdfDocumentReader 按页解析；doc/docx/md 走 TikaDocumentReader）
       → TokenTextSplitter 切片（chunkSize=800, minChunkSize=120）
       → 每个 chunk 打租户隔离元数据（tenant_id / chat_id / job_id / file_name / chunk_index）
       → EmbeddingModel 向量化（1024 维）
@@ -227,7 +231,9 @@ PDF 上传
 | GraphRetriever | 0.20 | 实体搜索 + 一跳邻居 + SPO 三元组 | 结构化关联 |
 | WebRetriever | 0.15 | SearXNG / Bing API（默认关闭） | 外部最新信息 |
 
-**融合策略**：加权评分 → 内容前 200 字符指纹去重（保留最高分）→ 按 finalScore 降序 → 取 topK。
+**融合策略（Weighted RRF）**：各路结果先按内容前 200 字符指纹去重（保留最高分），再按每路排名计算 RRF 贡献 `weight / (rrfK + rank)` 累加为 finalScore——只用排名、不比较不同检索器的原始分数量纲，比直接加权相乘更稳定。`rrfK` 默认 60（`app.retrieval.rrf-k`，越大越平滑）；四路权重可配置（`app.retrieval.weights.*`，自动归一化为总和 1，检索结果回带实际生效值）。按 finalScore 降序取 topK。
+
+检索线程池独立配置（`app.retrieval.pool-size` 默认 16、`queue-capacity` 默认 64），须 ≤ 数据库连接池大小（三路检索均直连数据库，扩线程前先扩连接池）。
 
 ### 5.5 三轮逐层精选重排
 
@@ -368,9 +374,96 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 
 ---
 
-## 9. 安全体系
+## 9. 平台资产配置基座与前端工作台
 
-### 9.1 鉴权链路
+### 9.1 平台资产（platform_asset）
+
+平台配置层的统一底座：八类配置资产共用一张 `platform_asset` 表（V23 迁移），靠 `asset_type` 区分，全部按租户隔离。
+
+| asset_type | 说明 |
+|------------|------|
+| agents | 智能体（提示词、模型、开场引导与资源绑定） |
+| workflows | 工作流（画布节点、连线与执行确认策略） |
+| tools | 工具（表单式 API / 代码式 API / SQL） |
+| knowledge-bases | 知识库 |
+| knowledge-files | 知识文件（通过 `parent_id` 挂到知识库） |
+| safety-guards | 安全防护（过滤主题与阻止消息） |
+| model-services | 模型服务（提供商、地址与参数） |
+| databases | 第三方数据库连接配置 |
+
+表结构与约束：
+
+- 唯一键 `(tenant_id, asset_type, name)`：同租户同类型下名称唯一
+- `config_json LONGTEXT`：存放各类型差异化配置（JSON）
+- `status` 默认 `DRAFT`；`parent_id` 支持层级（知识文件 → 知识库）
+
+### 9.2 配置态 REST API（/platform/**）
+
+| 接口 | 说明 |
+|------|------|
+| `GET /platform/{assetType}?page&pageSize&search` | 分页搜索 |
+| `POST /platform/{assetType}` | 创建 |
+| `GET / PUT / DELETE /platform/{assetType}/{id}` | 详情 / 更新 / 删除 |
+| `POST /platform/agents/{id}/copy` | 智能体复制 |
+| `POST /platform/agents/{id}/publish` | 智能体发布（声明发布渠道） |
+| `POST /platform/model-services/{id}/test` | 模型连接测试 |
+
+权限与安全边界：
+
+- 写操作仅 `ROLE_ADMIN`；读操作要求已认证
+- 所有记录按认证过滤器解析出的租户隔离，跨租户不可见
+- `apiKey` / `password` / `secret` / `token` 等敏感配置字段在响应中统一脱敏为 `******`
+
+### 9.3 前端平台工作台（Studio 页面组）
+
+前端按资产类型提供专属工作台页面（`frontend/src/components/platform/` 与 `components/system/`）：
+
+| 组件 | 页面 |
+|------|------|
+| PlatformOverview | 平台总览 |
+| AgentStudio | 智能体工作台 |
+| WorkflowStudio | 工作流画布 |
+| ToolStudio | 工具配置 |
+| SafetyGuardStudio | 安全防护 |
+| ModelServiceStudio | 模型服务 |
+| DatabaseStudio | 数据库 |
+| SystemManagementView | 系统管理 |
+
+交互基线：侧栏分组导航、顶栏作为唯一模块标题源（各页面不重复标题区）；平台入口按角色显示（非 ADMIN 不可见，也不静默跳转兜底页）；页签切换同步地址栏路径；品牌主色 `#315DEB`（含 Element Plus 色阶与深色模式适配）。
+
+### 9.4 与运行时闭环的关系（当前边界）
+
+配置基座是"配置资源 → 运行时真实生效"闭环的第一批：资产 CRUD、搜索、分页、基础状态、智能体复制/发布、模型连接测试。智能体配置（提示词/模型/记忆轮数/知识库/工具/安全防护绑定）驱动真实会话、工作流可视化编排与试运行、安全防护会话前拦截等运行时闭环需求**尚未实施**，规划见 `docs/platform-remaining-requirements.md`（R1–R12 四阶段路线）。
+
+---
+
+## 10. 会话状态、分支与交接
+
+### 10.1 会话状态持久化
+
+`agent_session_state` 表（V8 迁移）持久化会话级状态：分支列表、置顶/归档标记、交接摘要等；`lock_version` 乐观锁列（V16 迁移）保证并发更新不互相覆盖。
+
+### 10.2 会话管理 API（/ai/sessions）
+
+| 接口 | 说明 |
+|------|------|
+| `GET /ai/sessions` | 会话列表 |
+| `GET /ai/sessions/{sessionId}` | 会话详情（含分支） |
+| `PUT /ai/sessions/{sessionId}` | 更新会话状态 |
+| `POST /ai/sessions/{sessionId}/pin`、`/archive` | 置顶 / 归档 |
+| `POST /ai/sessions/{sessionId}/handoff` | 生成交接摘要 |
+| `POST /ai/sessions/{sessionId}/branches/compare`、`/merge` | 分支对比 / 合并 |
+
+### 10.3 分支与交接
+
+- **会话分支**：同一会话可派生多个分支并行探索，前端 `BranchDrawer` 支持分支管理与对比、合并。
+- **交接摘要**：`SessionHandoffService` 从已持久化的会话分支生成确定性上下文交接摘要——刻意不走 LLM（交接是上下文迁移操作，不是又一次答案生成），用于把当前会话上下文移交给新会话或人工坐席。
+
+---
+
+## 11. 安全体系
+
+### 11.1 鉴权链路
 
 ```
 API Key（X-API-Key）
@@ -379,7 +472,7 @@ API Key（X-API-Key）
   → Refresh Token 续签（14 天）
 ```
 
-### 9.2 多层防护
+### 11.2 多层防护
 
 | 防护 | 实现 |
 |------|------|
@@ -389,14 +482,16 @@ API Key（X-API-Key）
 | 安全响应头 | X-Content-Type-Options / X-Frame-Options / Permissions-Policy |
 | CORS 白名单 | 可配置 `APP_CORS_ALLOWED_ORIGINS` |
 | 审计日志 | 全请求记录，保留 90 天，定期清理 |
-| 敏感信息脱敏 | API Key / Email / 查询参数级脱敏 |
+| 敏感信息脱敏 | API Key / Email / 查询参数级脱敏；平台资产配置中的 apiKey/password/secret/token 统一掩码 |
 | 上传安全 | 文件类型/大小检查，文件名清洗 |
+| MCP SSRF 防护 | 白名单不再豁免地址检查；内部地址逐条显式授权；封堵 DNS 重绑定 |
+| query_database 租户硬校验 | SQL 中租户只允许 `__TENANT__` 占位符（模型照示例写真实租户名会被硬校验拒绝），堵住跨租户读 |
 
 ---
 
-## 10. 容错与兜底
+## 12. 容错与兜底
 
-### 10.1 分层容错架构
+### 12.1 分层容错架构
 
 ```
 请求入口
@@ -408,7 +503,7 @@ API Key（X-API-Key）
                  └─ 超时 → 各 runtime 独立处理
 ```
 
-### 10.2 Resilience4j 防护（已织入 LLM 调用链）
+### 12.2 Resilience4j 防护（已织入 LLM 调用链）
 
 **当前状态**：`llm.ModelCallGuard` 统一封装 CircuitBreaker / Retry / TimeLimiter 三个 Bean，以编程式装饰织入全部 LLM 调用点（按场景独立熔断器）：
 
@@ -427,9 +522,9 @@ API Key（X-API-Key）
 | Retry | 仅同步调用（流式不重试，避免重复吐字） | 最多 3 次，间隔 2s，仅对瞬时异常重试（`RestClientException` / `WebClientException` / `TimeoutException` / `TransientAiException`）；熔断器异常不重试 |
 | TimeLimiter | 流式以 Reactor `timeout` 实现基线兜底 | 30 秒无任何新帧 → 按失败回写熔断器并中断流 |
 
-装饰顺序：同步 `Retry(CircuitBreaker(调用))`——熔断器记录每次尝试，重试由瞬时异常白名单驱动。观测：`ResilienceConfiguration` 显式定义的 `TaggedCircuitBreakerMetrics` / `TaggedRetryMetrics` Binder Bean 发布 `resilience4j_circuitbreaker_*` / `resilience4j_retry_*` tagged 指标（按 `llm.<场景>` 实例区分；starter 默认发布路径被自定义注册表 Bean 顶掉，故显式定义）+ 自定义计数器 `llm.call.outcome{scenario, outcome=success/error/not_permitted}`。RAG 两条链的生成步骤捕获熔断异常返回固定兜底文案（`generation_fallback`），ReAct / Workflow / DeepResearch 由既有场景兜底承接（见 10.3）。模型路由 fallback 链（10.3 末行）是路由层的独立降级，与本节熔断互补。
+装饰顺序：同步 `Retry(CircuitBreaker(调用))`——熔断器记录每次尝试，重试由瞬时异常白名单驱动。观测：`ResilienceConfiguration` 显式定义的 `TaggedCircuitBreakerMetrics` / `TaggedRetryMetrics` Binder Bean 发布 `resilience4j_circuitbreaker_*` / `resilience4j_retry_*` tagged 指标（按 `llm.<场景>` 实例区分；starter 默认发布路径被自定义注册表 Bean 顶掉，故显式定义）+ 自定义计数器 `llm.call.outcome{scenario, outcome=success/error/not_permitted}`。RAG 两条链的生成步骤捕获熔断异常返回固定兜底文案（`generation_fallback`），ReAct / Workflow / DeepResearch 由既有场景兜底承接（见 12.3）。模型路由 fallback 链（12.3 末行）是路由层的独立降级，与本节熔断互补。
 
-### 10.3 各场景兜底行为
+### 12.3 各场景兜底行为
 
 | 场景 | 兜底 |
 |------|------|
@@ -445,13 +540,13 @@ API Key（X-API-Key）
 
 ---
 
-## 11. 可观测性
+## 13. 可观测性
 
-### 11.1 技术栈
+### 13.1 技术栈
 
 Prometheus（指标） + Loki（日志） + Tempo（链路追踪） + Alertmanager（告警） + Grafana（可视化）
 
-### 11.2 核心指标
+### 13.2 核心指标
 
 ```
 # Agent 工作流
@@ -475,7 +570,7 @@ react.stream.first_token.latency{outcome}
 react.stream.total.latency{outcome}
 ```
 
-### 11.3 告警规则
+### 13.3 告警规则
 
 | 规则 | 阈值 |
 |------|------|
@@ -485,7 +580,7 @@ react.stream.total.latency{outcome}
 | JvmMemoryHigh | 堆使用 > 85% |
 | DiskSpaceLow | 磁盘 < 15% |
 
-### 11.4 日志与追踪
+### 13.4 日志与追踪
 
 - JSON 结构化日志，含 request_id / trace_id / tenant_id / chat_id
 - OTLP 导出到 Tempo，采样率可配置
@@ -493,9 +588,9 @@ react.stream.total.latency{outcome}
 
 ---
 
-## 12. 评测体系
+## 14. 评测体系
 
-### 12.1 两套评测
+### 14.1 两套评测
 
 | | CI 回归门禁 | Evaluation Studio |
 |---|---|---|
@@ -503,7 +598,7 @@ react.stream.total.latency{outcome}
 | 触发 | 每次 PR + 每晚定时 | `make eval-demo` |
 | 作用 | 卡 CI 红绿灯 | 质量看板 |
 
-### 12.2 数据集设计
+### 14.2 数据集设计
 
 四个维度，每条 case 带正向约束（必须命中）与反向约束（禁止出现）：
 
@@ -514,7 +609,9 @@ react.stream.total.latency{outcome}
 | tool_routing | 模型有没有选对工具 |
 | hallucination_guard | 没答案时会不会瞎编 |
 
-### 12.3 评分算法
+评测结果表已接入标准检索指标（V21 迁移）：`recall@k`、`MRR@k`、`precision@k`，与回归门禁的自定义约束指标并行输出。
+
+### 14.3 评分算法
 
 ```
 期望关键词命中率 = 命中数 / 期望总数
@@ -522,7 +619,7 @@ react.stream.total.latency{outcome}
 引用检查 = RAG 类 case 必须带正确引用
 ```
 
-### 12.4 门禁阈值
+### 14.4 门禁阈值
 
 | 指标 | 红线 |
 |------|------|
@@ -534,7 +631,7 @@ react.stream.total.latency{outcome}
 
 五项全过才绿灯，任一不达标 CI 失败。
 
-### 12.5 当前评测结果
+### 14.5 当前评测结果
 
 | 指标 | 值 |
 |------|-----|
@@ -547,14 +644,16 @@ react.stream.total.latency{outcome}
 
 ---
 
-## 13. 数据库设计
+## 15. 数据库设计
 
-### 13.1 核心表
+### 15.1 核心表
 
 | 表 | 用途 |
 |----|------|
 | conversation | 对话历史（tenant + conversation_id + role + message） |
 | ingestion_job | 异步入库任务状态 |
+| platform_asset | 平台八类配置资产（智能体/工作流/工具/知识库/知识文件/安全防护/模型服务/数据库，见第 9 章） |
+| agent_session_state | 会话级状态（分支/置顶/归档/交接摘要，含 lock_version 乐观锁） |
 | agent_task / agent_step / agent_event | 工作流任务/步骤/事件持久化 |
 | memory_item / memory_event | 四层记忆 + 事件溯源 |
 | kg_entity / kg_relation / kg_fact | 知识图谱 |
@@ -564,13 +663,13 @@ react.stream.total.latency{outcome}
 | model_ab_exposure | 模型 A/B 实验曝光 |
 | answer_feedback | 用户反馈 |
 
-### 13.2 迁移管理
+### 15.2 迁移管理
 
 Flyway 管理，脚本位于 `src/main/resources/db/migration/`，先迁移后发流量。
 
 ---
 
-## 14. API 概览
+## 16. API 概览
 
 ### 会话与 Agent
 
@@ -593,6 +692,29 @@ POST      /ai/memory/save                   保存记忆
 GET       /ai/graph/search                  图谱搜索
 ```
 
+### 会话管理
+
+```
+GET       /ai/sessions                      会话列表
+GET       /ai/sessions/{sessionId}          会话详情（含分支）
+PUT       /ai/sessions/{sessionId}          更新会话状态
+POST      /ai/sessions/{sessionId}/pin      置顶
+POST      /ai/sessions/{sessionId}/archive  归档
+POST      /ai/sessions/{sessionId}/handoff  生成交接摘要
+POST      /ai/sessions/{sessionId}/branches/compare  分支对比
+POST      /ai/sessions/{sessionId}/branches/merge    分支合并
+```
+
+### 平台配置资产（/platform）
+
+```
+GET/POST  /platform/{assetType}             八类资产分页搜索 / 创建
+GET/PUT/DELETE /platform/{assetType}/{id}   详情 / 更新 / 删除
+POST      /platform/agents/{id}/copy        智能体复制
+POST      /platform/agents/{id}/publish     智能体发布
+POST      /platform/model-services/{id}/test 模型连接测试
+```
+
 ### 知识入库
 
 ```
@@ -612,9 +734,9 @@ GET       /audit/logs                       审计查询
 
 ---
 
-## 15. 部署与运维
+## 17. 部署与运维
 
-### 15.1 容器编排
+### 17.1 容器编排
 
 ```bash
 # 一键启动全栈（应用 + MySQL + Redis + RabbitMQ + 前端）
@@ -624,7 +746,7 @@ GET       /audit/logs                       审计查询
 docker compose -f docker-compose.observability.yml up -d
 ```
 
-### 15.2 CI 流水线（7 阶段）
+### 17.2 CI 流水线（7 阶段）
 
 | Job | 职责 |
 |-----|------|
@@ -636,7 +758,7 @@ docker compose -f docker-compose.observability.yml up -d
 | trivy-scan | 容器镜像扫描 |
 | docker | Docker Buildx + GHCR 推送 |
 
-### 15.3 生产检查清单
+### 17.3 生产检查清单
 
 - [ ] `APP_SECURITY_ENABLED=true`
 - [ ] 注入 `APP_JWT_SECRET` 与 `OPENAI_API_KEY`
@@ -646,31 +768,37 @@ docker compose -f docker-compose.observability.yml up -d
 
 ---
 
-## 16. 已知局限与改进方向
+## 18. 已知局限与改进方向
 
-### 16.1 上下文窗口管理
+### 18.1 平台配置 → 运行时闭环（进行中）
+
+**现状**：八类平台资产已完成配置基座（CRUD/搜索/分页/复制/发布/模型连接测试，见第 9 章），但智能体配置尚未驱动真实会话——提示词/模型/记忆轮数/知识库范围/工具与安全防护绑定均未接入运行时；工作流可视化编排、试运行、上线/下线，工具真实测试与执行，安全防护会话前拦截同样待建。
+
+**改进**：按 `docs/platform-remaining-requirements.md` 的 R1–R12 四阶段实施（智能体最小闭环 → 工作流与工具 → 知识库治理与发布 → 系统管理与体验完善）。
+
+### 18.2 上下文窗口管理
 
 **现状**：四层记忆有硬上限（5+10+5 条）不会膨胀，但 `MessageChatMemoryAdvisor` 未显式配置窗口大小，30 轮长对话可能叠加出约 2 万 Token 历史，存在超窗口或注意力稀释风险。缺少发送前 Token 计数与历史摘要压缩。
 
 **改进**：显式配置记忆窗口（如最近 10 轮）；发送前 Token 估算超限则按时间衰减丢弃；对被丢弃历史做一次性摘要压缩。
 
-### 16.2 任务级超时预算
+### 18.3 任务级超时预算
 
 **现状**：ReAct 路径有 MAX_STEPS=4 硬上限，但 DeepResearch 对规划 Agent 生成的子问题数量无上限，理论上可产生不可控的检索轮数。`AgentWorkflowEngine` 只记录任务延迟指标，不强制拦截。
 
 **改进**：创建任务时设定 deadline，每步执行前检查是否超时；给规划 Agent 加子问题数量上限（如 5 个）。
 
-### 16.3 Resilience4j 接入确认
+### 18.4 Resilience4j 接入确认
 
-**已解决**：`llm.ModelCallGuard` 已编程式织入全部 LLM 调用链（`ReactAgentService` / `WorkflowReactAgentService` / `RagAnswerService` / `HybridRagAnswerService` / `ResearchPlannerAgent` / `ReportWriterAgent`），同步调用走 Retry+熔断、流式走订阅前快速失败+30s 超时基线；`ResilienceConfiguration` 显式定义 Tagged Binder Bean 发布 `resilience4j_circuitbreaker_*` 指标（懒创建实例经 onEntryAdded 挂上），另有 `llm.call.outcome` 自定义计数器。参数与织入明细见 10.2。
+**已解决**：`llm.ModelCallGuard` 已编程式织入全部 LLM 调用链（`ReactAgentService` / `WorkflowReactAgentService` / `RagAnswerService` / `HybridRagAnswerService` / `ResearchPlannerAgent` / `ReportWriterAgent`），同步调用走 Retry+熔断、流式走订阅前快速失败+30s 超时基线；`ResilienceConfiguration` 显式定义 Tagged Binder Bean 发布 `resilience4j_circuitbreaker_*` 指标（懒创建实例经 onEntryAdded 挂上），另有 `llm.call.outcome` 自定义计数器。参数与织入明细见 12.2。
 
-### 16.4 记忆系统与主管线的集成
+### 18.5 记忆系统与主管线的集成
 
 **现状**：读写闭环已全线打通（详见 `docs/architecture-memory-system.md`）。写侧四类 Recorder：`ChatTurnMemoryRecorder`（对话轮次 short）、`MemoryExtractionService`（画像提取 long）、`TaskConclusionMemoryRecorder`（任务结论 task）、`RagFactMemoryRecorder`（RAG 事实 fact）。读侧 `MemoryInjectionAdvisor` 显式 opt-in：调用方同时传 `memory.tenantId` 与 `memory.userId` 两个 advisor 参数才注入，记忆以独立 SystemMessage 插入 prompt 首部（不改写 user 消息，会话历史不累积记忆快照），默认只注 long/fact 跨会话视图；该 advisor 挂在 `CommonConfiguration` 的四个 ChatClient（主聊天 chatClient、客服 serviceChatClient、PDF 问答 pdfChatClient、agentChatClient）上。`HybridRagAnswerService` 另走显式召回（user prompt 三段式带"已知记忆"段并上报 `memoryUsed`），`ReactAgentService` 在 planner 提示词注入召回快照并经 `ChatTurnMemoryRecorder` 写回。REST 查询与管理由 `MemoryController` 提供（`/ai/memory/**`：query / task / events / save）。
 
 **改进**：无（原"未接入主管线"的评估已过时）；后续可关注 token 估算未计入记忆段的记账瑕疵（HybridRagAnswerService 已知瑕疵注释）。
 
-### 16.5 Spring AI 版本升级
+### 18.6 Spring AI 版本升级
 
 **现状**：已完成从 `1.0.0-M6` 到 `1.1.7` 稳定线（Maven Central）的升级，breaking changes（QuestionAnswerAdvisor 新包路径、`BaseChatMemoryAdvisor` 常量、starter 命名等）已全部适配。
 
@@ -690,6 +818,10 @@ docker compose -f docker-compose.observability.yml up -d
 | APP_SECURITY_ENABLED | 安全开关 | true |
 | APP_JWT_SECRET | JWT 签名密钥 | — |
 | APP_VECTOR_STORE_BACKEND | pgvector / simple | pgvector |
+| APP_RETRIEVAL_WEIGHT_VECTOR/KEYWORD/GRAPH/WEB | 四路检索融合权重（自动归一化） | 0.40 / 0.25 / 0.20 / 0.15 |
+| APP_RETRIEVAL_RRF_K | Weighted RRF 常数，越大越平滑 | 60 |
+| APP_RETRIEVAL_SOURCE_TIMEOUT_MS | 单路检索超时 | 3000 |
+| APP_RETRIEVAL_POOL_SIZE | 检索线程池大小（须 ≤ DB 连接池） | 16 |
 | APP_INGESTION_QUEUE_BACKEND | redis_stream / rabbitmq / db_polling | redis_stream |
 | APP_RATE_LIMIT_CAPACITY | 限流容量 | 60 |
 | APP_MODEL_ROUTER_DEFAULT_PROFILE | 默认模型档位 | balanced |
@@ -703,5 +835,9 @@ docker compose -f docker-compose.observability.yml up -d
 - 混合检索：`docs/architecture-hybrid-retrieval.md`
 - 记忆系统：`docs/architecture-memory-system.md`
 - 知识图谱：`docs/architecture-knowledge-graph.md`
+- MCP 桥接：`docs/architecture-mcp-bridge.md`
+- 平台基座 API：`docs/platform-baseline-api.md`
+- 剩余功能需求（运行时闭环路线）：`docs/platform-remaining-requirements.md`
+- 前端 UI 改造说明：`docs/frontend-ui-refactor.md`
 - 评测指南：`evaluation/README.md`
 - Spring AI 升级计划：`docs/spring-ai-upgrade-plan.md`
