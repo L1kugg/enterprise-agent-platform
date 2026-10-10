@@ -4,6 +4,18 @@
 
     <AgentStudio v-else-if="platformSection === 'agents'" />
 
+    <WorkflowStudio v-else-if="platformSection === 'workflows'" />
+
+    <ToolStudio v-else-if="platformSection === 'tools'" />
+
+    <SafetyGuardStudio v-else-if="platformSection === 'safety-guards'" />
+
+    <ModelServiceStudio v-else-if="platformSection === 'model-services'" />
+
+    <DatabaseStudio v-else-if="platformSection === 'databases'" />
+
+    <SystemManagementView v-else-if="platformSection === 'system'" />
+
     <section v-else v-loading="platformLoading" class="platform-panel">
       <div class="platform-head">
         <div>
@@ -51,7 +63,11 @@
             <el-tag size="small" :type="statusTag(row.status)">{{ row.status || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="activePlatformType === 'knowledge-files'" label="所属知识库" min-width="150">
+        <el-table-column
+          v-if="activePlatformType === 'knowledge-files'"
+          label="所属知识库"
+          min-width="150"
+        >
           <template #default="{ row }">{{ knowledgeBaseName(row.parentId) }}</template>
         </el-table-column>
         <el-table-column label="更新时间" width="170">
@@ -59,29 +75,36 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" @click="openEditDialog(row)">编辑</el-button>
+            <el-button size="small" link type="primary" @click="openEditDialog(row)"
+              >编辑</el-button
+            >
             <el-button
               v-if="activePlatformType === 'agents'"
               size="small"
               link
               type="primary"
               @click="copyAgent(row)"
-            >复制</el-button>
+              >复制</el-button
+            >
             <el-button
               v-if="activePlatformType === 'agents'"
               size="small"
               link
               type="success"
               @click="publishAgent(row)"
-            >发布</el-button>
+              >发布</el-button
+            >
             <el-button
               v-if="activePlatformType === 'model-services'"
               size="small"
               link
               type="success"
               @click="testModel(row)"
-            >测试</el-button>
-            <el-button size="small" link type="danger" @click="removePlatformAsset(row)">删除</el-button>
+              >测试</el-button
+            >
+            <el-button size="small" link type="danger" @click="removePlatformAsset(row)"
+              >删除</el-button
+            >
           </template>
         </el-table-column>
       </el-table>
@@ -123,12 +146,20 @@
           </el-select>
         </el-form-item>
         <el-form-item label="配置 JSON" required>
-          <el-input v-model="assetConfigJson" type="textarea" :rows="14" spellcheck="false" class="mono" />
+          <el-input
+            v-model="assetConfigJson"
+            type="textarea"
+            :rows="14"
+            spellcheck="false"
+            class="mono"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dialogSaving" @click="savePlatformAsset">保存</el-button>
+        <el-button type="primary" :loading="dialogSaving" @click="savePlatformAsset"
+          >保存</el-button
+        >
       </template>
     </el-dialog>
   </section>
@@ -136,7 +167,13 @@
 
 <script setup lang="ts">
 import AgentStudio from './AgentStudio.vue';
+import DatabaseStudio from './DatabaseStudio.vue';
+import ModelServiceStudio from './ModelServiceStudio.vue';
 import PlatformOverview from './PlatformOverview.vue';
+import SafetyGuardStudio from './SafetyGuardStudio.vue';
+import SystemManagementView from '../system/SystemManagementView.vue';
+import ToolStudio from './ToolStudio.vue';
+import WorkflowStudio from './WorkflowStudio.vue';
 import {
   activePlatformType,
   activeResource,
