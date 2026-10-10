@@ -10,16 +10,16 @@
 
     <nav class="sidebar-scroll" aria-label="主导航">
       <p class="nav-group">工作空间</p>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'overview'}" @click="goPlatform('overview')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'overview'}" @click="goPlatform('overview')">
         <el-icon><Odometer /></el-icon><span>平台总览</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'agents'}" @click="goPlatform('agents')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'agents'}" @click="goPlatform('agents')">
         <el-icon><Avatar /></el-icon><span>智能体</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'workflows'}" @click="goPlatform('workflows')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'workflows'}" @click="goPlatform('workflows')">
         <el-icon><Share /></el-icon><span>工作流</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'tools'}" @click="goPlatform('tools')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'tools'}" @click="goPlatform('tools')">
         <el-icon><SetUp /></el-icon><span>工具管理</span>
       </button>
       <button type="button" :class="{active: activeView === 'knowledge'}" @click="activateView('knowledge')">
@@ -27,16 +27,16 @@
       </button>
 
       <p class="nav-group">平台配置</p>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'safety-guards'}" @click="goPlatform('safety-guards')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'safety-guards'}" @click="goPlatform('safety-guards')">
         <el-icon><Lock /></el-icon><span>安全防护</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'model-services'}" @click="goPlatform('model-services')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'model-services'}" @click="goPlatform('model-services')">
         <el-icon><Cpu /></el-icon><span>模型服务</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'databases'}" @click="goPlatform('databases')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'databases'}" @click="goPlatform('databases')">
         <el-icon><Coin /></el-icon><span>数据库管理</span>
       </button>
-      <button type="button" :class="{active: activeView === 'platform' && platformSection === 'system'}" @click="goPlatform('system')">
+      <button v-if="isAdmin" type="button" :class="{active: activeView === 'platform' && platformSection === 'system'}" @click="goPlatform('system')">
         <el-icon><UserFilled /></el-icon><span>系统管理</span>
       </button>
 

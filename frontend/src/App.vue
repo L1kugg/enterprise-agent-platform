@@ -19,6 +19,16 @@
 
       <PlatformView v-else-if="isAdmin && activeView === 'platform'" />
 
+      <section v-else-if="activeView === 'platform'" class="no-permission-panel" aria-label="需要管理员身份">
+        <el-alert
+          type="warning"
+          show-icon
+          :closable="false"
+          title="平台配置需要管理员身份"
+          description="当前登录账号不是 ADMIN，无法访问平台总览、智能体、工作流、工具、安全防护、模型服务、数据库与系统管理。请使用管理员账号登录（右侧设置可退出后重新登录）。"
+        />
+      </section>
+
       <AdminView v-else-if="isAdmin && activeView === 'admin'" />
 
       <UsageView v-else-if="activeView === 'usage'" />
@@ -165,6 +175,17 @@ onBeforeUnmount(() => {
 /* 聊天页且未折叠时，会话栏占中间一列；其它页签内容区占满整行 */
 .app-shell.shell-with-sessions {
   grid-template-columns: 236px 260px minmax(0, 1fr);
+}
+
+.no-permission-panel {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.no-permission-panel :deep(.el-alert) {
+  max-width: 560px;
 }
 
 .workspace {
