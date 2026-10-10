@@ -1,11 +1,16 @@
 <template>
   <section class="evaluation-page">
     <aside class="eval-side-panel">
-      <div class="eval-panel-head">
-        <div>
-          <p class="section-label">评测集</p>
-          <strong>{{ evalDatasets.length }}</strong>
-        </div>
+      <div class="eval-panel-head list-head">
+        <span class="panel-title">评测集</span>
+        <el-tag size="small" effect="plain">{{ evalDatasets.length }}</el-tag>
+        <el-button
+          size="small"
+          type="primary"
+          class="head-spacer"
+          @click="createDialogVisible = true"
+          >新建评测集</el-button
+        >
       </div>
 
       <div class="eval-dataset-list">
@@ -29,73 +34,6 @@
         </div>
         <div v-if="!evalDatasets.length" class="session-empty">暂无评测集</div>
       </div>
-
-      <div class="eval-create-panel">
-        <p class="section-label">创建评测集</p>
-        <el-input v-model="evalDatasetName" size="small" placeholder="评测集名称" />
-        <el-input v-model="evalDatasetDescription" size="small" placeholder="描述" />
-        <div class="eval-editor-toggle">
-          <el-radio-group v-model="evalEditorMode" size="small">
-            <el-radio-button value="form">表单</el-radio-button>
-            <el-radio-button value="json">JSON</el-radio-button>
-          </el-radio-group>
-        </div>
-        <template v-if="evalEditorMode === 'form'">
-          <div v-for="(draft, i) in evalCaseDrafts" :key="i" class="eval-case-draft">
-            <div class="eval-case-head">
-              <span>题目 {{ i + 1 }}</span>
-              <button
-                type="button"
-                :disabled="evalCaseDrafts.length <= 1"
-                @click="removeEvalCase(i)"
-              >
-                删除
-              </button>
-            </div>
-            <el-input v-model="draft.question" size="small" placeholder="问题，如：高温作业有哪些风险？" />
-            <el-input
-              v-model="draft.expected"
-              size="small"
-              placeholder="期望关键词（逗号分隔），如：高温,风险"
-            />
-            <el-input
-              v-model="draft.expectedDocuments"
-              size="small"
-              placeholder="期望文档（可选，逗号分隔），用于 Recall/MRR/Precision"
-            />
-            <el-input
-              v-model="draft.expectedChunks"
-              size="small"
-              placeholder="期望切片（可选，逗号分隔），如 report.md:chunk-2"
-            />
-            <el-input
-              v-model="draft.forbidden"
-              size="small"
-              placeholder="禁用关键词（可选，逗号分隔）"
-            />
-          </div>
-          <div class="eval-case-actions">
-            <el-button size="small" @click="addEvalCase">添加题目</el-button>
-            <el-button size="small" type="primary" plain @click="syncDraftsToJson">生成 JSON</el-button>
-          </div>
-        </template>
-        <el-input
-          v-else
-          v-model="evalDatasetJson"
-          class="eval-json-input"
-          type="textarea"
-          :rows="11"
-          resize="none"
-          spellcheck="false"
-        />
-        <el-button
-          type="primary"
-          :loading="evalCreating"
-          :disabled="!evalDatasetName.trim() || !evalDatasetJson.trim()"
-          @click="createEvalDatasetFromJson"
-          >创建评测集</el-button
-        >
-      </div>
     </aside>
 
     <section class="eval-main-panel">
@@ -106,10 +44,7 @@
           <small v-if="metric.delta" :class="metric.deltaClass">{{ metric.delta }}</small>
         </div>
       </div>
-      <p
-        v-if="(evalCurrentRun?.metrics.retrievalMetricsCases ?? 0) === 0"
-        class="eval-metric-note"
-      >
+      <p v-if="(evalCurrentRun?.metrics.retrievalMetricsCases ?? 0) === 0" class="eval-metric-note">
         Recall@K / MRR@K / Precision@K 显示为 -：评测题未配置期望文档、切片或引用。
       </p>
 
@@ -136,11 +71,30 @@
           <template #default="{ row }">
             <div class="eval-expand">
               <div class="eval-expand-scores">
-                <span>Recall@K {{ formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable) }}</span>
-                <span>MRR@K {{ formatApplicablePercent(row.mrrAtK, row.retrievalMetricsApplicable) }}</span>
-                <span>Precision@K {{ formatApplicablePercent(row.precisionAtK, row.retrievalMetricsApplicable) }}</span>
-                <span>引用覆盖 {{ formatApplicablePercent(row.citationCoverage, row.citationCoverageApplicable) }}</span>
-                <span>关键词 {{ formatApplicablePercent(row.keywordScore, row.keywordScoreApplicable) }}</span>
+                <span
+                  >Recall@K
+                  {{ formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable) }}</span
+                >
+                <span
+                  >MRR@K
+                  {{ formatApplicablePercent(row.mrrAtK, row.retrievalMetricsApplicable) }}</span
+                >
+                <span
+                  >Precision@K
+                  {{
+                    formatApplicablePercent(row.precisionAtK, row.retrievalMetricsApplicable)
+                  }}</span
+                >
+                <span
+                  >引用覆盖
+                  {{
+                    formatApplicablePercent(row.citationCoverage, row.citationCoverageApplicable)
+                  }}</span
+                >
+                <span
+                  >关键词
+                  {{ formatApplicablePercent(row.keywordScore, row.keywordScoreApplicable) }}</span
+                >
                 <span>引用标记 {{ formatPercent(row.citationMarkerCoverage) }}</span>
               </div>
               <p class="eval-expand-label">模型回答</p>
@@ -165,7 +119,9 @@
           <template #default="{ row }">{{ formatPercent(row.score) }}</template>
         </el-table-column>
         <el-table-column label="Recall@K" width="120">
-          <template #default="{ row }">{{ formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable) }}</template>
+          <template #default="{ row }">{{
+            formatApplicablePercent(row.recallAtK, row.retrievalMetricsApplicable)
+          }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="120">
           <template #default="{ row }">{{ row.latencyMs }}ms</template>
@@ -173,6 +129,86 @@
         <el-table-column prop="question" label="问题" min-width="280" show-overflow-tooltip />
       </el-table>
     </section>
+    <el-dialog
+      v-model="createDialogVisible"
+      title="新建评测集"
+      width="640px"
+      destroy-on-close
+      append-to-body
+    >
+      <div class="eval-create-panel">
+        <p class="section-label">创建评测集</p>
+        <el-input v-model="evalDatasetName" size="small" placeholder="评测集名称" />
+        <el-input v-model="evalDatasetDescription" size="small" placeholder="描述" />
+        <div class="eval-editor-toggle">
+          <el-radio-group v-model="evalEditorMode" size="small">
+            <el-radio-button value="form">表单</el-radio-button>
+            <el-radio-button value="json">JSON</el-radio-button>
+          </el-radio-group>
+        </div>
+        <template v-if="evalEditorMode === 'form'">
+          <div v-for="(draft, i) in evalCaseDrafts" :key="i" class="eval-case-draft">
+            <div class="eval-case-head">
+              <span>题目 {{ i + 1 }}</span>
+              <button
+                type="button"
+                :disabled="evalCaseDrafts.length <= 1"
+                @click="removeEvalCase(i)"
+              >
+                删除
+              </button>
+            </div>
+            <el-input
+              v-model="draft.question"
+              size="small"
+              placeholder="问题，如：高温作业有哪些风险？"
+            />
+            <el-input
+              v-model="draft.expected"
+              size="small"
+              placeholder="期望关键词（逗号分隔），如：高温,风险"
+            />
+            <el-input
+              v-model="draft.expectedDocuments"
+              size="small"
+              placeholder="期望文档（可选，逗号分隔），用于 Recall/MRR/Precision"
+            />
+            <el-input
+              v-model="draft.expectedChunks"
+              size="small"
+              placeholder="期望切片（可选，逗号分隔），如 report.md:chunk-2"
+            />
+            <el-input
+              v-model="draft.forbidden"
+              size="small"
+              placeholder="禁用关键词（可选，逗号分隔）"
+            />
+          </div>
+          <div class="eval-case-actions">
+            <el-button size="small" @click="addEvalCase">添加题目</el-button>
+            <el-button size="small" type="primary" plain @click="syncDraftsToJson"
+              >生成 JSON</el-button
+            >
+          </div>
+        </template>
+        <el-input
+          v-else
+          v-model="evalDatasetJson"
+          class="eval-json-input"
+          type="textarea"
+          :rows="11"
+          resize="none"
+          spellcheck="false"
+        />
+        <el-button
+          type="primary"
+          :loading="evalCreating"
+          :disabled="!evalDatasetName.trim() || !evalDatasetJson.trim()"
+          @click="createEvalDatasetFromJson"
+          >创建评测集</el-button
+        >
+      </div>
+    </el-dialog>
   </section>
 </template>
 
@@ -201,13 +237,17 @@ import { ref, watch } from 'vue';
 
 // 结构化题目编辑器：业务用户不写 JSON，表单填完一键生成；JSON 模式保留给高级用户
 const evalEditorMode = ref<'form' | 'json'>('json');
-const evalCaseDrafts = ref([{
-  question: '',
-  expected: '',
-  expectedDocuments: '',
-  expectedChunks: '',
-  forbidden: '',
-}]);
+// 创建评测集对话框（从左侧面板收进弹窗，与平台 Studio 的“新建”交互一致）
+const createDialogVisible = ref(false);
+const evalCaseDrafts = ref([
+  {
+    question: '',
+    expected: '',
+    expectedDocuments: '',
+    expectedChunks: '',
+    forbidden: '',
+  },
+]);
 
 function addEvalCase() {
   evalCaseDrafts.value.push({
@@ -287,11 +327,27 @@ watch(evalEditorMode, (mode) => {
   padding: 14px;
 }
 
+.list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.head-spacer {
+  margin-left: auto;
+}
+
 .eval-dataset-list {
+  flex: 1;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -335,8 +391,9 @@ watch(evalEditorMode, (mode) => {
 }
 
 .eval-dataset-list button.active {
-  border-color: rgba(15, 118, 110, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.28);
+  border-color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 8%, transparent);
+  color: var(--ui-accent);
 }
 
 .eval-dataset-list span,
@@ -435,7 +492,7 @@ watch(evalEditorMode, (mode) => {
 }
 
 .eval-run-summary.current {
-  border-color: rgba(15, 118, 110, 0.45);
+  border-color: color-mix(in oklab, var(--ui-accent) 55%, transparent);
 }
 
 .eval-run-summary strong,

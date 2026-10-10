@@ -15,8 +15,8 @@
 
     <template v-else>
       <div v-if="isEmptyConversation" class="welcome-block">
-        <h3>开始一个新问题</h3>
-        <p>上传文档或直接提问，回答会标注出处；编辑已发送的消息可以重新生成回答。</p>
+        <h3>开始对话任务</h3>
+        <p>选择左侧会话或直接输入问题；回答附带引用与 Agent 执行轨迹，编辑已发送消息可重新生成。</p>
         <div class="welcome-suggestions">
           <button
             v-for="question in welcomeSuggestions"
@@ -40,10 +40,10 @@
         class="message-row"
         :class="[entry.item.role, entry.item.state || 'done']"
       >
-        <div class="avatar">{{ entry.item.role === 'user' ? 'U' : 'AI' }}</div>
+        <div class="avatar">{{ entry.item.role === 'user' ? '用户' : '智能体' }}</div>
         <div class="bubble-wrap">
           <div class="bubble-meta">
-            <span>{{ entry.item.role === 'user' ? 'You' : 'Assistant' }}</span>
+            <span>{{ entry.item.role === 'user' ? '用户' : '智能体' }}</span>
             <span>{{ formatTime(entry.item.createdAt) }}</span>
             <span v-if="entry.item.kind === 'research'" class="research-badge">深度研究</span>
             <span v-if="entry.item.state === 'streaming'" class="status-dot">生成中</span>
@@ -111,10 +111,7 @@
                     >
                       <div class="trace-timeline-rail">
                         <div class="trace-node"></div>
-                        <div
-                          v-if="tsIdx < traceSteps.length - 1"
-                          class="trace-connector"
-                        ></div>
+                        <div v-if="tsIdx < traceSteps.length - 1" class="trace-connector"></div>
                       </div>
                       <div class="trace-timeline-content">
                         <div class="trace-step-header">
@@ -170,12 +167,7 @@
 
             <template v-else>
               <div v-if="editingMessageId === entry.item.id" class="edit-box">
-                <el-input
-                  v-model="editingMessageDraft"
-                  type="textarea"
-                  :rows="3"
-                  resize="none"
-                />
+                <el-input v-model="editingMessageDraft" type="textarea" :rows="3" resize="none" />
                 <div class="edit-actions">
                   <el-button size="small" @click="cancelEditMessage">取消</el-button>
                   <el-button
@@ -450,19 +442,34 @@ import {
 
 .welcome-block {
   max-width: 930px;
-  margin: 0 auto 12px;
-  padding: 0 20px;
+  margin: 20px auto 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-card);
 }
 
 .welcome-block h3 {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.16;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.welcome-block h3::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--ui-accent);
 }
 
 .welcome-block p {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--ui-muted);
+  font-size: 13px;
 }
 
 /* 首屏示例问题：样式与输入框工具按钮保持同一套胶囊语言 */
@@ -470,24 +477,27 @@ import {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 14px;
 }
 
 .welcome-chip {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--ui-border);
-  background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
+  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
   color: var(--ui-text);
-  border-radius: 999px;
-  padding: 7px 14px;
+  border-radius: 8px;
+  padding: 8px 13px;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
 .welcome-chip:hover {
   border-color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 7%, transparent);
 }
 
 .message-actions button {
@@ -497,8 +507,8 @@ import {
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   color: var(--ui-text);
-  border-radius: 999px;
-  padding: 6px 11px;
+  border-radius: 8px;
+  padding: 5px 10px;
   font-size: 12px;
   cursor: pointer;
 }
@@ -513,30 +523,33 @@ import {
   margin: 0 auto;
   padding: 0 20px 18px;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 12px;
   align-items: flex-start;
 }
 
 .message-row.user {
-  grid-template-columns: minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(0, 1fr) 34px;
 }
 
 .avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  background: linear-gradient(150deg, #274abc, #315deb);
-  color: #f8fafc;
+  border: 1px solid color-mix(in oklab, var(--ui-accent) 45%, transparent);
+  background: color-mix(in oklab, var(--ui-accent) 12%, transparent);
+  color: var(--ui-accent);
 }
 
 .message-row.user .avatar {
   grid-column: 2;
-  background: linear-gradient(150deg, #1d4ed8, #4338ca);
+  border-color: var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+  color: var(--ui-muted);
 }
 
 .bubble-wrap {
@@ -565,7 +578,7 @@ import {
 
 .bubble {
   width: min(100%, 860px);
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-card) 86%, transparent);
   padding: 12px 14px;
@@ -578,7 +591,7 @@ import {
 }
 
 .message-row.user .bubble {
-  background: linear-gradient(150deg, rgba(29, 78, 216, 0.15), rgba(67, 56, 202, 0.12));
+  background: color-mix(in oklab, var(--ui-panel) 72%, transparent);
 }
 
 .assistant-skeleton {
@@ -663,7 +676,7 @@ import {
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-card) 88%, transparent);
   color: var(--ui-text);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 4px 10px;
   font-size: 12px;
   cursor: pointer;
@@ -887,9 +900,10 @@ import {
   max-width: 930px;
   margin: 0 auto;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: color-mix(in oklab, var(--ui-card) 92%, transparent);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
   padding: 10px;
 }
 
@@ -916,7 +930,7 @@ import {
   gap: 6px;
 }
 
-/* ChatGPT 风格工具药丸：小圆角胶囊 + 面板底色 */
+/* 工具按钮：与平台 Studio 的操作按钮同一套小圆角卡片语言 */
 .composer-tool {
   display: inline-flex;
   align-items: center;
@@ -924,7 +938,7 @@ import {
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   color: var(--ui-text);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 6px 11px;
   font-size: 12px;
   cursor: pointer;
@@ -1141,7 +1155,6 @@ import {
     background-position: -120% 0;
   }
 }
-
 
 @media (max-width: 980px) {
   .composer-shell {
