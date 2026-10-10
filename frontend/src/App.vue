@@ -11,15 +11,17 @@
     <SessionSidebar />
 
     <main class="workspace">
-      <WorkspaceHeader />
-
       <ChatView v-if="activeView === 'chat'" />
 
       <KnowledgeView v-else-if="activeView === 'knowledge'" />
 
       <PlatformView v-else-if="isAdmin && activeView === 'platform'" />
 
-      <section v-else-if="activeView === 'platform'" class="no-permission-panel" aria-label="需要管理员身份">
+      <section
+        v-else-if="activeView === 'platform'"
+        class="no-permission-panel"
+        aria-label="需要管理员身份"
+      >
         <el-alert
           type="warning"
           show-icon
@@ -34,13 +36,11 @@
       <UsageView v-else-if="activeView === 'usage'" />
 
       <EvaluationView v-else />
-
     </main>
 
     <SettingsDialog />
 
     <BranchDrawer />
-
   </div>
 </template>
 
@@ -55,15 +55,10 @@ import AdminView from './components/admin/AdminView.vue';
 import EvaluationView from './components/evaluation/EvaluationView.vue';
 import KnowledgeView from './components/knowledge/KnowledgeView.vue';
 import PlatformView from './components/platform/PlatformView.vue';
-import WorkspaceHeader from './components/WorkspaceHeader.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
 import { onBeforeUnmount, onMounted } from 'vue';
 import { canUseRemoteSync, isAdmin } from './composables/useAuthState';
-import {
-  activeView,
-  registerGlobalUiEffects,
-  sessionColVisible,
-} from './composables/useGlobalUi';
+import { activeView, registerGlobalUiEffects, sessionColVisible } from './composables/useGlobalUi';
 import { clearStreamResetTimer } from './composables/useChatState';
 import {
   createMessageResizeObserver,
@@ -73,11 +68,7 @@ import {
   teardownViewport,
   updateViewport,
 } from './composables/useChatViewport';
-import {
-  loadUsageTrend,
-  refreshCostSummary,
-  registerUsageEffects,
-} from './composables/useUsage';
+import { loadUsageTrend, refreshCostSummary, registerUsageEffects } from './composables/useUsage';
 import { loadEvalDatasets } from './composables/useEvaluation';
 import {
   loadKnowledgeDocuments,
@@ -162,9 +153,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-shell {
-  /* 定高框架：页面本体永远等于一屏。此前用 min-height，侧栏内容一长
-     就把整页撑高，聊天区滚到底再往下滚，整页跟着滚、输入框下方露出大片空白。 */
+  /* 定高框架 + 整体卡片布局：外层留白，侧栏/会话栏/页面均为独立圆角卡片 */
   height: 100vh;
+  padding: 12px;
+  gap: 12px;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -189,10 +182,8 @@ onBeforeUnmount(() => {
 }
 
 .workspace {
-  /* 固定一屏高、内部滚动：所有页面（flex:1 + min-height:0 链、height:100% 表格、
-     sticky 输入框）都按"定高框架"设计，此前 min-height 让高度链断裂，
-     内容一长就把输入框/分页条顶出屏幕外 */
-  height: 100vh;
+  /* 卡片化后由外层网格控制高度：工作区自身只需内部滚动 */
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

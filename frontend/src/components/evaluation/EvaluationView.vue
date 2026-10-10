@@ -37,6 +37,30 @@
     </aside>
 
     <section class="eval-main-panel">
+      <div class="eval-toolbar">
+        <span class="eval-toolbar-title">评测结果</span>
+        <div class="eval-toolbar-actions">
+          <el-button size="small" :loading="evalLoading" @click="loadEvalDatasets">刷新</el-button>
+          <el-button
+            size="small"
+            type="primary"
+            :loading="evalRunning"
+            :disabled="!evalSelectedDatasetId"
+            @click="runSelectedEvalDataset"
+            >运行评测</el-button
+          >
+          <el-button
+            size="small"
+            :disabled="!evalCurrentRun"
+            :loading="evalReportExporting"
+            @click="downloadEvalReport"
+            >导出报告</el-button
+          >
+          <el-button size="small" :disabled="!evalCurrentRun" @click="markCurrentEvalRunBaseline"
+            >设为基线</el-button
+          >
+        </div>
+      </div>
       <div class="eval-score-strip">
         <div v-for="metric in evalMetricCards" :key="metric.key" class="eval-metric-card">
           <span>{{ metric.label }}</span>
@@ -219,6 +243,7 @@
 // App.vue onMounted 触发；全部状态在 useEvaluation 单例。
 import {
   createEvalDatasetFromJson,
+  downloadEvalReport,
   evalBaselineRun,
   evalCreating,
   evalCurrentRun,
@@ -226,9 +251,15 @@ import {
   evalDatasetJson,
   evalDatasetName,
   evalDatasets,
+  evalLoading,
   evalMetricCards,
+  evalReportExporting,
+  evalRunning,
   evalSelectedDatasetId,
+  loadEvalDatasets,
+  markCurrentEvalRunBaseline,
   removeEvalDataset,
+  runSelectedEvalDataset,
   selectEvalDataset,
 } from '../../composables/useEvaluation';
 import { formatPercent, formatRunScore } from '../../utils/evalFormat';
@@ -325,6 +356,25 @@ watch(evalEditorMode, (mode) => {
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
+}
+
+.eval-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.eval-toolbar-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.eval-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .list-head {

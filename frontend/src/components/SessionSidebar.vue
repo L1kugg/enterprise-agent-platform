@@ -4,6 +4,22 @@
     <button class="new-chat-btn" type="button" @click="createAndSwitchSession">+ 新建会话</button>
 
     <section class="session-tools">
+      <el-select
+        v-model="activeWorkspaceId"
+        size="small"
+        filterable
+        allow-create
+        default-first-option
+        placeholder="切换或输入新工作区"
+        @change="handleWorkspaceChange"
+      >
+        <el-option
+          v-for="workspace in workspaceOptions"
+          :key="workspace"
+          :label="workspace"
+          :value="workspace"
+        />
+      </el-select>
       <el-input v-model="sessionSearch" size="small" placeholder="搜索会话标题或 ID" clearable />
       <div class="tool-row">
         <el-select v-model="workspaceFilter" size="small" class="tool-select">
@@ -30,6 +46,25 @@
         <p class="section-label">会话</p>
         <div class="branch-head-actions">
           <span class="section-meta">{{ filteredSessions.length }}/{{ sessionCount }}</span>
+          <el-tooltip
+            :content="'会话分支 (' + (activeSession?.branches.length ?? 0) + ')'"
+            placement="bottom"
+            :show-after="300"
+          >
+            <button
+              type="button"
+              aria-label="查看分支"
+              :disabled="(activeSession?.branches.length ?? 0) <= 1"
+              @click="branchDrawerVisible = true"
+            >
+              <el-icon :size="13"><Share /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip content="清空当前会话" placement="bottom" :show-after="300">
+            <button type="button" aria-label="清空当前会话" @click="clearConversation">
+              <el-icon :size="13"><Delete /></el-icon>
+            </button>
+          </el-tooltip>
           <el-tooltip content="云端拉取" placement="bottom" :show-after="300">
             <button
               type="button"
@@ -64,12 +99,8 @@
           <div class="session-content">
             <div class="session-title-row">
               <p class="session-title">{{ session.title }}</p>
-              <el-tag v-if="session.pinned" size="small" type="success" effect="plain"
-                >置顶</el-tag
-              >
-              <el-tag v-if="session.archived" size="small" type="info" effect="plain"
-                >归档</el-tag
-              >
+              <el-tag v-if="session.pinned" size="small" type="success" effect="plain">置顶</el-tag>
+              <el-tag v-if="session.archived" size="small" type="info" effect="plain">归档</el-tag>
             </div>
             <p class="session-meta-row">
               {{ session.workspaceId }} · {{ formatTime(session.updatedAt) }}
@@ -82,7 +113,11 @@
               </button>
             </el-tooltip>
             <el-tooltip content="生成交接摘要" placement="bottom" :show-after="300">
-              <button type="button" aria-label="生成交接摘要" @click.stop="generateHandoffSummary(session.id)">
+              <button
+                type="button"
+                aria-label="生成交接摘要"
+                @click.stop="generateHandoffSummary(session.id)"
+              >
                 <el-icon :size="12"><DocumentCopy /></el-icon>
               </button>
             </el-tooltip>
@@ -140,8 +175,19 @@
 // 显隐开关 sessionColVisible / 折叠状态 sessionColCollapsed 在 useGlobalUi
 // （折叠按钮在这里，展开按钮在顶栏，所以折叠状态归全局而不是本组件）。
 // 列表/筛选状态与全部会话动作在 useSessions 单例，无需 props/emits。
-import { Box, CaretLeft, Delete, DocumentCopy, Download, Edit, Top, Upload } from '@element-plus/icons-vue';
 import {
+  Box,
+  CaretLeft,
+  Delete,
+  DocumentCopy,
+  Download,
+  Edit,
+  Share,
+  Top,
+  Upload,
+} from '@element-plus/icons-vue';
+import {
+  branchDrawerVisible,
   sessionColCollapsed,
   sessionColVisible,
   sessionSearch,
@@ -149,9 +195,13 @@ import {
   workspaceFilter,
 } from '../composables/useGlobalUi';
 import { canUseRemoteSync } from '../composables/useAuthState';
+import { clearConversation } from '../composables/useChatEngine';
 import {
+  activeSession,
   activeSessionId,
+  activeWorkspaceId,
   cloudSyncing,
+  handleWorkspaceChange,
   createAndSwitchSession,
   filteredSessions,
   generateHandoffSummary,
@@ -176,9 +226,9 @@ import { formatTime } from '../utils/format';
   padding: 12px;
   min-height: 0;
   overflow: hidden;
-  border-right: 1px solid var(--ui-border);
-  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
-  backdrop-filter: blur(12px);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-card);
 }
 
 /* flex 纵向布局默认"先压缩孩子、再出滚动条"：按钮/工具区锁 flex-shrink，
