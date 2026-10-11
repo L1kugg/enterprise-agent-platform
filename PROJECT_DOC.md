@@ -404,9 +404,16 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 | `GET /platform/{assetType}?page&pageSize&search` | 分页搜索 |
 | `POST /platform/{assetType}` | 创建 |
 | `GET / PUT / DELETE /platform/{assetType}/{id}` | 详情 / 更新 / 删除 |
-| `POST /platform/agents/{id}/copy` | 智能体复制 |
-| `POST /platform/agents/{id}/publish` | 智能体发布（声明发布渠道） |
-| `POST /platform/model-services/{id}/test` | 模型连接测试 |
+| `POST /platform/agents/{id}/copy`、`/publish` | 智能体复制 / 发布（声明渠道） |
+| `POST /platform/workflows/{id}/copy`、`/online`、`/offline` | 工作流复制 / 上线 / 下线 |
+| `POST /platform/workflows/{id}/test-run` | 工作流试运行（真实图遍历执行，含环检测与节点 trace） |
+| `GET /platform/workflows/{id}/export`、`POST /platform/workflows/import` | 工作流导出 / 导入 |
+| `POST /platform/tools/{id}/test` | 工具测试（真实 HTTP 调用，按配置发起请求） |
+| `POST /platform/safety-guards/{id}/test` | 安全策略测试（真实正则/关键词匹配） |
+| `POST /platform/model-services/{id}/test` | 模型连接测试（真实 HTTP 探测，回写 lastTestStatus） |
+| `POST /platform/databases/{id}/test` | 数据库连接测试（真实 JDBC 连接） |
+| `GET / PUT /platform/users` | 用户列表 / 更新（角色、启停） |
+| `GET / POST / PUT / DELETE /platform/roles` | 角色 CRUD（含权限集） |
 
 权限与安全边界：
 
@@ -433,7 +440,9 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 
 ### 9.4 与运行时闭环的关系（当前边界）
 
-配置基座是"配置资源 → 运行时真实生效"闭环的第一批：资产 CRUD、搜索、分页、基础状态、智能体复制/发布、模型连接测试。智能体配置（提示词/模型/记忆轮数/知识库/工具/安全防护绑定）驱动真实会话、工作流可视化编排与试运行、安全防护会话前拦截等运行时闭环需求**尚未实施**，规划见 `docs/platform-remaining-requirements.md`（R1–R12 四阶段路线）。
+配置基座已完成两批：① 八类资产 CRUD、搜索、分页、复制/发布；② 各模块治理动作——工作流试运行（真实图遍历）/上下线/导入导出、工具真实测试（HTTP）、安全策略真实测试（正则/关键词）、模型连接探测、数据库 JDBC 连接测试、用户与角色管理。前端 Studio 页面（画布、测试面板、系统管理）均已接通这些接口。
+
+**尚未实施**的是"配置 → 会话运行时"的最后一段：智能体配置（提示词/模型/记忆轮数/知识库/工具/安全防护绑定）仍只是 JSON 存档，不驱动真实会话；智能体调试接口（`/platform/agents/{id}/debug`，前端 AgentStudio 调试面板按钮已置灰待接入）、安全防护会话前拦截、知识库绑定召回范围、已发布智能体的对外调用渠道均未建设。规划见 `docs/platform-remaining-requirements.md`（R1–R12 四阶段路线）。
 
 ---
 
@@ -712,7 +721,14 @@ GET/POST  /platform/{assetType}             八类资产分页搜索 / 创建
 GET/PUT/DELETE /platform/{assetType}/{id}   详情 / 更新 / 删除
 POST      /platform/agents/{id}/copy        智能体复制
 POST      /platform/agents/{id}/publish     智能体发布
+POST      /platform/workflows/{id}/copy|online|offline|test-run  工作流复制/上下线/试运行
+GET/POST  /platform/workflows/{id}/export | /platform/workflows/import  工作流导出/导入
+POST      /platform/tools/{id}/test         工具真实测试
+POST      /platform/safety-guards/{id}/test 安全策略真实测试
 POST      /platform/model-services/{id}/test 模型连接测试
+POST      /platform/databases/{id}/test     数据库连接测试
+GET/PUT   /platform/users                   用户列表 / 更新
+GET/POST/PUT/DELETE /platform/roles         角色管理
 ```
 
 ### 知识入库
@@ -772,7 +788,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 18.1 平台配置 → 运行时闭环（进行中）
 
-**现状**：八类平台资产已完成配置基座（CRUD/搜索/分页/复制/发布/模型连接测试，见第 9 章），但智能体配置尚未驱动真实会话——提示词/模型/记忆轮数/知识库范围/工具与安全防护绑定均未接入运行时；工作流可视化编排、试运行、上线/下线，工具真实测试与执行，安全防护会话前拦截同样待建。
+**现状**：配置基座与各模块治理动作已完成（八类资产 CRUD、工作流试运行/上下线/导入导出、工具/安全/模型/数据库真实测试、用户角色管理，见第 9 章），前端 Studio 已接通。但智能体配置尚未驱动真实会话——聊天接口无 `agentId`、提示词/模型/记忆轮数/知识库范围/工具与安全防护绑定均未接入运行时；智能体调试接口、安全防护会话前拦截、已发布智能体的调用渠道、知识库绑定上传与分段治理同样待建。
 
 **改进**：按 `docs/platform-remaining-requirements.md` 的 R1–R12 四阶段实施（智能体最小闭环 → 工作流与工具 → 知识库治理与发布 → 系统管理与体验完善）。
 
