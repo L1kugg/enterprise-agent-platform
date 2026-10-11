@@ -81,6 +81,13 @@ management:
         enabled: true
 
 app:
+  agent:
+    # 智能体绑定模型调用失败后是否回退既有档位路由；false 则直接向用户报错
+    model-fallback-enabled: ${APP_AGENT_MODEL_FALLBACK_ENABLED:true}
+    # 绑定模型客户端缓存 TTL（秒）；资产配置指纹变化时无条件重建
+    model-cache-ttl-seconds: ${APP_AGENT_MODEL_CACHE_TTL:600}
+    # memoryTurns 有效上限，超出按上限截断
+    max-memory-turns: ${APP_AGENT_MAX_MEMORY_TURNS:30}
   security:
     enabled: ${APP_SECURITY_ENABLED:true}
     jwt-secret: ${APP_JWT_SECRET:}

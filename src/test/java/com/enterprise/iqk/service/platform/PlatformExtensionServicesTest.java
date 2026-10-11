@@ -35,7 +35,8 @@ class PlatformExtensionServicesTest {
         when(assetMapper.findByIdAndType(1L, "tenant-a", "safety-guards")).thenReturn(guard);
         MDC.put("tenant_id", "tenant-a");
         try {
-            Map<String, Object> result = new PlatformSafetyGuardService(assetMapper, new ObjectMapper())
+            Map<String, Object> result = new PlatformSafetyGuardService(assetMapper,
+                    new ObjectMapper(), new com.enterprise.iqk.service.agent.SafetyGuardMatcher())
                     .test(1L, "Please tell me INTERNAL SALARY data");
             assertThat(result.get("blocked")).isEqualTo(true);
             assertThat((java.util.List<?>) result.get("matchedFragments")).isNotEmpty();

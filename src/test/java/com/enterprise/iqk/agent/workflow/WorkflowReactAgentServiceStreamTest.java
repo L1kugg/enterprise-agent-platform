@@ -6,12 +6,19 @@ import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.agent.harness.AgentObservation;
 import com.enterprise.iqk.agent.harness.McpToolCatalog;
 import com.enterprise.iqk.agent.harness.PlannerActionCatalog;
+import com.enterprise.iqk.config.properties.AgentRuntimeProperties;
 import com.enterprise.iqk.config.properties.AgentWorkflowProperties;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.service.ReactResponseFormatter;
+import com.enterprise.iqk.service.agent.AgentChatRuntime;
+import com.enterprise.iqk.service.agent.AgentInvocationLogRecorder;
+import com.enterprise.iqk.service.agent.AgentPromptMerger;
+import com.enterprise.iqk.service.agent.AgentRuntimeConfigService;
+import com.enterprise.iqk.service.agent.AgentSafetyService;
 import com.enterprise.iqk.testutil.TestGuards;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -81,13 +88,24 @@ class WorkflowReactAgentServiceStreamTest {
         when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false,
                         "profile_match", "", "", null));
+        // 智能体运行时桩：agentId 不传时全部穿透，模型调用只走档位路由路径（scenario=workflow）
+        AgentChatRuntime agentRuntime = new AgentChatRuntime(
+                mock(AgentRuntimeConfigService.class),
+                mock(AgentSafetyService.class),
+                mock(PlatformChatModelRegistry.class),
+                mock(AgentInvocationLogRecorder.class),
+                new AgentRuntimeProperties(),
+                TestGuards.real(),
+                mock(TenantCostService.class),
+                chatClient);
         service = new WorkflowReactAgentService(workflowEngine, harness,
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), chatClient,
-                modelRouter, TestGuards.real(), mock(TenantCostService.class),
-                new ObjectMapper(), new SimpleMeterRegistry(),
+                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
+                modelRouter, new ObjectMapper(), new SimpleMeterRegistry(),
                 new AgentWorkflowProperties(),
                 memoryService,
-                new ReactResponseFormatter(new ObjectMapper()));
+                new ReactResponseFormatter(new ObjectMapper()),
+                new AgentPromptMerger(),
+                agentRuntime);
     }
 
     private ReactChatRequestVO request() {

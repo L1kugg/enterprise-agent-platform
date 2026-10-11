@@ -39,4 +39,14 @@ public interface PlatformAssetMapper extends BaseMapper<PlatformAsset> {
     PlatformAsset findByIdAndType(@Param("id") Long id,
                                   @Param("tenantId") String tenantId,
                                   @Param("assetType") String assetType);
+
+    /** 普通用户可见目录：仅发布态资产，最新更新在前，限量防整表翻页。 */
+    @Select("""
+            SELECT * FROM platform_asset
+            WHERE tenant_id = #{tenantId} AND asset_type = #{assetType} AND status = 'PUBLISHED'
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 100
+            """)
+    List<PlatformAsset> findPublishedByType(@Param("tenantId") String tenantId,
+                                            @Param("assetType") String assetType);
 }

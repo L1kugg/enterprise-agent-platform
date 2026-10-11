@@ -2,7 +2,9 @@ package com.enterprise.iqk.service.platform;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
+import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
+import com.enterprise.iqk.service.agent.AgentBindingSyncService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,7 +32,8 @@ class PlatformAssetServiceTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new TestingAuthenticationToken("tester", "n/a", "ROLE_ADMIN"));
         try {
-            PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper());
+            PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
             PlatformAsset created = service.create("model-services", "qwen", null,
                     "{\"apiUrl\":\"https://model.local\",\"apiKey\":\"sk-secret\"}", null, "tester");
 
@@ -45,7 +49,8 @@ class PlatformAssetServiceTest {
 
     @Test
     void createRejectsUnsupportedAssetType() {
-        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper());
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
         assertThatThrownBy(() -> service.create("unknown", "x", "{}", null, null, "tester"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
@@ -53,7 +58,8 @@ class PlatformAssetServiceTest {
 
     @Test
     void createRejectsInvalidConfigurationJson() {
-        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper());
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
         assertThatThrownBy(() -> service.create("agents", "x", null, "{bad", null, "tester"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
@@ -62,7 +68,8 @@ class PlatformAssetServiceTest {
     @Test
     void getIsRestrictedToCurrentTenantAndAssetType() {
         when(mapper.findByIdAndType(any(), any(), any())).thenReturn(null);
-        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper());
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
 
         assertThatThrownBy(() -> service.get("agents", 12L))
                 .isInstanceOf(ResponseStatusException.class)
@@ -84,7 +91,8 @@ class PlatformAssetServiceTest {
             rawAtUpdate[0] = argument.getConfigJson();
             return 1;
         }).when(mapper).updateById(any(PlatformAsset.class));
-        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper());
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
 
         PlatformAsset updated = service.update("model-services", 9L, null, null,
                 "{\"apiKey\":\"******\"}", "UNTESTED", null);

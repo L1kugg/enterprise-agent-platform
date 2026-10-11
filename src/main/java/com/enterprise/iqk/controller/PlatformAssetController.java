@@ -3,8 +3,10 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.domain.platform.PlatformRoleRecord;
 import com.enterprise.iqk.domain.platform.PlatformUserRecord;
+import com.enterprise.iqk.domain.vo.AgentDebugResponseVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.security.UserContext;
+import com.enterprise.iqk.service.agent.AgentDebugService;
 import com.enterprise.iqk.service.platform.PlatformAdminService;
 import com.enterprise.iqk.service.platform.PlatformAssetService;
 import com.enterprise.iqk.service.platform.PlatformSafetyGuardService;
@@ -42,6 +44,7 @@ public class PlatformAssetController {
     private final PlatformSafetyGuardService safetyGuardService;
     private final PlatformSqlTestService sqlTestService;
     private final PlatformAdminService adminService;
+    private final AgentDebugService agentDebugService;
 
     public record AssetUpsertRequest(
             @NotBlank(message = "name is required") String name,
@@ -56,6 +59,7 @@ public class PlatformAssetController {
     public record WorkflowTestRunRequest(Map<String, Object> input) {}
     public record ToolTestRequest(Map<String, Object> params) {}
     public record SafetyGuardTestRequest(String text) {}
+    public record AgentDebugRequest(@NotBlank(message = "message is required") String message, String chatId) {}
     public record RoleUpsertRequest(@NotBlank(message = "name is required") String name, String code,
                                     String description, List<String> permissions) {}
     public record UserUpdateRequest(String displayName, String status, List<String> roles) {}
@@ -68,8 +72,10 @@ public class PlatformAssetController {
                 request.parentId(), UserContext.currentUserId(null));
     }
 
+    // 列表/详情仅管理员：config_json 含系统提示词与密钥类配置，不对普通用户开放
+    // （普通用户取智能体展示信息走 GET /ai/agents 目录接口）
     @GetMapping("/{assetType}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('ADMIN')")
     public PagedResult<PlatformAsset> list(@PathVariable String assetType,
                                            @RequestParam(defaultValue = "1") int page,
                                            @RequestParam(defaultValue = "20") int pageSize,
@@ -79,7 +85,7 @@ public class PlatformAssetController {
     }
 
     @GetMapping("/{assetType}/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('ADMIN')")
     public PlatformAsset get(@PathVariable String assetType, @PathVariable Long id) {
         return service.get(assetType, id);
     }
@@ -112,6 +118,14 @@ public class PlatformAssetController {
         return service.publishAgent(id, request == null ? List.of() : request.channels());
     }
 
+    /** 智能体调试：用已保存配置真跑一次会话（channel=debug），草稿可调。 */
+    @PostMapping("/agents/{id}/debug")
+    @PreAuthorize("hasRole('ADMIN')")
+    public AgentDebugResponseVO debugAgent(@PathVariable Long id,
+                                           @Valid @RequestBody AgentDebugRequest request) {
+        return agentDebugService.debug(id, request.message(), request.chatId());
+    }
+
     @PostMapping("/workflows/{id}/copy")
     @PreAuthorize("hasRole('ADMIN')")
     public PlatformAsset copyWorkflow(@PathVariable Long id,
@@ -139,7 +153,7 @@ public class PlatformAssetController {
     }
 
     @GetMapping("/workflows/{id}/export")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('ADMIN')")
     public com.fasterxml.jackson.databind.JsonNode exportWorkflow(@PathVariable Long id) {
         return workflowService.export(id);
     }

@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
+import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.agent.AgentBindingSyncService;
 import com.enterprise.iqk.util.SqlLikeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -44,6 +46,10 @@ public class PlatformAssetService {
 
     private final PlatformAssetMapper mapper;
     private final ObjectMapper objectMapper;
+    /** agents 保存后把 config_json 绑定 ID 同步进关系表（运行时只读表） */
+    private final AgentBindingSyncService agentBindingSyncService;
+    /** model-services 配置变更/删除时失效绑定模型客户端缓存 */
+    private final PlatformChatModelRegistry chatModelRegistry;
 
     public long count(String assetType, String search) {
         return mapper.countForList(TenantContext.currentTenantId(), normalizeType(assetType), keyword(search));
@@ -81,6 +87,9 @@ public class PlatformAssetService {
                     .createdBy(creator).createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now())
                     .build();
             mapper.insert(asset);
+            if ("agents".equals(type)) {
+                agentBindingSyncService.syncFromConfig(asset.getTenantId(), asset.getId(), asset.getConfigJson());
+            }
             return sanitize(asset);
         } catch (DuplicateKeyException ex) {
             throw duplicate(type, name);
@@ -104,6 +113,13 @@ public class PlatformAssetService {
             existing.setParentId(parentId == null ? existing.getParentId() : parentId);
             existing.setUpdatedAt(LocalDateTime.now());
             mapper.updateById(existing);
+            if ("agents".equals(existing.getAssetType())) {
+                // 用合并密钥后的最终 config_json 同步绑定表（****** 不会进表）
+                agentBindingSyncService.syncFromConfig(existing.getTenantId(), existing.getId(), existing.getConfigJson());
+            }
+            if ("model-services".equals(existing.getAssetType())) {
+                chatModelRegistry.evict(existing.getId());
+            }
             return sanitize(existing);
         } catch (DuplicateKeyException ex) {
             throw duplicate(assetType, name);
@@ -113,6 +129,12 @@ public class PlatformAssetService {
     public void delete(String assetType, Long id) {
         PlatformAsset asset = getOwned(assetType, id);
         mapper.deleteById(asset.getId());
+        if ("agents".equals(asset.getAssetType())) {
+            agentBindingSyncService.deleteAllBindings(asset.getTenantId(), asset.getId());
+        }
+        if ("model-services".equals(asset.getAssetType())) {
+            chatModelRegistry.evict(asset.getId());
+        }
         if ("knowledge-bases".equals(asset.getAssetType())) {
             mapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PlatformAsset>()
                     .eq(PlatformAsset::getTenantId, asset.getTenantId())

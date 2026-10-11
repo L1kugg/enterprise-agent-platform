@@ -3,6 +3,7 @@ package com.enterprise.iqk.service.platform;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.agent.SafetyGuardMatcher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -12,17 +13,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
-/** 安全防护策略测试：KEYWORD 大小写不敏感包含匹配，REGEX 服务端正则匹配。 */
+/** 安全防护策略测试：KEYWORD 大小写不敏感包含匹配，REGEX 服务端正则匹配（匹配核心复用 SafetyGuardMatcher）。 */
 @Service
 @RequiredArgsConstructor
 public class PlatformSafetyGuardService {
     private final PlatformAssetMapper assetMapper;
     private final ObjectMapper objectMapper;
+    private final SafetyGuardMatcher safetyGuardMatcher;
 
     public Map<String, Object> test(Long id, String text) {
         if (text == null || text.isBlank()) {
@@ -35,20 +34,12 @@ public class PlatformSafetyGuardService {
             return Map.of("blocked", false, "hitLevel", "NONE", "matchedFragments", List.of());
         }
 
-        String matchType = config.path("matchType").asText("KEYWORD").toUpperCase(Locale.ROOT);
-        List<String> matched = new ArrayList<>();
-        for (JsonNode patternNode : config.path("patterns")) {
-            String pattern = patternNode.asText();
-            if (pattern.isBlank()) continue;
-            if (matchType.equals("REGEX")) {
-                try {
-                    if (Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(text).find()) matched.add(pattern);
-                } catch (PatternSyntaxException ex) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "安全策略正则不合法：" + pattern, ex);
-                }
-            } else if (text.toLowerCase(Locale.ROOT).contains(pattern.toLowerCase(Locale.ROOT))) {
-                matched.add(pattern);
-            }
+        List<String> matched;
+        try {
+            matched = safetyGuardMatcher.match(config.path("matchType").asText("KEYWORD"),
+                    stringList(config.path("patterns")), text);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         }
         boolean blocked = !matched.isEmpty();
         return Map.of(
@@ -57,6 +48,19 @@ public class PlatformSafetyGuardService {
                 "matchedFragments", matched,
                 "blockMessage", blocked ? config.path("blockMessage").asText("该话题不在允许讨论范围内。") : ""
         );
+    }
+
+    private List<String> stringList(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        if (array != null && array.isArray()) {
+            for (JsonNode item : array) {
+                String text = item.asText("");
+                if (!text.isBlank()) {
+                    values.add(text.trim());
+                }
+            }
+        }
+        return values;
     }
 
     private JsonNode parse(String json) {

@@ -31,6 +31,9 @@ import java.util.UUID;
  */
 public class MemoryService {
 
+    /** 非智能体路径 short 层默认注入条数（维持旧行为）；一条 short 记忆对应一轮问答 */
+    private static final int DEFAULT_SHORT_LIMIT = 4;
+
     private final MemoryItemMapper itemMapper;
     private final MemoryEventMapper eventMapper;
     private final ObjectMapper objectMapper;
@@ -144,9 +147,20 @@ public class MemoryService {
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId,
                                                String query, boolean includeShort) {
+        return buildContext(tenantId, userId, query, includeShort, DEFAULT_SHORT_LIMIT);
+    }
+
+    /**
+     * 智能体路径重载：short 层按智能体 memoryTurns 裁剪（一条 short 记忆 = 一轮问答，
+     * 见 ChatTurnMemoryRecorder），shortLimit ≤ 0 表示不注入 short 层；
+     * long/fact 层预算不受影响，会话库仍保留完整历史。
+     */
+    public MemoryContextSnapshot buildContext(String tenantId, String userId,
+                                               String query, boolean includeShort, int shortLimit) {
         String tenant = TenantContext.normalize(tenantId);
-        List<MemoryItemRecord> shortMem = includeShort
-                ? relevanceScorer.select(queryShortMemory(tenant, userId, 30), query, "short", 4)
+        List<MemoryItemRecord> shortMem = includeShort && shortLimit > 0
+                ? relevanceScorer.select(queryShortMemory(tenant, userId, 30), query, "short",
+                        Math.min(shortLimit, 30))
                 : List.of();
         List<MemoryItemRecord> selectedLongMem = relevanceScorer.select(
                 queryLongMemory(tenant, userId, 40), query, "long", 5);
