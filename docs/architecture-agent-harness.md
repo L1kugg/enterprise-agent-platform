@@ -126,7 +126,7 @@ public interface McpToolAdapter {
 }
 ```
 
-默认提供 `HttpMcpToolAdapter`：只会调用 `app.agent-harness.mcp.servers` 中显式配置且启用的 server/tool，按 JSON-RPC `tools/call` 形式发送请求。HTTP 非 2xx、超时或解析异常都会变成 `source=mcp`、`status=error` 的 observation，而不是抛出到 ReAct 循环外。
+默认提供 `StandardMcpToolAdapter`：只会调用 `app.agent-harness.mcp.servers` 中显式配置且启用的 server/tool，按官方标准 MCP 协议（`McpSyncClient` + 自研 HC5 Streamable HTTP 传输，含 initialize 握手与会话复用）发起请求。HTTP 非 2xx、超时或协议异常都会变成 `source=mcp`、`status=error` 的 observation，而不是抛出到 ReAct 循环外。
 
 ## Workspace runtime
 

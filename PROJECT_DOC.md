@@ -61,6 +61,7 @@ Enterprise Agent Platform 是一个企业级 Spring AI RAG 平台，不停留在
 |------|------|------|
 | 语言/框架 | Java / Spring Boot | 17 / 3.4.5 |
 | AI 框架 | Spring AI | 1.1.7 |
+| MCP 协议 | 官方 MCP Java SDK（mcp-core + mcp-json-jackson2，自研 HC5 传输） | 1.1.4 |
 | 安全 | Spring Security + JJWT | 6.x + 0.13.0 |
 | 弹性 | Resilience4j | 2.4.0 |
 | 限流 | Bucket4j + Redis | 8.10.1 |
@@ -363,7 +364,7 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 | Runtime | 执行什么 | 信任级别 |
 |---------|---------|---------|
 | BuiltinToolRuntime | create_task / rag_search / query_database | 默认可用 |
-| McpToolRuntime | 配置化的 MCP 外部工具调用 | 需要 trusted |
+| McpToolRuntime | 标准协议调用外部 MCP server（官方 SDK + 自研 HC5 传输，配置驱动接入） | 默认可用（只读外部查询，风险由 SSRF 纵深兜底） |
 | WorkspaceRuntime | 文件读写 / 文本搜索 / 补丁应用 / Shell 命令 | 需要 trusted |
 
 ### 8.4 Workspace 安全边界

@@ -1,5 +1,7 @@
 # MCP 工具桥接探索
 
+> **状态：已归档（2026-10）**。本文档是 MCP 接入的早期探索/设计稿，其中的 `McpToolRegistry`/`McpToolProxy`/`TransportManager` 结构与 `mcp_server_policy`/`mcp_audit_log`/`mcp_server_config` 表方案均未按原样实施。当前实际实现见 `docs/code-map.md` 的"MCP 工具调用全链路"：官方 MCP Java SDK（io.modelcontextprotocol.sdk:mcp-core + mcp-json-jackson2）协议层 + 自研 HC5 `McpClientTransport` 传输层（保留 DNS 固定与 SSRF 纵深），Streamable HTTP 传输，server 清单走 `application.yml` 配置。本文的风险分析（提示注入/供应链/子进程泄漏）与开放问题仍有参考价值。
+
 ## 概述
 
 Model Context Protocol (MCP) 是 Anthropic 定义的开放协议，标准化了 LLM 与外部工具/数据源之间的交互层。Enterprise Agent Platform 当前的内置工具（`BuiltinToolRuntime` 等）硬编码在进程内。MCP 桥接的目标是：**将工具边界从进程内扩展到进程外，同时保持多租户隔离和审计能力不变**。
