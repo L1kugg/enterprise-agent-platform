@@ -50,7 +50,9 @@ public class PlatformAssetController {
             @NotBlank(message = "name is required") String name,
             String description,
             String configJson,
-            Long parentId) {}
+            Long parentId,
+            /** TENANT|SYSTEM，缺省 TENANT；SYSTEM 仅凭据型白名单（model-services/databases）可用 */
+            String scope) {}
 
     public record AssetUpdateRequest(String name, String description, String configJson, String status, Long parentId) {}
     public record CopyAgentRequest(String targetName) {}
@@ -69,7 +71,7 @@ public class PlatformAssetController {
     @PreAuthorize("hasRole('ADMIN')")
     public PlatformAsset create(@PathVariable String assetType, @Valid @RequestBody AssetUpsertRequest request) {
         return service.create(assetType, request.name(), request.description(), request.configJson(),
-                request.parentId(), UserContext.currentUserId(null));
+                request.parentId(), UserContext.currentUserId(null), request.scope());
     }
 
     // 列表/详情仅管理员：config_json 含系统提示词与密钥类配置，不对普通用户开放

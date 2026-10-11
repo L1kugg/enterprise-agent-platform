@@ -31,9 +31,14 @@
             <strong>{{ item.name }}</strong>
             <small>{{ providerOf(item) || '未配置提供商' }}</small>
           </span>
-          <el-tag size="small" :type="statusTag(item.status)">{{
-            item.status || 'UNTESTED'
-          }}</el-tag>
+          <span class="item-tags">
+            <el-tag v-if="item.scope === 'SYSTEM'" size="small" effect="plain" type="primary"
+              >系统</el-tag
+            >
+            <el-tag size="small" :type="statusTag(item.status)">{{
+              item.status || 'UNTESTED'
+            }}</el-tag>
+          </span>
         </button>
       </div>
     </aside>
@@ -128,6 +133,23 @@
             <el-input-number v-model="form.retry" :min="0" :max="5" />
           </el-form-item>
         </div>
+        <el-form-item label="共享范围">
+          <div class="scope-row">
+            <el-switch
+              v-model="form.scope"
+              active-value="SYSTEM"
+              inactive-value="TENANT"
+              active-text="系统共享"
+              inactive-text="仅本租户"
+              :disabled="Boolean(selected?.id)"
+            />
+            <small class="scope-hint">{{
+              selected?.id
+                ? '共享范围创建后不可更改'
+                : '系统共享 = 全体租户可用此模型（密钥对其它租户脱敏）'
+            }}</small>
+          </div>
+        </el-form-item>
         <el-form-item label="默认参数（JSON）">
           <el-input
             v-model="form.modelParamsText"
@@ -167,7 +189,7 @@ import {
   testPlatformModel,
   updatePlatformAsset,
 } from '../../api/platform';
-import type { PlatformAsset } from '../../types/platform';
+import type { PlatformAsset, PlatformAssetUpsert } from '../../types/platform';
 import { authContext, isAdmin } from '../../composables/useAuthState';
 
 interface LastTest {
@@ -195,6 +217,7 @@ const defaultForm = () => ({
   timeoutMs: 30000,
   retry: 1,
   modelParamsText: '{}',
+  scope: 'TENANT' as 'TENANT' | 'SYSTEM',
 });
 const form = ref(defaultForm());
 
@@ -240,6 +263,7 @@ function applyAsset(asset: PlatformAsset): void {
   selected.value = asset;
   const next = defaultForm();
   next.name = asset.name;
+  next.scope = asset.scope === 'SYSTEM' ? 'SYSTEM' : 'TENANT';
   try {
     const config = JSON.parse(asset.configJson || '{}') as Record<string, unknown>;
     if (typeof config.category === 'string') next.category = config.category;
@@ -295,7 +319,12 @@ async function save(): Promise<void> {
       modelParams,
     };
     if (form.value.apiKey.trim()) config.apiKey = form.value.apiKey.trim();
-    const body = { name: form.value.name.trim(), configJson: JSON.stringify(config) };
+    // scope 仅创建时生效（后端更新路径忽略，避免系统↔租户语义漂移）
+    const body: PlatformAssetUpsert = {
+      name: form.value.name.trim(),
+      configJson: JSON.stringify(config),
+      scope: form.value.scope,
+    };
     if (selected.value?.id) {
       await updatePlatformAsset('model-services', selected.value.id, body, authContext());
     } else {
@@ -445,6 +474,24 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 列表右侧标签组：系统徽标 + 状态标签并排 */
+.item-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+/* 共享范围开关行：开关 + 说明文字 */
+.scope-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.scope-hint {
+  color: var(--ui-muted);
+  font-size: 12px;
 }
 .editor-head {
   display: flex;

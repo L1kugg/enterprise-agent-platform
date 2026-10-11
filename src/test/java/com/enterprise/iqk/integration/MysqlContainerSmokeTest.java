@@ -9,6 +9,7 @@ import com.enterprise.iqk.domain.vo.AgentCatalogItemVO;
 import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.mapper.AgentBindingMapper;
 import com.enterprise.iqk.mapper.AgentInvocationLogMapper;
+import com.enterprise.iqk.mapper.PlatformAssetMapper;
 import com.enterprise.iqk.service.agent.AgentCatalogService;
 import com.enterprise.iqk.service.agent.AgentRuntimeConfigService;
 import com.enterprise.iqk.service.platform.PlatformAssetService;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,8 +106,8 @@ class MysqlContainerSmokeTest {
     @Test
     void startsApplicationAndAppliesAllFlywayMigrations() {
         assertNotNull(flyway.info().current());
-        // 与 db/migration 下最高迁移版本保持一致（当前 V25），新增迁移时同步更新
-        assertEquals("25", flyway.info().current().getVersion().getVersion());
+        // 与 db/migration 下最高迁移版本保持一致（当前 V26），新增迁移时同步更新
+        assertEquals("26", flyway.info().current().getVersion().getVersion());
 
         ResponseEntity<Map> response = restTemplate.getForEntity("/actuator/health", Map.class);
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -259,6 +261,67 @@ class MysqlContainerSmokeTest {
         assertEquals("SUCCESS", loaded.getStatus());
         assertEquals("qwen-smoke", loaded.getModelName());
         assertFalse(loaded.getFallbackApplied());
+    }
+
+    /** V26 系统共享资产（scope=SYSTEM）在真实 MySQL 上的跨租户可见性：联合列表 + 运行时解析 + 越权隔离。 */
+    @Test
+    void systemScopedAssetsAreVisibleAcrossTenants(
+            @Autowired PlatformAssetService assetService,
+            @Autowired PlatformAssetMapper assetMapper) {
+        authenticateAs("smoke-admin", "ROLE_ADMIN");
+        PlatformAsset systemModel;
+        PlatformAsset tenantModel;
+        try {
+            // 系统共享行：落 public 主租户
+            systemModel = assetService.create("model-services", "system-shared-model", null,
+                    "{\"modelName\":\"qwen-system\",\"apiUrl\":\"http://127.0.0.1:9/v1\",\"apiKey\":\"sk-system\"}",
+                    null, "smoke", "SYSTEM");
+            assertEquals("SYSTEM", systemModel.getScope());
+            assertEquals("public", systemModel.getTenantId());
+
+            // 业务资产带 SYSTEM 直接拒绝
+            ResponseStatusException rejected = assertThrows(ResponseStatusException.class,
+                    () -> assetService.create("agents", "no-system-agent", null, "{}", null, "smoke", "SYSTEM"));
+            assertEquals(HttpStatus.BAD_REQUEST, rejected.getStatusCode());
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        // 另一租户视角（tenant_id=u-smoke）：联合列表能看到系统行；本租户私有行互不可见
+        tenantModel = insertTenantPrivateModel(assetMapper);
+        List<PlatformAsset> visible = listAsTenant("u-smoke", assetService);
+        assertTrue(visible.stream().anyMatch(a -> a.getId().equals(systemModel.getId())),
+                "系统共享模型必须对其它租户可见");
+        assertTrue(visible.stream().anyMatch(a -> a.getId().equals(tenantModel.getId())),
+                "本租户私有模型可见");
+
+        // 运行时联合解析：u-smoke 能按 ID 解析系统行；public 租户看不到 u-smoke 的私有行
+        assertNotNull(assetMapper.findByIdAndTypeVisible(systemModel.getId(), "u-smoke", "model-services"));
+        assertNull(assetMapper.findByIdAndTypeVisible(tenantModel.getId(), "public", "model-services"));
+
+        // 脱敏对系统行同样生效（跨租户读不泄露明文密钥）
+        assertTrue(visible.stream().filter(a -> a.getId().equals(systemModel.getId()))
+                .allMatch(a -> a.getConfigJson().contains("******")));
+    }
+
+    private List<PlatformAsset> listAsTenant(String tenantId, PlatformAssetService assetService) {
+        try {
+            org.slf4j.MDC.put("tenant_id", tenantId);
+            return assetService.list("model-services", null, 1, 50);
+        } finally {
+            org.slf4j.MDC.remove("tenant_id");
+        }
+    }
+
+    private PlatformAsset insertTenantPrivateModel(PlatformAssetMapper assetMapper) {
+        PlatformAsset asset = PlatformAsset.builder()
+                .tenantId("u-smoke").assetType("model-services").scope("TENANT").name("u-smoke-private-model")
+                .status("UNTESTED")
+                .configJson("{\"modelName\":\"qwen-private\",\"apiUrl\":\"http://127.0.0.1:9/v1\",\"apiKey\":\"sk-private\"}")
+                .createdBy("smoke").createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now())
+                .build();
+        assetMapper.insert(asset);
+        return asset;
     }
 
     private static void authenticateAs(String user, String... authorities) {

@@ -67,7 +67,7 @@ class PlatformAssetServiceTest {
 
     @Test
     void getIsRestrictedToCurrentTenantAndAssetType() {
-        when(mapper.findByIdAndType(any(), any(), any())).thenReturn(null);
+        when(mapper.findByIdAndTypeVisible(any(), any(), any())).thenReturn(null);
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
 
@@ -80,11 +80,11 @@ class PlatformAssetServiceTest {
     @Test
     void updateKeepsOriginalSecretWhenMaskedOrOmitted() {
         PlatformAsset existing = PlatformAsset.builder()
-                .id(9L).tenantId("public").assetType("model-services").name("model")
+                .id(9L).tenantId("public").assetType("model-services").scope("SYSTEM").name("model")
                 .status("UNTESTED").configJson("{\"apiKey\":\"sk-original\"}")
                 .createdAt(java.time.LocalDateTime.now()).updatedAt(java.time.LocalDateTime.now())
                 .build();
-        when(mapper.findByIdAndType(9L, "public", "model-services")).thenReturn(existing);
+        when(mapper.findByIdAndTypeVisible(9L, "public", "model-services")).thenReturn(existing);
         final String[] rawAtUpdate = new String[1];
         doAnswer(invocation -> {
             PlatformAsset argument = invocation.getArgument(0);
@@ -99,5 +99,66 @@ class PlatformAssetServiceTest {
 
         assertThat(updated.getConfigJson()).contains("\"apiKey\":\"******\"");
         assertThat(rawAtUpdate[0]).contains("sk-original").doesNotContain("\"apiKey\":\"******\"");
+        // scope 不可经更新变更（update 签名不接收 scope）
+        assertThat(updated.getScope()).isEqualTo("SYSTEM");
         verify(mapper).updateById(existing);    }
+
+    @Test
+    void createRejectsSystemScopeForNonCredentialType() {
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                    mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
+        // 六类业务资产不允许系统共享（白名单外直接 400）
+        assertThatThrownBy(() -> service.create("agents", "x", null, "{}", null, "tester", "SYSTEM"))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
+    }
+
+    @Test
+    void createSystemScopedAssetLandsInPublicTenant() {
+        when(mapper.insert(any(PlatformAsset.class))).thenAnswer(invocation -> {
+            PlatformAsset asset = invocation.getArgument(0);
+            asset.setId(77L);
+            return 1;
+        });
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
+
+        PlatformAsset created = service.create("model-services", "shared-model", null,
+                "{\"apiUrl\":\"https://model.local\"}", null, "tester", "SYSTEM");
+
+        ArgumentCaptor<PlatformAsset> captor = ArgumentCaptor.forClass(PlatformAsset.class);
+        verify(mapper).insert(captor.capture());
+        // SYSTEM 行固定落 public 主租户 + scope 标记
+        assertThat(captor.getValue().getTenantId()).isEqualTo("public");
+        assertThat(captor.getValue().getScope()).isEqualTo("SYSTEM");
+        assertThat(created.getScope()).isEqualTo("SYSTEM");
+    }
+
+    @Test
+    void listUsesUnionQueryOnlyForCredentialTypes() {
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
+
+        service.list("model-services", null, 1, 20);
+        verify(mapper).findForListUnion(org.mockito.ArgumentMatchers.eq("public"),
+                org.mockito.ArgumentMatchers.eq("model-services"), any(),
+                org.mockito.ArgumentMatchers.eq(20), org.mockito.ArgumentMatchers.eq(0L));
+
+        service.list("agents", null, 1, 20);
+        verify(mapper).findForList(org.mockito.ArgumentMatchers.eq("public"),
+                org.mockito.ArgumentMatchers.eq("agents"), any(),
+                org.mockito.ArgumentMatchers.eq(20), org.mockito.ArgumentMatchers.eq(0L));
+    }
+
+    @Test
+    void updateRejectsCrossTenantPrivateAsset() {
+        // 联合查询只放行 SYSTEM 行：别的租户的私有行（scope=TENANT）解析为 null → 404
+        when(mapper.findByIdAndTypeVisible(9L, "public", "model-services")).thenReturn(null);
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class));
+
+        assertThatThrownBy(() -> service.update("model-services", 9L, "new-name", null, null, null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
+    }
 }

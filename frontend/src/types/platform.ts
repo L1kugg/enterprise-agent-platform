@@ -13,6 +13,8 @@ export interface PlatformAsset {
   id: number;
   tenantId?: string;
   assetType: PlatformAssetType;
+  /** TENANT=租户私有（默认）；SYSTEM=系统共享（仅 model-services/databases，全体租户运行时可见） */
+  scope?: 'TENANT' | 'SYSTEM';
   parentId?: number | null;
   name: string;
   description?: string | null;
@@ -36,6 +38,8 @@ export interface PlatformAssetUpsert {
   configJson?: string;
   parentId?: number | null;
   status?: string;
+  /** 仅创建时生效：SYSTEM=系统共享（仅 model-services/databases 可用），更新时后端忽略 */
+  scope?: 'TENANT' | 'SYSTEM';
 }
 
 // ---------- 工作流（R6） ----------

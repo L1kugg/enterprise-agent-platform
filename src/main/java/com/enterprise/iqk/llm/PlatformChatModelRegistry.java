@@ -50,12 +50,13 @@ public class PlatformChatModelRegistry {
         this.properties = properties;
     }
 
-    /** 解析绑定模型服务为可用 ChatClient；配置缺失/不完整抛 400，调用失败由上层回退策略承接。 */
+    /** 解析绑定模型服务为可用 ChatClient；配置缺失/不完整抛 400，调用失败由上层回退策略承接。
+     *  可见性含系统共享资产（scope=SYSTEM）：本租户私有 ∪ 系统共享，租户自带优先由绑定 ID 唯一性保证。 */
     public BoundChatModel resolve(Long modelServiceAssetId, String tenantId) {
         if (modelServiceAssetId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "智能体未绑定模型服务");
         }
-        PlatformAsset asset = assetMapper.findByIdAndType(modelServiceAssetId, tenantId, "model-services");
+        PlatformAsset asset = assetMapper.findByIdAndTypeVisible(modelServiceAssetId, tenantId, "model-services");
         if (asset == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "智能体绑定的模型服务不存在");
         }

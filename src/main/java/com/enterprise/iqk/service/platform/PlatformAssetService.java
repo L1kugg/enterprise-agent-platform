@@ -44,6 +44,9 @@ public class PlatformAssetService {
             "model-services", "UNTESTED",
             "databases", "UNTESTED");
 
+    /** 允许 scope=SYSTEM（系统共享）的资产类型白名单：凭据型基础设施，其余六类业务资产强制租户隔离。 */
+    private static final Set<String> SYSTEM_SCOPED_TYPES = Set.of("model-services", "databases");
+
     private final PlatformAssetMapper mapper;
     private final ObjectMapper objectMapper;
     /** agents 保存后把 config_json 绑定 ID 同步进关系表（运行时只读表） */
@@ -52,15 +55,23 @@ public class PlatformAssetService {
     private final PlatformChatModelRegistry chatModelRegistry;
 
     public long count(String assetType, String search) {
-        return mapper.countForList(TenantContext.currentTenantId(), normalizeType(assetType), keyword(search));
+        String type = normalizeType(assetType);
+        String tenantId = TenantContext.currentTenantId();
+        String kw = keyword(search);
+        return SYSTEM_SCOPED_TYPES.contains(type)
+                ? mapper.countForListUnion(tenantId, type, kw)
+                : mapper.countForList(tenantId, type, kw);
     }
 
     public java.util.List<PlatformAsset> list(String assetType, String search, int page, int pageSize) {
         String type = normalizeType(assetType);
         int safePage = Math.max(1, page);
         int safeSize = Math.max(1, Math.min(pageSize, 100));
-        return mapper.findForList(TenantContext.currentTenantId(), type, keyword(search),
-                        safeSize, (long) (safePage - 1) * safeSize)
+        String tenantId = TenantContext.currentTenantId();
+        String kw = keyword(search);
+        return (SYSTEM_SCOPED_TYPES.contains(type)
+                ? mapper.findForListUnion(tenantId, type, kw, safeSize, (long) (safePage - 1) * safeSize)
+                : mapper.findForList(tenantId, type, kw, safeSize, (long) (safePage - 1) * safeSize))
                 .stream().map(this::sanitize).toList();
     }
 
@@ -70,9 +81,23 @@ public class PlatformAssetService {
 
     public PlatformAsset create(String assetType, String name, String description,
                                 String configJson, Long parentId, String creator) {
+        return create(assetType, name, description, configJson, parentId, creator, null);
+    }
+
+    /** @param scope TENANT|SYSTEM（缺省 TENANT）；SYSTEM 仅凭据型白名单可用且强制落 public 主租户 */
+    public PlatformAsset create(String assetType, String name, String description,
+                                String configJson, Long parentId, String creator, String scope) {
         String type = normalizeType(assetType);
         validateName(name);
         validateJson(configJson);
+        boolean system = PlatformAsset.SCOPE_SYSTEM.equalsIgnoreCase(scope == null ? "" : scope.trim());
+        if (system && !SYSTEM_SCOPED_TYPES.contains(type)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "asset type does not support system scope: " + type);
+        }
+        String effectiveScope = system ? PlatformAsset.SCOPE_SYSTEM : PlatformAsset.SCOPE_TENANT;
+        // SYSTEM 行固定落 public 主租户（系统资源的家，唯一键防系统资源重名）
+        String effectiveTenant = system ? TenantContext.DEFAULT_TENANT : TenantContext.currentTenantId();
         if ("knowledge-files".equals(type) && parentId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "knowledge file parentId is required");
         }
@@ -81,7 +106,7 @@ public class PlatformAssetService {
         }
         try {
             PlatformAsset asset = PlatformAsset.builder()
-                    .tenantId(TenantContext.currentTenantId()).assetType(type).parentId(parentId)
+                    .tenantId(effectiveTenant).assetType(type).scope(effectiveScope).parentId(parentId)
                     .name(name.trim()).description(StringUtils.hasText(description) ? description.trim() : null)
                     .status(TYPE_STATUS.get(type)).configJson(normalizeJson(configJson))
                     .createdBy(creator).createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now())
@@ -232,9 +257,14 @@ public class PlatformAssetService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config must be valid JSON", ex);
         }
     }
+    /**
+     * 写路径 ownership 解析：本租户私有行，或系统共享行（scope=SYSTEM，落 public）。
+     * 系统行对任意租户的 ADMIN 开放（写接口本就 hasRole('ADMIN')，此处防的是
+     * "ADMIN 越过租户改别的租户私有行"——联合查询只放行 SYSTEM 行，租户私有行仍按 tenant 过滤）。
+     */
     private PlatformAsset getOwned(String assetType, Long id) {
         if (id == null || id <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid id");
-        PlatformAsset asset = mapper.findByIdAndType(id, TenantContext.currentTenantId(), normalizeType(assetType));
+        PlatformAsset asset = mapper.findByIdAndTypeVisible(id, TenantContext.currentTenantId(), normalizeType(assetType));
         if (asset == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "asset not found");
         return asset;
     }

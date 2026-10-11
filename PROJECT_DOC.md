@@ -379,7 +379,7 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 
 ### 9.1 平台资产（platform_asset）
 
-平台配置层的统一底座：八类配置资产共用一张 `platform_asset` 表（V23 迁移），靠 `asset_type` 区分，全部按租户隔离。
+平台配置层的统一底座：八类配置资产共用一张 `platform_asset` 表（V23 迁移），靠 `asset_type` 区分，全部按租户隔离；其中两类凭据型资产支持**系统共享**（V26 `scope` 列，设计见 `docs/platform-system-assets-design.md`）。
 
 | asset_type | 说明 |
 |------------|------|
@@ -389,14 +389,18 @@ INDEX idx_memory_item_expires          (expires_at)                -- 定时清�
 | knowledge-bases | 知识库 |
 | knowledge-files | 知识文件（通过 `parent_id` 挂到知识库） |
 | safety-guards | 安全防护（过滤主题与阻止消息） |
-| model-services | 模型服务（提供商、地址与参数） |
-| databases | 第三方数据库连接配置 |
+| model-services | 模型服务（提供商、地址与参数）——**可 `scope=SYSTEM` 系统共享** |
+| databases | 第三方数据库连接配置——**可 `scope=SYSTEM` 系统共享** |
 
 表结构与约束：
 
 - 唯一键 `(tenant_id, asset_type, name)`：同租户同类型下名称唯一
 - `config_json LONGTEXT`：存放各类型差异化配置（JSON）
 - `status` 默认 `DRAFT`；`parent_id` 支持层级（知识文件 → 知识库）
+- `scope`（V26）：`TENANT`（默认，租户私有）或 `SYSTEM`（系统共享，仅 model-services/databases
+  白名单可用，行固定落 `public` 主租户）。SYSTEM 行全体租户运行时可见（联合解析
+  `findByIdAndTypeVisible`：本租户私有 ∪ 系统共享），写/删/测试仅 ADMIN，密钥对跨租户读
+  脱敏；用量计费仍记调用方租户。前端模型服务/数据库工作台提供共享开关与「系统」徽标。
 
 ### 9.2 配置态 REST API（/platform/**）
 

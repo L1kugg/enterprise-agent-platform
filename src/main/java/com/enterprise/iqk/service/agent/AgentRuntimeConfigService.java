@@ -58,7 +58,8 @@ public class AgentRuntimeConfigService {
         Long modelServiceId = modelBindings.isEmpty() ? null : modelBindings.get(0).getResourceId();
         String boundModelName = null;
         if (modelServiceId != null) {
-            PlatformAsset model = assetMapper.findByIdAndType(modelServiceId, tenantId, "model-services");
+            // 系统共享资产可见（scope=SYSTEM）：本租户私有 ∪ 系统共享
+            PlatformAsset model = assetMapper.findByIdAndTypeVisible(modelServiceId, tenantId, "model-services");
             if (model == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "智能体绑定的模型服务不存在");
             }

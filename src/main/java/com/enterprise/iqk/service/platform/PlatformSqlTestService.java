@@ -147,7 +147,8 @@ public class PlatformSqlTestService {
     }
 
     private PlatformAsset ownedDatabase(Long id) {
-        PlatformAsset database = assetMapper.findByIdAndType(id, TenantContext.currentTenantId(), "databases");
+        // 系统共享资产可见（scope=SYSTEM）：本租户私有 ∪ 系统共享
+        PlatformAsset database = assetMapper.findByIdAndTypeVisible(id, TenantContext.currentTenantId(), "databases");
         if (database == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "数据库配置不存在");
         return database;
     }
