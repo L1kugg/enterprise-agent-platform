@@ -226,23 +226,27 @@ app:
       # SSRF 白名单：只收窄可访问的主机范围（逗号分隔，".example.com" 形式按后缀
       # 匹配整段域）。命中白名单不豁免任何地址检查——解析到回环/私有网段的地址
       # 必须在 allowed-internal-addresses 中按"主机+端口+网段"逐条显式授权。
-      allowed-hosts: ${APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS:mcp-weather}
-      # 内部地址显式授权（无按环境一键放行的开关，生产同理需逐条声明）：
-      # weather MCP 是 compose 服务名 mcp-weather，经 Docker 内置 DNS 解析到容器网段
-      # （默认 172.16.0.0/12），故按其服务名 + 端口 + 网段显式授权
-      allowed-internal-addresses:
-        - host: mcp-weather
-          port: 9101
-          cidrs: ["172.16.0.0/12"]
-      servers:
-        # 天气 MCP 翻译壳：compose 服务 mcp-weather（deploy/docker-compose.prod.yml），
-        # 桥接 Open-Meteo 免费天气 API；本地无该容器时调用会在 supports() 处报未注册，不影响其它功能
-        weather:
-          base-url: ${APP_MCP_WEATHER_BASE_URL:http://mcp-weather:9101}
-          tools:
-            get_weather:
-              # 壳内 geocode + forecast 各一次上游调用，8s 覆盖串行总耗时
-              timeout-ms: ${APP_MCP_WEATHER_TIMEOUT_MS:8000}
+      # 默认为空 = 拒绝一切出站 MCP（fail-closed），接入 server 时显式配置。
+      allowed-hosts: ${APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS:}
+      # 内部地址显式授权（无按环境一键放行的开关，生产同理需逐条声明）。
+      # compose 内部 MCP 服务经 Docker 内置 DNS 解析到容器网段（默认 172.16.0.0/12），
+      # 接入时按"服务名 + 端口 + 网段"逐条授权（对象列表不做环境变量占位，直接写 yml），示例：
+      #   allowed-internal-addresses:
+      #     - host: my-mcp-server
+      #       port: 9101
+      #       cidrs: ["172.16.0.0/12"]
+      # 标准 MCP server（Streamable HTTP）：每 server 一个端点 + 可调用工具白名单。
+      # 客户端走官方 MCP 协议（initialize 握手 / tools/list 发现 / tools/call 调用），
+      # 传输层为自研 HC5 实现（保留 DNS 固定与 SSRF 纵深）。默认不配置任何 server。
+      # 接入示例：
+      #   servers:
+      #     my-tools:
+      #       base-url: ${APP_MCP_SERVER_BASE_URL:http://my-mcp-server:9101}
+      #       endpoint: /mcp            # 缺省即 /mcp
+      #       tools:
+      #         get_weather:
+      #           timeout-ms: 8000
+      servers: {}
     # 主库只读查询动作（query_database）：模型生成 SQL，后端正则守卫 + 只读会话 + 超时/行数/单元格截断。
     # max-rows 与 HarnessPayloadSanitizer 的集合截断上限（30）对齐，配大只会被消毒器二次截断
     database-query:

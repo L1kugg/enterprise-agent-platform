@@ -42,15 +42,17 @@ public class ActionSchemaRegistry {
                         + "information_schema 等系统表可直接查（无 tenant_id 列，无需过滤）；"
                         + "禁止 INSERT/UPDATE/DELETE 等任何写操作与多语句；结果自动追加 LIMIT 并截断。"));
 
-        // mcp_call 不设 trustedOnly：外部只读查询（如天气）要能在聊天 ReAct 循环里直接用，
-        // 风险由适配器的 SSRF 校验 + allowed-hosts 白名单 + 2MiB 响应上限兜住，
+        // mcp_call 不设 trustedOnly：外部只读查询要能在聊天 ReAct 循环里直接用，
+        // 风险由传输层的 SSRF 校验 + allowed-hosts 白名单 + 2MiB 响应上限兜住，
         // 还可被 disabled-actions / 租户白名单随时熔断；
         // workspace 写/壳动作保持 trustedOnly（一次性令牌确认流程专属）。
+        // 具体可用的 server/tool 组合由 McpToolCatalog 启动期 tools/list 动态生成提示词，
+        // 此处静态文案仅作兜底（零 server 配置时提示"未发现可用工具"）。
         register(new ActionSchema("mcp_call", "mcp",
                 Set.of("server", "tool", "arguments"), Set.of(),
                 Set.of("arguments"), "external", false,
-                "查询外部工具；当前提供天气查询，action_input 固定为 "
-                        + "{\"server\":\"weather\",\"tool\":\"get_weather\",\"arguments\":{\"city\":\"城市中文名\"}}"));
+                "调用标准 MCP 协议的外部工具（server/tool 组合以规划器提示词列出的为准），"
+                        + "action_input 形如 {\"server\":\"...\",\"tool\":\"...\",\"arguments\":{...}}"));
 
         register(new ActionSchema("workspace_list_files", "workspace",
                 Set.of(), Set.of("path", "maxDepth"), Set.of(), "read", true));

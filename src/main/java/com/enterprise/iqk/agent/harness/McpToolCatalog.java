@@ -13,9 +13,10 @@ import java.util.Map;
 /**
  * MCP 工具目录：启动时对所有已配置的 MCP server 调 tools/list，
  * 发现可用工具并缓存定义（名称、描述、参数 schema）。
- * 规划器提示词的 mcp_call 说明从本目录动态生成——新增 MCP server
- * 只需配 base-url，工具自动出现在 Agent 的可用动作列表中。
- * 单个 server 发现失败不阻断启动（该 server 的工具退回 yml 静态配置）。
+ * 规划器提示词的 mcp_call 说明从本目录动态生成——新增标准 MCP server
+ * 只需配 base-url，工具经 tools/list 自动出现在 Agent 的可用动作列表中。
+ * 单个 server 发现失败不阻断启动（该 server 的工具从目录缺席，
+ * supports() 仍以 yml 白名单为准）。
  */
 @Slf4j
 @Component

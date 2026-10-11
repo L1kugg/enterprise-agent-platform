@@ -50,7 +50,7 @@ public class AgentHarnessProperties {
         // 中逐条显式授权。
         private java.util.List<String> allowedHosts = new java.util.ArrayList<>();
         // 内部地址显式授权：仅这里逐条声明的"主机(+端口)+网段"才可访问
-        // 回环/链路本地/私有网段地址（如 compose 内的 mcp-weather 服务、
+        // 回环/链路本地/私有网段地址（如 compose 网段内的内部 MCP 服务、
         // 开发环境 localhost mock），不存在按环境一键放行的全局开关。
         // 生产环境同理：内部 MCP 服务必须显式声明，默认一律拒绝。
         private java.util.List<AddressGrant> allowedInternalAddresses = new java.util.ArrayList<>();
@@ -76,13 +76,14 @@ public class AgentHarnessProperties {
     public static class McpServer {
         private boolean enabled = true;
         private String baseUrl = "";
+        /** Streamable HTTP 单端点路径（标准 MCP server 通常为 /mcp）。 */
+        private String endpoint = "/mcp";
         private Map<String, McpTool> tools = new LinkedHashMap<>();
     }
 
     @Data
     public static class McpTool {
         private boolean enabled = true;
-        private String path = "/mcp/tools/call";
         private int timeoutMs = 5_000;
     }
 

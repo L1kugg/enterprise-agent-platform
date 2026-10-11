@@ -9,8 +9,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * MCP 工具运行时：处理 mcp_call 动作，把调用转发给注册的 McpToolAdapter。
- * runtime 层只做"选适配器 + 统一观测"，协议细节（JSON-RPC、SSRF 防护、响应上限）
- * 全部下沉到适配器实现（如 HttpMcpToolAdapter）。
+ * runtime 层只做"选适配器 + 统一观测"，协议细节（标准 MCP 握手/JSON-RPC、SSRF 防护、
+ * 响应上限）全部下沉到适配器实现（如 StandardMcpToolAdapter）。
  */
 @Component
 @RequiredArgsConstructor
