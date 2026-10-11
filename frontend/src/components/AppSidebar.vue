@@ -4,7 +4,7 @@
       <div class="brand-mark" aria-hidden="true">AI</div>
       <div>
         <strong>Enterprise Agent Platform</strong>
-        <small>AI Agent Platform</small>
+        <small>企业智能体控制台</small>
       </div>
     </div>
 

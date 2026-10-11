@@ -15,37 +15,36 @@
 
     <template v-else>
       <div v-if="isEmptyConversation" class="welcome-block">
-        <template v-if="selectedAgent">
-          <h3>{{ selectedAgent.name }}</h3>
-          <p v-if="selectedAgent.openingMessage">{{ selectedAgent.openingMessage }}</p>
-          <p v-else>已切换到「{{ selectedAgent.name }}」，直接输入问题开始对话。</p>
-          <div v-if="agentOpeningQuestions.length" class="welcome-suggestions">
+        <div class="welcome-hero">
+          <div class="welcome-glyph">
+            <el-icon :size="22"><MagicStick /></el-icon>
+          </div>
+          <template v-if="selectedAgent">
+            <h3>{{ selectedAgent.name }}</h3>
+            <p v-if="selectedAgent.openingMessage">{{ selectedAgent.openingMessage }}</p>
+            <p v-else>已切换到「{{ selectedAgent.name }}」，直接输入问题开始对话。</p>
+          </template>
+          <template v-else>
+            <h3>开始对话任务</h3>
+            <p>
+              选择左侧会话或直接输入问题；回答附带引用与 Agent 执行轨迹，编辑已发送消息可重新生成。
+            </p>
+          </template>
+          <div
+            v-if="selectedAgent ? agentOpeningQuestions.length : welcomeSuggestions.length"
+            class="welcome-suggestions"
+          >
             <button
-              v-for="question in agentOpeningQuestions"
+              v-for="question in selectedAgent ? agentOpeningQuestions : welcomeSuggestions"
               :key="question"
               type="button"
               class="welcome-chip"
               @click="applySuggestion(question)"
             >
-              {{ question }}
+              <span>{{ question }}</span>
             </button>
           </div>
-        </template>
-        <template v-else>
-          <h3>开始对话任务</h3>
-          <p>选择左侧会话或直接输入问题；回答附带引用与 Agent 执行轨迹，编辑已发送消息可重新生成。</p>
-          <div class="welcome-suggestions">
-            <button
-              v-for="question in welcomeSuggestions"
-              :key="question"
-              type="button"
-              class="welcome-chip"
-              @click="applySuggestion(question)"
-            >
-              {{ question }}
-            </button>
-          </div>
-        </template>
+        </div>
       </div>
 
       <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
@@ -58,14 +57,18 @@
         class="message-row"
         :class="[entry.item.role, entry.item.state || 'done']"
       >
-        <div class="avatar">{{ entry.item.role === 'user' ? '用户' : '智能体' }}</div>
+        <div class="avatar" :class="entry.item.role === 'user' ? 'avatar-user' : 'avatar-agent'">
+          <el-icon :size="15">
+            <User v-if="entry.item.role === 'user'" />
+            <MagicStick v-else />
+          </el-icon>
+        </div>
         <div class="bubble-wrap">
           <div class="bubble-meta">
-            <span>{{ entry.item.role === 'user' ? '用户' : '智能体' }}</span>
-            <span>{{ formatTime(entry.item.createdAt) }}</span>
             <span v-if="entry.item.kind === 'research'" class="research-badge">深度研究</span>
             <span v-if="entry.item.state === 'streaming'" class="status-dot">生成中</span>
             <span v-if="entry.item.state === 'pending'" class="status-dot">思考中</span>
+            <span class="meta-time">{{ formatTime(entry.item.createdAt) }}</span>
           </div>
 
           <div class="bubble" :class="{ 'bubble-error': entry.item.state === 'error' }">
@@ -373,8 +376,10 @@ import {
   Compass,
   CopyDocument,
   Edit,
+  MagicStick,
   Paperclip,
   RefreshRight,
+  User,
 } from '@element-plus/icons-vue';
 import { computed, onMounted } from 'vue';
 import { welcomeSuggestions } from '../../utils/constants';
@@ -497,76 +502,128 @@ onMounted(() => {
 }
 
 .welcome-block {
-  max-width: 930px;
-  margin: 20px auto 16px;
-  padding: 18px 20px;
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  background: var(--ui-card);
-}
-
-.welcome-block h3 {
-  margin: 0;
+  flex: 1;
+  min-height: 56vh;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  line-height: 1.3;
+  justify-content: center;
+  padding: 24px 20px;
 }
 
-.welcome-block h3::before {
-  content: '';
-  width: 4px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--ui-accent);
+/* 空会话欢迎区：居中英雄式（呼应现代对话产品），不做描边卡片 */
+.welcome-hero {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
-.welcome-block p {
-  margin: 6px 0 0;
+.welcome-glyph {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-strong) 100%);
+  box-shadow: 0 10px 24px color-mix(in oklab, var(--ui-accent) 30%, transparent);
+  margin-bottom: 16px;
+}
+
+.welcome-hero h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.welcome-hero p {
+  margin: 8px 0 0;
   color: var(--ui-muted);
   font-size: 13px;
+  line-height: 1.65;
 }
 
-/* 首屏示例问题：样式与输入框工具按钮保持同一套胶囊语言 */
+/* 首屏示例问题：轻胶囊，hover 时露出箭头并点亮品牌描边 */
 .welcome-suggestions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 20px;
 }
 
 .welcome-chip {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   border: 1px solid var(--ui-border);
-  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+  background: color-mix(in oklab, var(--ui-card) 78%, transparent);
   color: var(--ui-text);
-  border-radius: 8px;
-  padding: 8px 13px;
+  border-radius: 999px;
+  padding: 8px 16px;
   font-size: 13px;
   cursor: pointer;
   transition:
     border-color 160ms ease,
-    background 160ms ease;
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.welcome-chip::after {
+  content: '→';
+  color: var(--ui-accent);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .welcome-chip:hover {
-  border-color: var(--ui-accent);
-  background: color-mix(in oklab, var(--ui-accent) 7%, transparent);
+  border-color: color-mix(in oklab, var(--ui-accent) 55%, transparent);
+  background: color-mix(in oklab, var(--ui-accent) 7%, var(--ui-card));
+}
+
+.welcome-chip:hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 消息操作：默认隐藏，悬浮/聚焦该行时浮现；ghost 图标按钮，不再一排描边框压住内容 */
+.message-actions {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.message-row:hover .message-actions,
+.message-row:focus-within .message-actions {
+  opacity: 1;
 }
 
 .message-actions button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--ui-border);
-  background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
-  color: var(--ui-text);
-  border-radius: 8px;
-  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  border-radius: 7px;
+  padding: 4px 9px;
   font-size: 12px;
   cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.message-actions button:hover {
+  color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 9%, transparent);
 }
 
 .virtual-spacer {
@@ -579,33 +636,40 @@ onMounted(() => {
   margin: 0 auto;
   padding: 0 20px 18px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   gap: 12px;
   align-items: flex-start;
 }
 
 .message-row.user {
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 32px;
 }
 
+/* 头像：圆形图标位——智能体=品牌底白图标，用户=中性面板底，替代原先塞两个汉字的方块 */
 .avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  border: 1px solid color-mix(in oklab, var(--ui-accent) 45%, transparent);
-  background: color-mix(in oklab, var(--ui-accent) 12%, transparent);
-  color: var(--ui-accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.avatar-agent {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-strong) 100%);
+  box-shadow: 0 3px 10px color-mix(in oklab, var(--ui-accent) 32%, transparent);
+}
+
+.avatar-user {
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
+  color: var(--ui-muted);
 }
 
 .message-row.user .avatar {
   grid-column: 2;
-  border-color: var(--ui-border);
-  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
-  color: var(--ui-muted);
 }
 
 .bubble-wrap {
@@ -625,7 +689,13 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 角色已由头像表达，meta 只留时间/状态；弱化为次要信息 */
+.meta-time {
+  color: color-mix(in oklab, var(--ui-muted) 82%, transparent);
 }
 
 .status-dot {
@@ -646,8 +716,10 @@ onMounted(() => {
   padding: 2px 0;
 }
 
+/* 用户气泡：品牌淡染，替代原先无品牌感的灰面板 */
 .message-row.user .bubble {
-  background: color-mix(in oklab, var(--ui-panel) 72%, transparent);
+  border-color: color-mix(in oklab, var(--ui-accent) 22%, var(--ui-border));
+  background: color-mix(in oklab, var(--ui-accent) 6%, var(--ui-card));
 }
 
 .assistant-skeleton {
@@ -689,12 +761,6 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-.message-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 /* 失败态：红色描边气泡 + 醒目重试按钮，用户不用猜「重新生成」能不能当重试用 */
 .bubble-error {
   border: 1px solid rgba(220, 38, 38, 0.45);
@@ -702,9 +768,12 @@ onMounted(() => {
 }
 
 .retry-btn {
-  border-color: rgba(220, 38, 38, 0.55) !important;
   color: #dc2626 !important;
   font-weight: 600;
+}
+
+.retry-btn:hover {
+  background: color-mix(in oklab, rgba(220, 38, 38, 0.09), transparent) !important;
 }
 
 .citation-panel,
@@ -737,6 +806,14 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   text-align: left;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.citation-chip:hover {
+  border-color: color-mix(in oklab, var(--ui-accent) 55%, transparent);
+  color: var(--ui-accent);
 }
 
 .evidence-panel ul {
@@ -790,19 +867,20 @@ onMounted(() => {
   align-items: center;
   position: relative;
 }
+/* 轨迹配色对齐品牌色板：基色=品牌蓝 #315DEB，工具=青，完成=绿，异常=琥珀 */
 .trace-node {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #6366f1;
+  background: var(--ui-accent);
   border: 2px solid var(--ui-card);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ui-accent) 25%, transparent);
   flex-shrink: 0;
   z-index: 1;
 }
 .trace-action-tool_call .trace-node {
-  background: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+  background: #0ea5e9;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
 }
 .trace-action-finish .trace-node {
   background: #10b981;
@@ -815,7 +893,11 @@ onMounted(() => {
 .trace-connector {
   width: 2px;
   flex: 1;
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.4), rgba(99, 102, 241, 0.08));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--ui-accent) 40%, transparent),
+    color-mix(in oklab, var(--ui-accent) 8%, transparent)
+  );
   min-height: 20px;
 }
 .trace-timeline-content {
@@ -843,13 +925,13 @@ onMounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #fff;
-  background: #6366f1;
+  background: var(--ui-accent);
 }
 .badge-thought {
-  background: #3b82f6;
+  background: color-mix(in oklab, var(--ui-accent) 62%, #17222e);
 }
 .badge-tool_call {
-  background: #8b5cf6;
+  background: #0ea5e9;
 }
 .badge-finish {
   background: #10b981;
@@ -919,7 +1001,7 @@ onMounted(() => {
   filter: brightness(1.15);
 }
 .retrieval-lane.vector {
-  background: #6366f1;
+  background: var(--ui-accent);
 }
 .retrieval-lane.keyword {
   background: #0ea5e9;
@@ -934,9 +1016,35 @@ onMounted(() => {
 .thinking {
   max-width: 930px;
   margin: 0 auto;
-  padding: 0 20px 10px 70px;
+  padding: 0 20px 10px 64px;
   color: var(--ui-muted);
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 流式状态指示：品牌色脉冲点 */
+.thinking::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  animation: thinking-pulse 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 .composer-shell {
@@ -992,18 +1100,23 @@ onMounted(() => {
   width: 148px;
 }
 
-/* 工具按钮：与平台 Studio 的操作按钮同一套小圆角卡片语言 */
+/* 工具按钮：与平台 Studio 的操作按钮同一套小圆角卡片语言，高度与发送按钮（32px）对齐 */
 .composer-tool {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  height: 32px;
   border: 1px solid var(--ui-border);
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   color: var(--ui-text);
   border-radius: 8px;
-  padding: 6px 11px;
+  padding: 0 12px;
   font-size: 12px;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
 }
 
 .composer-tool:hover {
@@ -1234,22 +1347,21 @@ onMounted(() => {
   }
 
   .message-row {
-    grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-columns: 28px minmax(0, 1fr);
     gap: 8px;
   }
 
   .message-row.user {
-    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-columns: minmax(0, 1fr) 28px;
   }
 
   .avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 28px;
+    height: 28px;
   }
 
   .thinking {
-    padding-left: 52px;
+    padding-left: 48px;
   }
 
   .composer-footer {
