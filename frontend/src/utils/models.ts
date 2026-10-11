@@ -122,6 +122,7 @@ export function normalizeSession(raw: unknown): SessionRecord {
     branches,
     handoffSummary: typeof candidate.handoffSummary === 'string' ? candidate.handoffSummary : undefined,
     handoffGeneratedAt: typeof candidate.handoffGeneratedAt === 'number' ? candidate.handoffGeneratedAt : undefined,
+    agentId: typeof candidate.agentId === 'number' ? candidate.agentId : undefined,
   };
 }
 

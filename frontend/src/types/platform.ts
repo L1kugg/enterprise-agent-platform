@@ -123,6 +123,42 @@ export interface SafetyGuardTestResult {
   [key: string]: unknown;
 }
 
+// ---------- 智能体调试（R2.1） ----------
+
+/** 调试面板单步（后端刻意不含 thought/actionInput/observation 原文）。 */
+export interface AgentDebugStep {
+  step: number;
+  action: string;
+  elapsedMs?: number | null;
+  status?: string;
+}
+
+/** 智能体调试响应（POST /platform/agents/{id}/debug）。 */
+export interface AgentDebugResult {
+  status: 'SUCCESS' | 'BLOCKED' | 'ERROR';
+  answer?: string;
+  error?: string;
+  latencyMs?: number;
+  modelSummary?: {
+    modelName?: string | null;
+    source?: 'bound' | 'router' | null;
+    fallbackApplied?: boolean;
+    routeProfile?: string;
+    routeReason?: string;
+    routeCostTier?: string;
+  };
+  safetyResult?: {
+    checked?: boolean;
+    blocked?: boolean;
+    blockMessage?: string;
+  };
+  memorySummary?: {
+    memoryTurns?: number;
+    injectedLabels?: string[];
+  };
+  steps?: AgentDebugStep[];
+}
+
 // ---------- 系统管理（R10） ----------
 
 export interface PlatformUser {

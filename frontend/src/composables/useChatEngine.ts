@@ -31,6 +31,7 @@ import {
   upsertTrace,
   currentAbortController,
 } from './useChatState';
+import { selectedAgentId } from './useAgentCatalog';
 import { persistState } from './persistence';
 import {
   activeBranch,
@@ -254,6 +255,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
           prompt: question,
           chatId: chatId.value,
           modelProfile: modelProfile.value,
+          agentId: selectedAgentId.value ?? undefined,
         },
         authContext(),
         (event, payload) => {
@@ -313,6 +315,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
           prompt: question,
           chatId: chatId.value,
           modelProfile: modelProfile.value,
+          agentId: selectedAgentId.value ?? undefined,
         },
         authContext(),
         controller.signal,

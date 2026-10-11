@@ -36,6 +36,8 @@ export interface SessionRecord {
   branches: SessionBranch[];
   handoffSummary?: string;
   handoffGeneratedAt?: number;
+  /** 会话绑定的平台智能体（不传 = 默认助手）。 */
+  agentId?: number;
 }
 
 export interface BranchTreeItem {

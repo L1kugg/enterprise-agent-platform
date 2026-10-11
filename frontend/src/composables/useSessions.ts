@@ -36,6 +36,7 @@ import {
   traceSteps,
 } from './useChatState';
 import { messageHeights, scrollToBottom } from './useChatViewport';
+import { selectedAgentId } from './useAgentCatalog';
 import { persistState, readBootstrap, registerPersistSlice } from './persistence';
 import {
   sessionColCollapsed,
@@ -83,6 +84,7 @@ export function initChatFromActiveSession(): void {
   chatId.value = activeSession.value.id;
   modelProfile.value = activeSession.value.modelProfile;
   streaming.value = activeSession.value.streaming;
+  selectedAgentId.value = activeSession.value.agentId ?? null;
   messages.value = [...activeBranch.value.messages];
   traceSteps.value = [...activeBranch.value.traceSteps];
 }
@@ -251,6 +253,7 @@ export function syncCurrentSessionBranch(): void {
 
   session.modelProfile = modelProfile.value;
   session.streaming = streaming.value;
+  session.agentId = selectedAgentId.value ?? undefined;
 
   branch.messages = [...messages.value];
   branch.traceSteps = [...traceSteps.value];
@@ -278,6 +281,7 @@ export function loadSession(sessionId: string): void {
   chatId.value = session.id;
   modelProfile.value = session.modelProfile;
   streaming.value = session.streaming;
+  selectedAgentId.value = session.agentId ?? null;
 
   const branch = getBranch(session, session.activeBranchId) ?? session.branches[0];
   if (!branch) {

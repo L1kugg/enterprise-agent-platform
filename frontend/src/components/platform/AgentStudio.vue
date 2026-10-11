@@ -197,21 +197,64 @@
     <aside class="studio-debug panel">
       <div class="panel-head compact">
         <div>
-          <p class="section-label">Debug Preview</p>
-          <h3>调试预览</h3>
+          <p class="section-label">Debug</p>
+          <h3>调试</h3>
         </div>
-        <el-tag size="small" type="info">未接入运行时</el-tag>
+        <el-tag size="small" :type="selected?.status === 'PUBLISHED' ? 'success' : 'info'">
+          {{ selected?.status || 'DRAFT' }}
+        </el-tag>
       </div>
       <div class="debug-body">
-        <el-alert
-          type="warning"
-          :closable="false"
-          title="调试能力待接入"
-          description="当前平台配置资源已保存，但智能体配置尚未绑定到聊天执行接口；为避免伪造结果，此处不模拟成功响应。"
-          show-icon
+        <p v-if="formDirty" class="debug-dirty">表单有未保存修改，调试按「已保存配置」执行。</p>
+        <el-input
+          v-model="debugMessage"
+          type="textarea"
+          :rows="3"
+          :disabled="!editingId"
+          placeholder="输入调试消息（用已保存配置真跑一次会话）"
         />
-        <el-button type="primary" plain disabled>运行调试</el-button>
-        <div class="debug-meta">
+        <el-button
+          type="primary"
+          :loading="debugRunning"
+          :disabled="!editingId || !debugMessage.trim()"
+          @click="runDebug"
+          >运行调试</el-button
+        >
+        <template v-if="debugResult">
+          <div class="debug-result">
+            <el-tag size="small" :type="debugStatusTag(debugResult.status)">
+              {{ debugResult.status }}
+            </el-tag>
+            <span v-if="debugResult.latencyMs != null" class="debug-latency">
+              {{ debugResult.latencyMs }}ms
+            </span>
+          </div>
+          <el-alert
+            v-if="debugResult.status === 'ERROR'"
+            type="error"
+            :closable="false"
+            :title="debugResult.error || '执行失败'"
+            show-icon
+          />
+          <div v-if="debugResult.answer" class="debug-answer">{{ debugResult.answer }}</div>
+          <div class="debug-meta">
+            <p>模型</p>
+            <span class="debug-meta-text">{{ modelSummaryText }}</span>
+            <p>安全拦截</p>
+            <span class="debug-meta-text">{{ safetySummaryText }}</span>
+            <p>记忆注入</p>
+            <span class="debug-meta-text">{{ memorySummaryText }}</span>
+          </div>
+          <el-collapse v-if="debugResult.steps?.length" class="debug-steps">
+            <el-collapse-item :title="`执行步骤（${debugResult.steps.length}）`">
+              <div v-for="step in debugResult.steps" :key="step.step" class="debug-step">
+                <span>#{{ step.step }} {{ step.action }}</span>
+                <small>{{ step.status }} · {{ step.elapsedMs ?? '-' }}ms</small>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </template>
+        <div v-else class="debug-meta">
           <p>当前状态</p>
           <span>{{ selected?.status || 'DRAFT' }}</span>
           <p>已绑定资源</p>
@@ -230,8 +273,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { createPlatformAsset, listPlatformAssets, updatePlatformAsset } from '../../api/platform';
-import type { PlatformAsset } from '../../types/platform';
+import {
+  createPlatformAsset,
+  debugPlatformAgent,
+  listPlatformAssets,
+  updatePlatformAsset,
+} from '../../api/platform';
+import type { AgentDebugResult, PlatformAsset } from '../../types/platform';
 import { authContext } from '../../composables/useAuthState';
 import { statusTag } from '../../composables/usePlatformAssets';
 
@@ -295,6 +343,64 @@ const configObject = computed(() => {
     memoryTurns: form.memoryTurns,
   };
 });
+
+// ---------- 调试（R2.1）：用已保存配置真跑一次会话 ----------
+const debugMessage = ref('');
+const debugRunning = ref(false);
+const debugResult = ref<AgentDebugResult | null>(null);
+/** 最近一次表单同步自的已保存配置（用于判断表单是否有未保存修改）。 */
+const savedConfigJson = ref('{}');
+
+const formDirty = computed(() => selected.value !== null && JSON.stringify(configObject.value) !== savedConfigJson.value);
+
+const modelSummaryText = computed(() => {
+  const summary = debugResult.value?.modelSummary;
+  if (!summary) return '-';
+  const name = summary.modelName || '未知模型';
+  const source = summary.source === 'bound' ? '绑定模型' : '档位路由';
+  return summary.fallbackApplied ? `${name}（已回退·${source}）` : `${name}（${source}）`;
+});
+
+const safetySummaryText = computed(() => {
+  const summary = debugResult.value?.safetyResult;
+  if (!summary) return '-';
+  return summary.blocked ? `已拦截：${summary.blockMessage ?? ''}` : '未命中';
+});
+
+const memorySummaryText = computed(() => {
+  const summary = debugResult.value?.memorySummary;
+  if (!summary) return '-';
+  return `最近 ${summary.memoryTurns ?? '-'} 轮 · 注入 ${summary.injectedLabels?.length ?? 0} 条`;
+});
+
+function debugStatusTag(status: AgentDebugResult['status']): 'success' | 'warning' | 'danger' {
+  if (status === 'SUCCESS') return 'success';
+  if (status === 'BLOCKED') return 'warning';
+  return 'danger';
+}
+
+async function runDebug(): Promise<void> {
+  if (!editingId.value || !debugMessage.value.trim()) {
+    return;
+  }
+  debugRunning.value = true;
+  try {
+    debugResult.value = await debugPlatformAgent(
+      editingId.value,
+      debugMessage.value.trim(),
+      undefined,
+      authContext(),
+    );
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '调试执行失败');
+  } finally {
+    debugRunning.value = false;
+  }
+}
+
+function markSavedConfig(): void {
+  savedConfigJson.value = JSON.stringify(configObject.value);
+}
 
 async function loadAgents(): Promise<void> {
   loading.value = true;
@@ -377,6 +483,9 @@ function selectAgent(item: PlatformAsset): void {
   form.executionConfirm = config.executionConfirm !== false;
   form.memoryTurns = typeof config.memoryTurns === 'number' ? config.memoryTurns : 10;
   advancedJson.value = JSON.stringify(config, null, 2);
+  markSavedConfig();
+  // 切换智能体后上一次调试结果不再属于当前对象，清空避免误导
+  debugResult.value = null;
 }
 
 function createDraft(): void {
@@ -399,6 +508,8 @@ function createDraft(): void {
   form.executionConfirm = true;
   form.memoryTurns = 10;
   advancedJson.value = JSON.stringify(configObject.value, null, 2);
+  markSavedConfig();
+  debugResult.value = null;
 }
 
 function validate(): string | null {
@@ -431,6 +542,7 @@ async function saveAgent(draft: boolean): Promise<void> {
       selectedId.value = created.id;
     }
     ElMessage.success('配置已保存');
+    markSavedConfig();
     await loadAgents();
     const current = agents.value.find((item) => item.id === editingId.value);
     if (current) selected.value = current;
@@ -627,11 +739,51 @@ onMounted(() => {
 }
 .debug-body {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 14px;
-  text-align: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.debug-dirty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.debug-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.debug-latency {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.debug-answer {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ui-panel) 70%, transparent);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.debug-steps :deep(.el-collapse-item__content) {
+  padding-bottom: 6px;
+}
+.debug-step {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.debug-step small {
+  color: var(--ui-muted);
 }
 .debug-meta {
   display: grid;
@@ -646,6 +798,11 @@ onMounted(() => {
   color: var(--ui-text);
   font-size: 15px;
   font-weight: 600;
+}
+.debug-meta .debug-meta-text {
+  font-size: 12px;
+  font-weight: 400;
+  word-break: break-word;
 }
 
 @media (max-width: 1250px) {

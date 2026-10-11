@@ -15,19 +15,37 @@
 
     <template v-else>
       <div v-if="isEmptyConversation" class="welcome-block">
-        <h3>开始对话任务</h3>
-        <p>选择左侧会话或直接输入问题；回答附带引用与 Agent 执行轨迹，编辑已发送消息可重新生成。</p>
-        <div class="welcome-suggestions">
-          <button
-            v-for="question in welcomeSuggestions"
-            :key="question"
-            type="button"
-            class="welcome-chip"
-            @click="applySuggestion(question)"
-          >
-            {{ question }}
-          </button>
-        </div>
+        <template v-if="selectedAgent">
+          <h3>{{ selectedAgent.name }}</h3>
+          <p v-if="selectedAgent.openingMessage">{{ selectedAgent.openingMessage }}</p>
+          <p v-else>已切换到「{{ selectedAgent.name }}」，直接输入问题开始对话。</p>
+          <div v-if="agentOpeningQuestions.length" class="welcome-suggestions">
+            <button
+              v-for="question in agentOpeningQuestions"
+              :key="question"
+              type="button"
+              class="welcome-chip"
+              @click="applySuggestion(question)"
+            >
+              {{ question }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <h3>开始对话任务</h3>
+          <p>选择左侧会话或直接输入问题；回答附带引用与 Agent 执行轨迹，编辑已发送消息可重新生成。</p>
+          <div class="welcome-suggestions">
+            <button
+              v-for="question in welcomeSuggestions"
+              :key="question"
+              type="button"
+              class="welcome-chip"
+              @click="applySuggestion(question)"
+            >
+              {{ question }}
+            </button>
+          </div>
+        </template>
       </div>
 
       <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
@@ -279,6 +297,25 @@
       <div class="composer-footer">
         <div class="composer-left">
           <div class="composer-tools">
+            <el-select
+              :model-value="selectedAgentId ?? undefined"
+              class="agent-select"
+              placeholder="默认助手"
+              clearable
+              :loading="agentsLoading"
+              :disabled="sending"
+              @change="
+                (value: number | undefined) => selectAgent(typeof value === 'number' ? value : null)
+              "
+              @clear="selectAgent(null)"
+            >
+              <el-option
+                v-for="agent in agents"
+                :key="agent.id"
+                :label="agent.name"
+                :value="agent.id"
+              />
+            </el-select>
             <button
               type="button"
               class="composer-tool"
@@ -339,6 +376,7 @@ import {
   Paperclip,
   RefreshRight,
 } from '@element-plus/icons-vue';
+import { computed, onMounted } from 'vue';
 import { welcomeSuggestions } from '../../utils/constants';
 import { renderMarkdown } from '../../utils/markdown';
 import { formatTime } from '../../utils/format';
@@ -389,6 +427,24 @@ import {
   stopGenerating,
   submitEditAndResend,
 } from '../../composables/useChatEngine';
+import {
+  agents,
+  agentsLoading,
+  loadAgents,
+  selectAgent,
+  selectedAgent,
+  selectedAgentId,
+} from '../../composables/useAgentCatalog';
+
+// 选中智能体的引导问题（空列表时不渲染 chips，退回纯文案）
+const agentOpeningQuestions = computed(
+  () => selectedAgent.value?.openingQuestions?.filter((item) => item.trim()) ?? [],
+);
+
+// 智能体目录在进入聊天页时拉一次（失败静默降级为默认助手）
+onMounted(() => {
+  void loadAgents();
+});
 </script>
 
 <style scoped>
@@ -927,7 +983,13 @@ import {
 .composer-tools {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
+}
+
+/* 智能体选择器：宽度收敛、与工具按钮同高度语言 */
+.composer-tools .agent-select {
+  width: 148px;
 }
 
 /* 工具按钮：与平台 Studio 的操作按钮同一套小圆角卡片语言 */

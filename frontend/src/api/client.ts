@@ -1,6 +1,7 @@
 import type {
   AdminDocumentSummary,
   AgentEngine,
+  AgentSummary,
   AuthContext,
   AuthTokenResponse,
   BranchCompareRequest,
@@ -376,6 +377,20 @@ export async function listSessionStates(
   const payload = await parseJsonSafely<PagedResult<SessionState>>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, '会话列表加载失败');
+  }
+  return payload;
+}
+
+/** 智能体目录（GET /ai/agents）：仅展示字段，加载失败由调用方静默降级为默认助手。 */
+export async function listUsableAgents(auth?: AuthContext): Promise<AgentSummary[]> {
+  const response = await fetch(resolveApi('/ai/agents'), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<AgentSummary[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '智能体目录加载失败');
   }
   return payload;
 }

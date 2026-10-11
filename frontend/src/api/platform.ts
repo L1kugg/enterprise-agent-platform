@@ -1,5 +1,6 @@
 import type { AuthContext } from '../types/react';
 import type {
+  AgentDebugResult,
   PlatformAsset,
   PlatformAssetPage,
   PlatformAssetType,
@@ -147,6 +148,20 @@ export function testPlatformModel(id: number, auth: AuthContext | undefined) {
   return requestPlatform<PlatformAsset>(`/platform/model-services/${id}/test`, auth, {
     method: 'POST',
     action: '模型连接测试',
+  });
+}
+
+/** 智能体调试（R2.1）：用已保存配置真跑一次会话（草稿可调）。 */
+export function debugPlatformAgent(
+  id: number,
+  message: string,
+  chatId: string | undefined,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<AgentDebugResult>(`/platform/agents/${id}/debug`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ message, chatId }),
+    action: '智能体调试',
   });
 }
 

@@ -14,6 +14,8 @@ export interface ReactChatRequest {
   prompt: string;
   chatId: string;
   modelProfile?: string;
+  /** 绑定平台智能体（platform_asset agents id）；不传走默认助手路径。 */
+  agentId?: number;
 }
 
 export interface ReactTraceStep {
@@ -40,6 +42,27 @@ export interface ReactChatResponse {
   experimentVariant?: string;
   experimentBucket?: number;
   trace: ReactTraceStep[];
+  /** 生效的智能体 id（未绑定为空） */
+  agentId?: number | null;
+  /** 会话前安全拦截命中（命中时 answer=拦截文案，未发生模型调用） */
+  safetyBlocked?: boolean;
+  /** 拦截文案 */
+  blockMessage?: string;
+  /** 实际使用的模型名（绑定模型或路由模型） */
+  modelName?: string | null;
+  /** 模型来源：bound=智能体绑定模型服务，router=档位路由 */
+  modelSource?: 'bound' | 'router' | null;
+  /** 绑定模型调用失败后是否回退到了档位路由 */
+  modelFallback?: boolean;
+}
+
+/** 普通用户可见的智能体目录项（GET /ai/agents，只含展示字段）。 */
+export interface AgentSummary {
+  id: number;
+  name: string;
+  description?: string | null;
+  openingMessage?: string | null;
+  openingQuestions?: string[];
 }
 
 export interface ReactTokenEvent {
