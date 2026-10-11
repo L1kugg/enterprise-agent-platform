@@ -13,7 +13,7 @@ public interface PlatformAssetMapper extends BaseMapper<PlatformAsset> {
     @Select("""
             SELECT COUNT(*) FROM platform_asset
             WHERE tenant_id = #{tenantId} AND asset_type = #{assetType}
-              AND name LIKE CONCAT('%', #{keyword}, '%') ESCAPE '\\'
+              AND name LIKE CONCAT('%', #{keyword}, '%') ESCAPE '\\\\'
             """)
     long countForList(@Param("tenantId") String tenantId,
                       @Param("assetType") String assetType,
@@ -22,7 +22,7 @@ public interface PlatformAssetMapper extends BaseMapper<PlatformAsset> {
     @Select("""
             SELECT * FROM platform_asset
             WHERE tenant_id = #{tenantId} AND asset_type = #{assetType}
-              AND name LIKE CONCAT('%', #{keyword}, '%') ESCAPE '\\'
+              AND name LIKE CONCAT('%', #{keyword}, '%') ESCAPE '\\\\'
             ORDER BY updated_at DESC, id DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
