@@ -1,7 +1,10 @@
 <template>
   <!-- 会话栏：仅聊天页显示，可折叠 -->
   <aside v-if="sessionColVisible" class="session-col">
-    <button class="new-chat-btn" type="button" @click="createAndSwitchSession">+ 新建会话</button>
+    <button class="new-chat-btn" type="button" @click="createAndSwitchSession">
+      <el-icon :size="14"><Plus /></el-icon>
+      新建会话
+    </button>
 
     <section class="session-tools">
       <el-select
@@ -182,6 +185,7 @@ import {
   DocumentCopy,
   Download,
   Edit,
+  Plus,
   Share,
   Top,
   Upload,
@@ -261,35 +265,39 @@ import { formatTime } from '../utils/format';
   border-color: rgba(49, 93, 235, 0.4);
 }
 
+/* 新建会话：保留主操作的品牌底身份，收敛视觉重量（图标化 + 更轻的悬浮） */
 .new-chat-btn {
-  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
   background: var(--ui-accent-strong);
   color: #fff;
   border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 14px;
+  padding: 9px 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--ui-accent-strong) 24%, transparent);
   transition:
-    transform 180ms ease,
     box-shadow 180ms ease,
     filter 180ms ease;
 }
 
 .new-chat-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px color-mix(in oklab, var(--ui-accent-strong) 32%, transparent);
-  filter: brightness(1.05);
+  filter: brightness(1.06);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--ui-accent-strong) 32%, transparent);
 }
 
 .session-tools {
   border: 1px solid var(--ui-border);
   border-radius: 10px;
-  padding: 10px;
+  padding: 8px 10px;
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tool-row {
@@ -301,6 +309,11 @@ import { formatTime } from '../utils/format';
 
 .tool-select {
   min-width: 0;
+}
+
+/* 归档开关：内联文案 3-4 个汉字，放宽轨道避免截断 */
+.tool-row :deep(.el-switch .el-switch__core) {
+  min-width: 58px;
 }
 
 /* 会话面板撑满会话栏剩余高度：列表内部滚动，会话再多也不挤压其它区域 */
@@ -318,13 +331,15 @@ import { formatTime } from '../utils/format';
 .session-item {
   border: 1px solid var(--ui-border);
   border-radius: 10px;
-  padding: 8px;
+  padding: 9px 10px;
   background: color-mix(in oklab, var(--ui-card) 76%, transparent);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: border-color 160ms ease;
+  gap: 6px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
 .session-item:hover {
@@ -358,9 +373,10 @@ import { formatTime } from '../utils/format';
 }
 
 .session-meta-row {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--ui-muted);
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--ui-muted) 88%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -368,7 +384,7 @@ import { formatTime } from '../utils/format';
 
 .session-actions {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   flex-wrap: wrap;
   /* 悬浮/聚焦时才出现：默认藏起来，会话卡片不再一排常驻按钮 */
   opacity: 0;
@@ -381,16 +397,62 @@ import { formatTime } from '../utils/format';
   opacity: 1;
 }
 
-/* 会话卡片操作钮是纯图标：居中 + 收窄内边距，置顶/归档态文字变长也不挤换行 */
+/* 卡片操作钮：ghost 图标位（与消息操作按钮同一语言），替代描边胶囊 */
 .session-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 6px;
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.session-actions button:hover {
+  color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 9%, transparent);
 }
 
 .session-actions .danger {
   color: #dc2626;
+}
+
+.session-actions .danger:hover {
+  color: #dc2626;
+  background: color-mix(in oklab, rgba(220, 38, 38, 0.08), transparent);
+}
+
+/* 面板头部动作钮：ghost 图标位（scoped 覆盖 shared.css 的描边胶囊，不影响 BranchDrawer） */
+.branch-head-actions {
+  gap: 2px;
+}
+
+.branch-head-actions button {
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  border-radius: 7px;
+  padding: 5px 7px;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.branch-head-actions button:hover {
+  color: var(--ui-accent);
+  background: color-mix(in oklab, var(--ui-accent) 9%, transparent);
+}
+
+/* 空态：居中弱化（scoped 覆盖 shared.css） */
+.session-empty {
+  text-align: center;
+  padding: 18px 6px;
 }
 
 @media (max-width: 980px) {
