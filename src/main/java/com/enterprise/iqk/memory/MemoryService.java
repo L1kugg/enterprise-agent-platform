@@ -1,5 +1,6 @@
 package com.enterprise.iqk.memory;
 
+import com.enterprise.iqk.config.properties.MemoryProperties;
 import com.enterprise.iqk.security.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,9 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -24,9 +27,10 @@ import java.util.UUID;
  * 设计要点 —— 写入时机决定层级：
  * 1. short：对话轮次完成写入，24 小时过期；
  * 2. task：工作流到达 DONE 写入结论，绑定 taskId，30 天过期；
- * 3. fact：RAG 证据置信度达标（>= 0.7）写入，永久、按租户共享；
+ * 3. fact：RAG 证据置信度达标（>= 0.7）写入，永久、按租户共享，
+ *    且记录证据源 chatId，文档删除时级联软失效（见 invalidateFactsForChat）；
  * 4. long：异步画像提取命中写入，永久。
- * 查询一律过滤已过期条目（expires_at 为空视为永久）；
+ * 查询一律过滤已过期（expires_at 为空视为永久）与软失效（stale=1）条目；
  * 写入失败由调用方（各 Recorder）以 best-effort 方式兜底，不阻塞主链路。
  */
 public class MemoryService {
@@ -38,42 +42,57 @@ public class MemoryService {
     private final MemoryEventMapper eventMapper;
     private final ObjectMapper objectMapper;
     private final MemoryRelevanceScorer relevanceScorer;
+    private final MemoryEmbeddingHelper embeddingHelper;
+    private final MemoryProperties memoryProperties;
 
     // ── 保存 ─────────────────────────────────────────────────────
 
     /** 保存会话级 short 记忆：24 小时过期；内容为空白时返回 null 不落库。 */
     public MemoryItemRecord saveShortMemory(String tenantId, String userId,
                                              String content, String source) {
-        return save(tenantId, userId, "short", content, source, null, 0.9,
-                LocalDateTime.now().plusHours(24));
+        return save(tenantId, userId, "short", content, source, null, null, 0.9,
+                LocalDateTime.now().plusHours(24), null);
     }
 
-    /** 保存用户画像 long 记忆：永久有效；内容为空白时返回 null 不落库。 */
+    /** 保存用户画像 long 记忆：永久有效；内容为空白时返回 null 不落库。向量在落库前缓存（失败留空回退词面）。 */
     public MemoryItemRecord saveLongMemory(String tenantId, String userId,
                                             String content, String source) {
-        return save(tenantId, userId, "long", content, source, null, 0.85, null);
+        return save(tenantId, userId, "long", content, source, null, null, 0.85, null, null);
     }
 
     /** 保存任务结论 task 记忆：绑定 taskId、30 天过期，source 记为 task:{taskId}。 */
     public MemoryItemRecord saveTaskMemory(String tenantId, String userId,
                                             String content, String taskId) {
-        return save(tenantId, userId, "task", content, "task:" + taskId, taskId, 0.9,
-                LocalDateTime.now().plusDays(30));
+        return save(tenantId, userId, "task", content, "task:" + taskId, null, taskId, 0.9,
+                LocalDateTime.now().plusDays(30), null);
     }
 
-    /** 保存租户级 fact 记忆：永久有效，置信度由调用方（RAG 证据综合分）给定。 */
-    public MemoryItemRecord saveFactMemory(String tenantId, String userId,
+    /**
+     * 保存租户级 fact 记忆：永久有效，置信度由调用方（RAG 证据综合分）给定；
+     * chatId 记录证据源批次供文档删除时级联失效，embeddingJson 为调用方批量
+     * 预计算的向量（null 时由本方法兜底单条补算一次）。
+     */
+    public MemoryItemRecord saveFactMemory(String tenantId, String chatId,
                                             String content, String source,
-                                            double confidence) {
-        return save(tenantId, userId, "fact", content, source, null,
-                confidence, null);
+                                            double confidence, String embeddingJson) {
+        return save(tenantId, null, "fact", content, source, chatId, null,
+                confidence, null, embeddingJson);
     }
 
-    /** 各层写入的公共落库路径：生成 memoryId、规范化租户、内容去空白，插入后记 CREATE 事件。 */
+    /**
+     * 各层写入的公共落库路径：生成 memoryId、规范化租户、内容去空白，
+     * long/fact 层在未提供向量时补算缓存 embedding，插入后记 CREATE 事件。
+     */
     private MemoryItemRecord save(String tenantId, String userId, String type,
-                                   String content, String source, String sourceTaskId,
-                                   double confidence, LocalDateTime expiresAt) {
+                                   String content, String source, String sourceChatId,
+                                   String sourceTaskId, double confidence,
+                                   LocalDateTime expiresAt, String embeddingJson) {
         if (!StringUtils.hasText(content)) return null;
+        String normalizedContent = content.trim();
+        if (embeddingJson == null && memoryProperties.isSemanticEnabled()
+                && ("long".equals(type) || "fact".equals(type))) {
+            embeddingJson = embeddingHelper.embedToJson(normalizedContent);
+        }
         String memoryId = "mem-" + UUID.randomUUID().toString().replace("-", "");
         LocalDateTime now = LocalDateTime.now();
         MemoryItemRecord item = MemoryItemRecord.builder()
@@ -81,10 +100,13 @@ public class MemoryService {
                 .tenantId(TenantContext.normalize(tenantId))
                 .userId(userId)
                 .type(type)
-                .content(content.trim())
+                .content(normalizedContent)
                 .source(source)
+                .sourceChatId(sourceChatId)
                 .sourceTaskId(sourceTaskId)
+                .stale(Boolean.FALSE)
                 .confidence(confidence)
+                .embeddingJson(embeddingJson)
                 .expiresAt(expiresAt)
                 .createdAt(now)
                 .updatedAt(now)
@@ -158,24 +180,63 @@ public class MemoryService {
     public MemoryContextSnapshot buildContext(String tenantId, String userId,
                                                String query, boolean includeShort, int shortLimit) {
         String tenant = TenantContext.normalize(tenantId);
-        List<MemoryItemRecord> shortMem = includeShort && shortLimit > 0
-                ? relevanceScorer.select(queryShortMemory(tenant, userId, 30), query, "short",
-                        Math.min(shortLimit, 30))
-                : List.of();
+        List<MemoryItemRecord> shortPool = includeShort && shortLimit > 0
+                ? queryShortMemory(tenant, userId, 30) : List.of();
+        List<MemoryItemRecord> longPool = queryLongMemory(tenant, userId, 40);
+        List<MemoryItemRecord> factPool = queryFactMemory(tenant, 0.7, 30);
+
+        MemoryRelevanceScorer.SemanticContext semantic =
+                buildSemanticContext(query, shortPool, longPool, factPool);
+        List<MemoryItemRecord> shortMem = shortPool.isEmpty() ? List.of()
+                : relevanceScorer.select(shortPool, query, "short",
+                        Math.min(shortLimit, 30), semantic);
         List<MemoryItemRecord> selectedLongMem = relevanceScorer.select(
-                queryLongMemory(tenant, userId, 40), query, "long", 5);
+                longPool, query, "long", 5, semantic);
         List<MemoryItemRecord> selectedFacts = relevanceScorer.select(
-                queryFactMemory(tenant, 0.7, 30), query, "fact", 4);
+                factPool, query, "fact", 4, semantic);
 
         StringBuilder context = new StringBuilder();
         List<MemoryItemRecord> longMem = appendLayer(context, "用户长期记忆:", selectedLongMem, 1200);
         shortMem = appendLayer(context, "近期对话要点:", shortMem, 1000);
         List<MemoryItemRecord> facts = appendLayer(context, "可信事实:", selectedFacts, 1000);
-        List<MemoryItemRecord> recalled = new java.util.ArrayList<>(longMem);
+        List<MemoryItemRecord> recalled = new ArrayList<>(longMem);
         recalled.addAll(shortMem);
         recalled.addAll(facts);
         recalled.forEach(m -> emitEvent(m.getMemoryId(), "USE", "recalled into generation context"));
         return new MemoryContextSnapshot(context.toString(), shortMem, longMem, facts);
+    }
+
+    /**
+     * 组装语义精排上下文：查询向量一次 embedding，候选侧只消费写入时缓存的向量。
+     * 语义开关关闭、查询为空、embedding 失败或候选全无向量时返回 null，
+     * 打分器随之退化为纯词面 —— 任何向量问题都不影响记忆召回本身。
+     */
+    private MemoryRelevanceScorer.SemanticContext buildSemanticContext(
+            String query, List<MemoryItemRecord>... pools) {
+        if (!memoryProperties.isSemanticEnabled() || !StringUtils.hasText(query)) {
+            return null;
+        }
+        try {
+            float[] queryVector = embeddingHelper.embed(query);
+            if (queryVector == null) {
+                return null;
+            }
+            Map<String, float[]> vectors = new HashMap<>();
+            for (List<MemoryItemRecord> pool : pools) {
+                for (MemoryItemRecord item : pool) {
+                    float[] vector = MemoryEmbeddingHelper.fromJson(item.getEmbeddingJson());
+                    if (vector != null && item.getMemoryId() != null) {
+                        vectors.put(item.getMemoryId(), vector);
+                    }
+                }
+            }
+            return vectors.isEmpty() ? null
+                    : new MemoryRelevanceScorer.SemanticContext(queryVector, vectors);
+        } catch (Exception ex) {
+            log.warn("semantic memory context build failed (fall back to lexical): reason={}",
+                    ex.toString());
+            return null;
+        }
     }
 
     private List<MemoryItemRecord> appendLayer(StringBuilder context,
@@ -236,6 +297,30 @@ public class MemoryService {
             itemMapper.deleteById(item.getId());
             emitEvent(memoryId, "DELETE", "manual deletion");
         }
+    }
+
+    /**
+     * 按证据源批次软失效 fact 记忆（文档删除钩子调用）：
+     * 证据源没了，"可信事实"就成了无源之谈，继续召回只会放大幻觉。
+     * 软失效不物理删除，逐条补写 INVALIDATE 事件保留审计轨迹；
+     * 幂等（stale=0 条件更新）且可通过配置整体关闭。
+     *
+     * @return 本次失效的条数
+     */
+    public int invalidateFactsForChat(String tenantId, String chatId) {
+        if (!memoryProperties.isCascadeInvalidateEnabled() || !StringUtils.hasText(chatId)) {
+            return 0;
+        }
+        String tenant = TenantContext.normalize(tenantId);
+        List<String> memoryIds = itemMapper.findActiveFactMemoryIdsByChat(tenant, chatId);
+        if (memoryIds.isEmpty()) {
+            return 0;
+        }
+        int rows = itemMapper.markFactsStaleByChat(tenant, chatId);
+        memoryIds.forEach(memoryId ->
+                emitEvent(memoryId, "INVALIDATE", "source document deleted: chat=" + chatId));
+        log.info("fact memories invalidated: tenant={}, chatId={}, rows={}", tenant, chatId, rows);
+        return rows;
     }
 
     // ── 事件 ─────────────────────────────────────────────────────

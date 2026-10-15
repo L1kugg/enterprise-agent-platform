@@ -103,7 +103,8 @@ public class MemoryController {
             }
             case "fact" -> memoryService.saveFactMemory(
                     tenantId, null, request.content(), "manual",
-                    request.confidence() == null ? DEFAULT_FACT_MIN_CONFIDENCE : request.confidence());
+                    request.confidence() == null ? DEFAULT_FACT_MIN_CONFIDENCE : request.confidence(),
+                    null);
             default -> throw new IllegalArgumentException("不支持的记忆类型: " + request.type());
         };
     }

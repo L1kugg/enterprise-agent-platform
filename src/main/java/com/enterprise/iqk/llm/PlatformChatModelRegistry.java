@@ -40,6 +40,8 @@ public class PlatformChatModelRegistry {
     private final ObjectMapper objectMapper;
     private final AgentRuntimeProperties properties;
     private final ConcurrentHashMap<Long, CacheEntry> cache = new ConcurrentHashMap<>();
+    /** 构建串行化的专用锁：ConcurrentHashMap 实例本身禁止作监视器（JLS 监视器语义不保证） */
+    private final Object buildLock = new Object();
     private final AtomicLong buildCount = new AtomicLong();
 
     public PlatformChatModelRegistry(PlatformAssetMapper assetMapper,
@@ -80,7 +82,7 @@ public class PlatformChatModelRegistry {
         if (entry != null && entry.fingerprint().equals(fingerprint) && !expired(entry)) {
             return entry.model();
         }
-        synchronized (cache) {
+        synchronized (buildLock) {
             entry = cache.get(modelServiceAssetId);
             if (entry != null && entry.fingerprint().equals(fingerprint) && !expired(entry)) {
                 return entry.model();

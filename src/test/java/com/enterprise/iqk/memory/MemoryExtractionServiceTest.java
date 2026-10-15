@@ -1,5 +1,6 @@
 package com.enterprise.iqk.memory;
 
+import com.enterprise.iqk.config.properties.MemoryProperties;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,12 +32,18 @@ class MemoryExtractionServiceTest {
     private ChatClient chatClient;
     private ModelRouter modelRouter;
     private TenantCostService tenantCostService;
+    private MemoryEmbeddingHelper embeddingHelper;
+    private MemoryProperties memoryProperties;
     private MemoryExtractionService service;
 
     private void setUp(String llmContent) {
         memoryService = mock(MemoryService.class);
         modelRouter = mock(ModelRouter.class);
         tenantCostService = mock(TenantCostService.class);
+        embeddingHelper = mock(MemoryEmbeddingHelper.class);
+        memoryProperties = new MemoryProperties();
+        // 语义判重默认关闭：既有用例验证文本判重与提取主链路，语义路径单独用例覆盖
+        memoryProperties.setSemanticEnabled(false);
 
         // 用 RETURNS_SELF 模拟 ChatClient 的链式调用，只关心最终的 content()
         chatClient = mock(ChatClient.class);
@@ -51,7 +58,7 @@ class MemoryExtractionServiceTest {
                 .thenReturn(DECISION);
 
         service = new MemoryExtractionService(memoryService, chatClient, modelRouter,
-                tenantCostService, new ObjectMapper());
+                tenantCostService, new ObjectMapper(), embeddingHelper, memoryProperties);
     }
 
     @Test
@@ -69,6 +76,27 @@ class MemoryExtractionServiceTest {
         // 提取调用计入租户成本（economy 档）
         verify(tenantCostService).recordUsage(eq("tenant-1"), eq("economy"), anyLong(), anyLong(),
                 eq("memory_extraction"));
+    }
+
+    @Test
+    void semanticDuplicateBlocksParaphrasedProfile() {
+        setUp("{\"isProfile\":true,\"memory\":\"用户是一名 Java 后端工程师\"}");
+        // 开启语义判重：既有画像换措辞（余弦 ≥ 阈值）时拦住新画像入库
+        memoryProperties.setSemanticEnabled(true);
+        MemoryItemRecord existing = MemoryItemRecord.builder()
+                .content("画像: 用户做 Java 服务端开发")
+                .embeddingJson("[1.0,0.0]")
+                .build();
+        when(memoryService.queryLongMemory(eq("tenant-1"), eq("user-1"), anyInt()))
+                .thenReturn(java.util.List.of(existing));
+        when(embeddingHelper.embed(anyString())).thenReturn(new float[]{0.99f, 0.1f});
+
+        service.extract("tenant-1", "user-1", "chat-1", "我是写Java后端的", "推荐如下…");
+
+        verify(memoryService, never()).saveLongMemory(anyString(), anyString(), anyString(),
+                anyString());
+        // 既有向量直接消费缓存，只有候选画像花一次 embedding
+        verify(embeddingHelper, org.mockito.Mockito.times(1)).embed(anyString());
     }
 
     @Test

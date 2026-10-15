@@ -9,6 +9,7 @@ import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.retrieval.KeywordIndexStore;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import com.enterprise.iqk.security.TenantContext;
@@ -71,6 +72,7 @@ public class IngestionService {
     private final GraphExtractionService graphExtractionService;
     private final KeywordIndexStore keywordIndexStore;
     private final SimpleVectorStoreSnapshotPersister snapshotPersister;
+    private final MemoryService memoryService;
 
     /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
@@ -188,6 +190,18 @@ public class IngestionService {
         } catch (Exception kgEx) {
             log.warn("kg cleanup 失败（不影响文档删除）: tenant={}, chatId={}, reason={}",
                     normalizedTenantId, chatId, kgEx.toString());
+        }
+        // 沉淀自该文档的 fact 记忆联动软失效：证据源没了，"可信事实"继续召回只会放大幻觉。
+        // best-effort——失败只留活事实不中止删除，且方法幂等（stale 条件更新），可重跑补齐。
+        try {
+            int factRows = memoryService.invalidateFactsForChat(normalizedTenantId, chatId);
+            if (factRows > 0) {
+                log.info("fact memory cleanup: tenant={}, chatId={}, rows={}",
+                        normalizedTenantId, chatId, factRows);
+            }
+        } catch (Exception memEx) {
+            log.warn("fact memory cleanup 失败（不影响文档删除）: tenant={}, chatId={}, reason={}",
+                    normalizedTenantId, chatId, memEx.toString());
         }
         Set<String> removedFiles = new LinkedHashSet<>();
         for (IngestionJob job : jobs) {

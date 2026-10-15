@@ -31,4 +31,10 @@
     <Match>
         <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
     </Match>
+    <!-- Suppress SING on record with static shared constant: record 规范要求 canonical
+         构造器与类同访问级，无法 private，此模式是 SpotBugs 对 record 的误报 -->
+    <Match>
+        <Class name="com.enterprise.iqk.service.agent.SafetyMatchResult"/>
+        <Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
+    </Match>
 </FindBugsFilter>

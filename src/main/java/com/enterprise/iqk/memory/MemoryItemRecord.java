@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  */
 @TableName("memory_item")
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class MemoryItemRecord {
@@ -37,10 +37,16 @@ public class MemoryItemRecord {
     private String source;
     /** 仅 task 层使用：绑定工作流任务 ID，召回与过期都按它限定在任务作用域内 */
     private String sourceTaskId;
+    /** 仅 fact 层使用：证据来源的入库批次 chatId，文档删除时按它级联失效（V27 起写入；存量行为 NULL 不参与级联） */
+    private String sourceChatId;
+    /** 软失效标记：证据源被删除等治理动作置 1，召回查询一律过滤；不物理删除以保留 memory_event 审计轨迹 */
+    private Boolean stale;
     /** 置信度 0~1：fact 层写入时继承证据分数（门槛 0.7），召回时还会再校验一次 */
     private Double confidence;
     /** 扩展元数据 JSON（预留字段） */
     private String metadataJson;
+    /** 写入时缓存的记忆向量（JSON float 数组，V27 起 long/fact 层写入）：召回时与查询向量做语义精排，空值回退纯词面 */
+    private String embeddingJson;
     /** 过期时间：short=+24h、task=+30d；long/fact 为空表示永久。每天凌晨 3 点定时清理 */
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;

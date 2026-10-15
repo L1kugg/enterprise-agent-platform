@@ -107,7 +107,7 @@ class MemoryControllerTest {
                 "fact", null, null, "某事实", null));
 
         verify(memoryService).saveFactMemory(anyString(), isNull(), anyString(), anyString(),
-                eq(0.7));
+                eq(0.7), isNull());
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.enterprise.iqk.domain.IngestionJob;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
+import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,13 @@ class IngestionServiceGraphHookTest {
     private IngestionService buildService(IngestionJobMapper mapper,
                                           VectorStore vectorStore,
                                           GraphExtractionService graphExtractionService) {
+        return buildService(mapper, vectorStore, graphExtractionService, mock(MemoryService.class));
+    }
+
+    private IngestionService buildService(IngestionJobMapper mapper,
+                                          VectorStore vectorStore,
+                                          GraphExtractionService graphExtractionService,
+                                          MemoryService memoryService) {
         return new IngestionService(
                 mapper,
                 vectorStore,
@@ -42,7 +50,8 @@ class IngestionServiceGraphHookTest {
                 mock(FileSafetyScanner.class),
                 graphExtractionService,
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
-                new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties())
+                new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties()),
+                memoryService
         );
     }
 
@@ -60,14 +69,34 @@ class IngestionServiceGraphHookTest {
     void deleteDocumentByChatCleansGraphWithSameScope() {
         IngestionJobMapper mapper = mock(IngestionJobMapper.class);
         GraphExtractionService graphExtractionService = mock(GraphExtractionService.class);
+        MemoryService memoryService = mock(MemoryService.class);
         when(mapper.findLatestByChatId("public", "chat-1", 100)).thenReturn(List.of(job("job-1", "chat-1")));
 
-        IngestionService service = buildService(mapper, mock(VectorStore.class), graphExtractionService);
+        IngestionService service = buildService(mapper, mock(VectorStore.class),
+                graphExtractionService, memoryService);
         List<String> removed = service.deleteDocumentByChat("public", "chat-1");
 
         assertThat(removed).isEmpty();
         // 图谱按同一 tenant + chatId 作用域联动清理
         verify(graphExtractionService).deleteByChat("public", "chat-1");
+        // 沉淀自该文档的 fact 记忆按同一作用域级联软失效
+        verify(memoryService).invalidateFactsForChat("public", "chat-1");
+        verify(mapper).deleteByChatIdAndTenant("public", "chat-1");
+    }
+
+    @Test
+    void factInvalidationFailureDoesNotAbortDocumentDeletion() {
+        IngestionJobMapper mapper = mock(IngestionJobMapper.class);
+        MemoryService memoryService = mock(MemoryService.class);
+        when(mapper.findLatestByChatId("public", "chat-1", 100)).thenReturn(List.of(job("job-1", "chat-1")));
+        doThrow(new RuntimeException("db down")).when(memoryService).invalidateFactsForChat("public", "chat-1");
+
+        IngestionService service = buildService(mapper, mock(VectorStore.class),
+                mock(GraphExtractionService.class), memoryService);
+
+        assertThatCode(() -> service.deleteDocumentByChat("public", "chat-1"))
+                .doesNotThrowAnyException();
+        // fact 记忆失效失败只留活事实：任务记录照常删除（失效幂等，可重跑补齐）
         verify(mapper).deleteByChatIdAndTenant("public", "chat-1");
     }
 
@@ -96,8 +125,7 @@ class IngestionServiceGraphHookTest {
 
         assertThat(service.deleteDocumentByChat("public", "chat-none")).isEmpty();
         verify(graphExtractionService, never()).deleteByChat(anyString(), anyString());
-        verify(mapper, never()).deleteByChatIdAndTenant(anyString(), anyString());
-    }
+        verify(mapper, never()).deleteByChatIdAndTenant(anyString(), anyString());    }
 
     @Test
     void parseAndSplitThrowsWhenSourceFileMissing() {

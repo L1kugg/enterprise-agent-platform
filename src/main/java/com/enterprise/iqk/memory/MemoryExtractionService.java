@@ -1,5 +1,6 @@
 package com.enterprise.iqk.memory;
 
+import com.enterprise.iqk.config.properties.MemoryProperties;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
@@ -33,7 +34,9 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  *    画像提取是可选增强，不应挤占用户问答的预算名额）；
  * 4. 隔离会话 —— 提取调用使用独立的 memory-extract 会话 ID，避免提取轮次
  *    写进用户可见的对话历史；
- * 5. 简单去重 —— 与既有 long 记忆做规范化后的包含比对，语义级去重留作演进。
+ * 5. 双重去重 —— 与既有 long 记忆先做规范化包含比对，再做向量语义比对
+ *    （换措辞的重复画像不再入库；语义比对只消费已缓存向量的记录，存量
+ *    无向量记录回退文本判重，避免每次提取重复 embedding 老数据）。
  */
 @Slf4j
 @Service
@@ -65,6 +68,8 @@ public class MemoryExtractionService {
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
+    private final MemoryEmbeddingHelper embeddingHelper;
+    private final MemoryProperties memoryProperties;
 
     /** 提取线程池：守护线程，不阻碍 JVM 退出。 */
     private final ExecutorService executor = Executors.newFixedThreadPool(2, runnable -> {
@@ -125,7 +130,9 @@ public class MemoryExtractionService {
                 return;
             }
             String memory = truncate(verdict.memory(), MAX_MEMORY_CHARS);
-            if (isDuplicate(memoryService.queryLongMemory(tenantId, userKey, LONG_MEMORY_SCAN_LIMIT), memory)) {
+            List<MemoryItemRecord> existingLongs =
+                    memoryService.queryLongMemory(tenantId, userKey, LONG_MEMORY_SCAN_LIMIT);
+            if (isDuplicate(existingLongs, memory) || isSemanticDuplicate(existingLongs, memory)) {
                 return;
             }
             memoryService.saveLongMemory(tenantId, userKey, "画像: " + memory,
@@ -183,13 +190,43 @@ public class MemoryExtractionService {
 
     /**
      * 规范化后的双向包含比对：新记忆与任一既有记忆互为包含即视为重复。
-     * 这是保守的文本级去重，语义级去重（向量相似度）留作后续演进。
+     * 保守的文本级去重，语义近似（换措辞）由 {@link #isSemanticDuplicate} 兜住。
      */
     private boolean isDuplicate(List<MemoryItemRecord> existing, String memory) {
         String normalized = normalize(memory);
         return existing != null && existing.stream()
                 .map(item -> normalize(item.getContent()))
                 .anyMatch(old -> old.contains(normalized) || normalized.contains(old));
+    }
+
+    /**
+     * 语义去重：候选画像与任一既有 long 记忆的余弦相似度达阈值即视为重复。
+     * 只比对已缓存向量（embedding_json）的既有记录——候选只需一次 embedding，
+     * 老数据不为判重反复计算；语义开关关闭或任何一步失败返回 false（不拦写入）。
+     */
+    boolean isSemanticDuplicate(List<MemoryItemRecord> existing, String memory) {
+        if (!memoryProperties.isSemanticEnabled() || existing == null || existing.isEmpty()) {
+            return false;
+        }
+        try {
+            float[] candidate = embeddingHelper.embed(memory);
+            if (candidate == null) {
+                return false;
+            }
+            for (MemoryItemRecord item : existing) {
+                float[] vector = MemoryEmbeddingHelper.fromJson(item.getEmbeddingJson());
+                if (vector == null) {
+                    continue;
+                }
+                if (MemoryEmbeddingHelper.cosine(candidate, vector)
+                        >= memoryProperties.getSemanticDedupThreshold()) {
+                    return true;
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("画像语义去重失败（回退文本判重）: reason={}", ex.toString());
+        }
+        return false;
     }
 
     /** 规范化用于去重比对的文本：去除全部空白。 */

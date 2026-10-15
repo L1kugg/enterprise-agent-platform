@@ -1,5 +1,6 @@
 package com.enterprise.iqk.memory;
 
+import com.enterprise.iqk.config.properties.MemoryProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,8 +27,11 @@ class MemoryServiceTenantIsolationTest {
     void setUp() {
         itemMapper = mock(MemoryItemMapper.class);
         eventMapper = mock(MemoryEventMapper.class);
+        MemoryProperties properties = new MemoryProperties();
+        // 单测关闭语义链路：不打真实 embedding，行为与纯词面基线一致
+        properties.setSemanticEnabled(false);
         service = new MemoryService(itemMapper, eventMapper, new ObjectMapper(),
-                new MemoryRelevanceScorer());
+                new MemoryRelevanceScorer(), mock(MemoryEmbeddingHelper.class), properties);
     }
 
     @Test
