@@ -81,6 +81,12 @@ management:
         enabled: true
 
 app:
+  chat:
+    memory:
+      # 会话记忆窗口治理（§18.2）：条数窗口 + Token 预算双重裁剪，只裁"进模型的部分"，
+      # conversation 表仍全量持久化（审计/回放不受影响）
+      max-messages: ${APP_CHAT_MEMORY_MAX_MESSAGES:20}
+      max-history-tokens: ${APP_CHAT_MEMORY_MAX_HISTORY_TOKENS:6000}
   agent:
     # 智能体绑定模型调用失败后是否回退既有档位路由；false 则直接向用户报错
     model-fallback-enabled: ${APP_AGENT_MODEL_FALLBACK_ENABLED:true}
@@ -130,6 +136,17 @@ app:
     max-relations: ${APP_GRAPH_MAX_RELATIONS:20}
     max-facts: ${APP_GRAPH_MAX_FACTS:15}
     max-input-chars: ${APP_GRAPH_MAX_INPUT_CHARS:6000}
+  memory:
+    # 文档删除时级联软失效其沉淀的 fact 记忆（stale 标记 + INVALIDATE 事件，防引用已删来源的"可信事实"继续被召回）
+    cascade-invalidate-enabled: ${APP_MEMORY_CASCADE_INVALIDATE_ENABLED:true}
+    # 召回侧同层近重复抑制：内容规范化后互含或 bigram Jaccard 达阈值，只保留综合分更高（通常即更新）的一条
+    dedup-enabled: ${APP_MEMORY_DEDUP_ENABLED:true}
+    near-duplicate-threshold: ${APP_MEMORY_NEAR_DUPLICATE_THRESHOLD:0.75}
+    # 语义精排：long/fact 写入时缓存向量，召回时与查询向量余弦相似按权重融入词面相关性；embedding 不可用自动回退纯词面
+    semantic-enabled: ${APP_MEMORY_SEMANTIC_ENABLED:true}
+    semantic-blend-weight: ${APP_MEMORY_SEMANTIC_BLEND_WEIGHT:0.5}
+    # long 画像写入侧语义去重阈值（换措辞的重复画像不再入库；仅比对已缓存向量的记录）
+    semantic-dedup-threshold: ${APP_MEMORY_SEMANTIC_DEDUP_THRESHOLD:0.88}
   retrieval:
     source-timeout-ms: ${APP_RETRIEVAL_SOURCE_TIMEOUT_MS:3000}
     # 须 ≤ 数据库连接池（DB_POOL_MAX_SIZE，默认 20）：三路检索均直连数据库，扩线程前先扩连接池

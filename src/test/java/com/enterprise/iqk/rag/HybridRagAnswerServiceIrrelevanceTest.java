@@ -154,9 +154,10 @@ class HybridRagAnswerServiceIrrelevanceTest {
         // 重试文档不经 HybridRetrievalService 加权，finalScore 按向量权重补齐（判分相关度基底）
         assertThat(judgedInputs.get(0).get(0).getFinalScore())
                 .isCloseTo(0.55 * HybridWeights.DEFAULT.vectorWeight(), within(1e-9));
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(requestSpec).user(userPrompt.capture());
-        assertThat(userPrompt.getValue()).contains("doc-rescued 正文");
+        // 重试文档的上下文走 system（§18.2 RAG 瘦身）
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemPrompt.capture());
+        assertThat(systemPrompt.getValue()).contains("doc-rescued 正文");
         assertThat(result.getRetrievalStats().getFinalCount()).isEqualTo(1);
     }
 

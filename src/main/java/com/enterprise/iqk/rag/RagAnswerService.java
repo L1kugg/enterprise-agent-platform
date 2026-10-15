@@ -104,8 +104,11 @@ public class RagAnswerService {
                 answer = modelCallGuard.call("rag", () -> chatClient.prompt()
                         .options(ChatOptions.builder().model(decision.model())
                                 .temperature(ragProperties.getTemperature()).build())
-                        .system(SystemConstants.RAG_ANSWER_SYSTEM)
-                        .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
+                        // 检索上下文走 system（advisor 不持久化 system）：持久化历史里 user 消息
+                        // 保持纯问题文本，避免单条数千 token 的增强消息撑爆会话窗口（§18.2）
+                        .system(SystemConstants.RAG_ANSWER_SYSTEM
+                                + "\n\n以下是知识库检索到的参考资料（回答必须仅以此为准）：\n" + context)
+                        .user(prompt)
                     .advisors(a -> a.param(CONVERSATION_ID, conversationId)
                             .param(MemoryInjectionAdvisor.MEMORY_TENANT_KEY, normalizedTenantId)
                             .param(MemoryInjectionAdvisor.MEMORY_USER_KEY, memoryUserKey))

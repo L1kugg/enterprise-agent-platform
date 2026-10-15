@@ -141,7 +141,7 @@ public class DeepResearchService {
             // 早前研究已得出的结论不重复拆题，尽力而为，失败按无结论降级。
             ResearchPlannerAgent.ResearchPlan plan = plannerAgent.plan(
                     request.getTopic(), recallPriorFindings(normalizedTenant),
-                    "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
+                    "research::" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(planStep.getStepId(), "COMPLETED",
                     Map.of("subQuestions", plan.subQuestions(), "strategy", plan.strategy()),
                     plan, null, null, null, 0, 0,
@@ -157,7 +157,7 @@ public class DeepResearchService {
 
                 HybridRetrievalService.HybridRetrievalResult retrieval =
                         hybridRetrievalService.retrieve(subQ, normalizedTenant,
-                                "research_" + task.getTaskId(), 5);
+                                "research::" + task.getTaskId(), 5);
 
                 StringBuilder finding = new StringBuilder("## " + subQ + "\n\n");
                 for (ScoredDocument doc : retrieval.documents()) {
@@ -181,7 +181,7 @@ public class DeepResearchService {
             var writeStep = workflowEngine.startStep(task.getTaskId(), "ReportWriter", stepNum,
                     Map.of("topic", request.getTopic()));
             String report = writerAgent.writeReport(request.getTopic(),
-                    String.join("\n\n", findings), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
+                    String.join("\n\n", findings), "research::" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(writeStep.getStepId(), "COMPLETED",
                     Map.of("reportLength", report.length()), report,
                     null, null, null, 0, 0, 0, null);

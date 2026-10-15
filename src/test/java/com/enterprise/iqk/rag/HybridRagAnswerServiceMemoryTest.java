@@ -100,10 +100,10 @@ class HybridRagAnswerServiceMemoryTest {
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("缓存穿透怎么防", "tenant-1", "chat-1", "conv-1", null);
 
-        // 记忆进入生成上下文（画像与事实都要出现在 user prompt 里）
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(requestSpec).user(userPrompt.capture());
-        assertThat(userPrompt.getValue()).contains("已知记忆")
+        // 记忆进入生成上下文（画像与事实都要出现在 system prompt 的"已知记忆"段，§18.2）
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemPrompt.capture());
+        assertThat(systemPrompt.getValue()).contains("已知记忆")
                 .contains("Java 后端开发者")
                 .contains("布隆过滤器可防缓存穿透");
 

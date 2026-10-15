@@ -104,14 +104,17 @@ class HybridRagAnswerServiceJudgingTest {
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("怎么操作", "tenant-1", "chat-1", "conv-1", null);
 
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(requestSpec).user(userPrompt.capture());
-        String prompt = userPrompt.getValue();
-        // 上下文只含判分胜者乙：乙跟在编号 [1] 之后，且不存在第二条 [2]
-        assertThat(prompt).contains("乙文档内容：最新操作指引");
-        assertThat(prompt.indexOf("乙文档内容")).isGreaterThan(prompt.indexOf("[1]"));
-        assertThat(prompt).doesNotContain("[2]");
-        assertThat(prompt).doesNotContain("甲文档内容");
+        // 检索上下文走 system（§18.2 RAG 瘦身）：system 只含判分胜者乙，user 只剩纯问题
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemPrompt.capture());
+        String prompt = systemPrompt.getValue();
+        // 上下文只含判分胜者乙：乙跟在编号 [1] 之后，参考资料段不存在第二条 [2]
+        // （系统提示词开头的示例文案"例如 [1][2]"不参与此断言，只查参考资料段）
+        String contextSection = prompt.substring(prompt.indexOf("参考资料"));
+        assertThat(contextSection).contains("乙文档内容：最新操作指引");
+        assertThat(contextSection.indexOf("乙文档内容")).isGreaterThan(contextSection.indexOf("[1]"));
+        assertThat(contextSection).doesNotContain("[2]");
+        assertThat(contextSection).doesNotContain("甲文档内容");
         assertThat(result.getRetrievalStats().getFinalCount()).isEqualTo(1);
     }
 
@@ -124,9 +127,9 @@ class HybridRagAnswerServiceJudgingTest {
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("怎么操作", "tenant-1", "chat-1", "conv-1", null);
 
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(requestSpec).user(userPrompt.capture());
-        assertThat(userPrompt.getValue()).contains("甲文档内容").contains("乙文档内容");
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemPrompt.capture());
+        assertThat(systemPrompt.getValue()).contains("甲文档内容").contains("乙文档内容");
         assertThat(result.getRetrievalStats().getFinalCount()).isEqualTo(2);
     }
 
@@ -138,9 +141,9 @@ class HybridRagAnswerServiceJudgingTest {
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("怎么操作", "tenant-1", "chat-1", "conv-1", null);
 
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(requestSpec).user(userPrompt.capture());
-        assertThat(userPrompt.getValue()).contains("甲文档内容").contains("乙文档内容");
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemPrompt.capture());
+        assertThat(systemPrompt.getValue()).contains("甲文档内容").contains("乙文档内容");
         assertThat(result.getRetrievalStats().getFinalCount()).isEqualTo(2);
     }
 
@@ -197,9 +200,10 @@ class HybridRagAnswerServiceJudgingTest {
 
         multiDocService.answer("两份报告各测得多少", "tenant-1", "chat-1", "conv-1", null);
 
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        verify(spec).user(userPrompt.capture());
-        String prompt = userPrompt.getValue();
+        // 检索上下文走 system（§18.2 RAG 瘦身）
+        ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
+        verify(spec).system(systemPrompt.capture());
+        String prompt = systemPrompt.getValue();
         // 两份文档的正文各自出现、互不顶替，且消费级（判分胜者）在前
         assertThat(prompt).contains("消费级正文：青藤阅读助手幻觉率7.3%");
         assertThat(prompt).contains("企业级正文：Keystone幻觉率6.5%");

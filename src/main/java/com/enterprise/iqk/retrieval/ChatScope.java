@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 会话软作用域：知识库按租户共享，chat_id 不再做检索硬过滤。
  * 硬过滤的代价是知识库按会话割裂——A 会话上传的文档 B 会话检索不到，
- * DeepResearch 用临时 chatId（research_+taskId）发检索，向量/关键词两路必然为空。
+ * DeepResearch 用临时 chatId（research::+taskId）发检索，向量/关键词两路必然为空。
  * 软作用域改为：同会话命中的文档获得有界加分（+0.05，封顶 1.0），
  * 兼顾"当前会话上传的资料更可能相关"与"租户内知识共享"两个诉求。
  */

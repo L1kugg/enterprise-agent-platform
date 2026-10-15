@@ -48,7 +48,8 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  * → 2 证据判分 → 2.5 高置信事实沉淀（置信度门槛由 recorder 控制）
  * → 3 引用构建 → 4 判分结果消费（按综合分降序组织上下文、剔除低分、截断 rerankTopK）
  * → 4.5 记忆召回注入（失败降级为无记忆，不中断管线）→ 5 生成 → 6 引用脚注。
- * user prompt 为三段式：用户问题 / 检索上下文 / "已知记忆" 段；memoryUsed 上报实际注入的记忆标签。
+ * prompt 结构：检索上下文与"已知记忆"段走 system（advisor 不持久化 system，会话历史
+ * 只存纯问答对，§18.2）；memoryUsed 上报实际注入的记忆标签。
  * 已知瑕疵：token 估算未把 memorySection 计入，记账略低估。
  */
 @Slf4j
@@ -133,8 +134,8 @@ public class HybridRagAnswerService {
 
             // Step 2.5：把高置信证据写入租户级 fact 记忆
             //（尽力而为；recorder 内部做了置信度门槛与条数上限，
-            // 绝不会拖慢或中断 RAG 管线）
-            ragFactMemoryRecorder.recordFacts(normalizedTenantId, evidence);
+            // 绝不会拖慢或中断 RAG 管线；chatId 随证据落库，文档删除时级联失效）
+            ragFactMemoryRecorder.recordFacts(normalizedTenantId, chatId, evidence);
 
             // 第 3 步：构建引用
             List<CitationItem> citations = citationService.buildCitations(evidence);
@@ -165,8 +166,12 @@ public class HybridRagAnswerService {
                 answer = modelCallGuard.call("rag-hybrid", () -> chatClient.prompt()
                         .options(ChatOptions.builder().model(decision.model())
                                 .temperature(ragProperties.getTemperature()).build())
-                        .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
-                        .user("用户问题:%n%s%n%n上下文:%n%s%s%n".formatted(prompt, context, memorySection))
+                        // 检索上下文与已知记忆走 system（advisor 不持久化 system）：持久化历史里
+                        // user 消息保持纯问题文本，防止单条数千 token 的增强消息撑爆会话窗口（§18.2）
+                        .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM
+                                + "\n\n以下是知识库检索到的参考资料（回答必须仅以此为准）：\n" + context
+                                + memorySection)
+                        .user(prompt)
                     .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                         .call()
                         .content());

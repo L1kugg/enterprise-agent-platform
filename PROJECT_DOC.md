@@ -799,9 +799,9 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 18.2 上下文窗口管理
 
-**现状**：四层记忆有硬上限（5+10+5 条）不会膨胀，但 `MessageChatMemoryAdvisor` 未显式配置窗口大小，30 轮长对话可能叠加出约 2 万 Token 历史，存在超窗口或注意力稀释风险。缺少发送前 Token 计数与历史摘要压缩。
+**第一步已解决（2026-10）**：真实爆点其实不是 30 轮普通对话，而是 RAG 链路把"用户问题+检索上下文"拼成单条 user 消息被 `MessageChatMemoryAdvisor` 原样持久化（单条可达数千 Token）。三项修复：① `MysqlChatMemory` 窗口显式化——`app.chat.memory.max-messages`（默认 20，原为硬编码常量）；② Token 预算按轮裁剪——`app.chat.memory.max-history-tokens`（默认 6000，复用租户成本记账的码点/4 口径），超预算从最旧整轮丢弃、历史不从孤儿 ASSISTANT 半轮开始、保底最近 1 整轮；裁剪只作用于"进模型的部分"，conversation 表保持全量（审计/回放）；③ RAG 瘦身——两条 RAG 链路的检索上下文与"已知记忆"段移入 system prompt（advisor 不持久化 system，字节码已验证），持久化历史只剩纯问答对。写入侧 `add()` 跳过 SYSTEM 消息双保险。附带清理：pdfChatClient 死代码删除、`research::` 会话前缀对齐 ConversationIdHelper 约定。
 
-**改进**：显式配置记忆窗口（如最近 10 轮）；发送前 Token 估算超限则按时间衰减丢弃；对被丢弃历史做一次性摘要压缩。
+**改进**：滚动摘要压缩列为二期（conversation 表 `type='summary'` 行 + 掉窗消息异步 economy 档摘要 + 读取置顶）。
 
 ### 18.3 任务级超时预算
 
@@ -815,7 +815,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 18.5 记忆系统与主管线的集成
 
-**现状**：读写闭环已全线打通（详见 `docs/architecture-memory-system.md`）。写侧四类 Recorder：`ChatTurnMemoryRecorder`（对话轮次 short）、`MemoryExtractionService`（画像提取 long）、`TaskConclusionMemoryRecorder`（任务结论 task）、`RagFactMemoryRecorder`（RAG 事实 fact）。读侧 `MemoryInjectionAdvisor` 显式 opt-in：调用方同时传 `memory.tenantId` 与 `memory.userId` 两个 advisor 参数才注入，记忆以独立 SystemMessage 插入 prompt 首部（不改写 user 消息，会话历史不累积记忆快照），默认只注 long/fact 跨会话视图；该 advisor 挂在 `CommonConfiguration` 的四个 ChatClient（主聊天 chatClient、客服 serviceChatClient、PDF 问答 pdfChatClient、agentChatClient）上。`HybridRagAnswerService` 另走显式召回（user prompt 三段式带"已知记忆"段并上报 `memoryUsed`），`ReactAgentService` 在 planner 提示词注入召回快照并经 `ChatTurnMemoryRecorder` 写回。REST 查询与管理由 `MemoryController` 提供（`/ai/memory/**`：query / task / events / save）。
+**现状**：读写闭环已全线打通（详见 `docs/architecture-memory-system.md`）。写侧四类 Recorder：`ChatTurnMemoryRecorder`（对话轮次 short）、`MemoryExtractionService`（画像提取 long）、`TaskConclusionMemoryRecorder`（任务结论 task）、`RagFactMemoryRecorder`（RAG 事实 fact）。读侧 `MemoryInjectionAdvisor` 显式 opt-in：调用方同时传 `memory.tenantId` 与 `memory.userId` 两个 advisor 参数才注入，记忆以独立 SystemMessage 插入 prompt 首部（不改写 user 消息，会话历史不累积记忆快照），默认只注 long/fact 跨会话视图；该 advisor 挂在 `CommonConfiguration` 的三个 ChatClient（主聊天 chatClient、客服 serviceChatClient、agentChatClient；原 PDF 问答 pdfChatClient 为死代码已移除，PDF 问答走 chatClient）。`HybridRagAnswerService` 另走显式召回（"已知记忆"段并入 system prompt 并上报 `memoryUsed`，§18.2 RAG 瘦身），`ReactAgentService` 在 planner 提示词注入召回快照并经 `ChatTurnMemoryRecorder` 写回。REST 查询与管理由 `MemoryController` 提供（`/ai/memory/**`：query / task / events / save）。
 
 **改进**：无（原"未接入主管线"的评估已过时）；后续可关注 token 估算未计入记忆段的记账瑕疵（HybridRagAnswerService 已知瑕疵注释）。
 
@@ -846,6 +846,8 @@ docker compose -f docker-compose.observability.yml up -d
 | APP_INGESTION_QUEUE_BACKEND | redis_stream / rabbitmq / db_polling | redis_stream |
 | APP_RATE_LIMIT_CAPACITY | 限流容量 | 60 |
 | APP_MODEL_ROUTER_DEFAULT_PROFILE | 默认模型档位 | balanced |
+| APP_CHAT_MEMORY_MAX_MESSAGES | 会话历史条数窗口（进模型的部分，表数据不受影响） | 20 |
+| APP_CHAT_MEMORY_MAX_HISTORY_TOKENS | 会话历史 Token 预算（超限裁最旧整轮，保底最近 1 轮） | 6000 |
 | APP_COST_GOVERNANCE_ENABLED | 成本治理开关 | true |
 
 ### 相关文档

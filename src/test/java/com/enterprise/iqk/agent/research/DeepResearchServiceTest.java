@@ -112,14 +112,14 @@ class DeepResearchServiceTest {
                         .type("DEEP_RESEARCH").status("PLANNING").build());
         when(workflowEngine.startStep(eq(taskId), anyString(), anyInt(), anyMap()))
                 .thenAnswer(inv -> nextStep(taskId, inv.getArgument(2)));
-        when(plannerAgent.plan(anyString(), anyString(), eq("research_" + taskId), eq("tenant-a"), any()))
+        when(plannerAgent.plan(anyString(), anyString(), eq("research::" + taskId), eq("tenant-a"), any()))
                 .thenReturn(new ResearchPlannerAgent.ResearchPlan(
                         List.of("子问题一", "子问题二"), List.of("关键词"), "direct"));
-        when(hybridRetrievalService.retrieve(eq("子问题一"), eq("tenant-a"), eq("research_" + taskId), eq(5)))
+        when(hybridRetrievalService.retrieve(eq("子问题一"), eq("tenant-a"), eq("research::" + taskId), eq(5)))
                 .thenReturn(retrieval(List.of(doc("vec-1", "vector", "向量证据", 0.9))));
-        when(hybridRetrievalService.retrieve(eq("子问题二"), eq("tenant-a"), eq("research_" + taskId), eq(5)))
+        when(hybridRetrievalService.retrieve(eq("子问题二"), eq("tenant-a"), eq("research::" + taskId), eq(5)))
                 .thenReturn(retrieval(List.of()));
-        when(writerAgent.writeReport(anyString(), anyString(), eq("research_" + taskId), eq("tenant-a"), any()))
+        when(writerAgent.writeReport(anyString(), anyString(), eq("research::" + taskId), eq("tenant-a"), any()))
                 .thenReturn("# 研究报告正文");
     }
 
@@ -157,9 +157,9 @@ class DeepResearchServiceTest {
         verify(workflowEngine).transitionStatus("task-1", WorkflowState.RETRIEVING, WorkflowState.WRITING);
         verify(workflowEngine).completeTask("task-1", WorkflowState.DONE, "# 研究报告正文");
         verify(workflowEngine).recordTaskMetrics(eq("DEEP_RESEARCH"), eq("DONE"), anyLong());
-        // 每个子问题各一次混合检索（深度 "research_" 前缀作会话作用域）
-        verify(hybridRetrievalService).retrieve("子问题一", "tenant-a", "research_task-1", 5);
-        verify(hybridRetrievalService).retrieve("子问题二", "tenant-a", "research_task-1", 5);
+        // 每个子问题各一次混合检索（深度 "research::" 前缀作会话作用域）
+        verify(hybridRetrievalService).retrieve("子问题一", "tenant-a", "research::task-1", 5);
+        verify(hybridRetrievalService).retrieve("子问题二", "tenant-a", "research::task-1", 5);
     }
 
     @Test
@@ -171,7 +171,7 @@ class DeepResearchServiceTest {
         service.executeResearch(startedTask("task-1"), request("测试主题", "balanced"), "tenant-a");
 
         ArgumentCaptor<String> prior = ArgumentCaptor.forClass(String.class);
-        verify(plannerAgent).plan(eq("测试主题"), prior.capture(), eq("research_task-1"),
+        verify(plannerAgent).plan(eq("测试主题"), prior.capture(), eq("research::task-1"),
                 eq("tenant-a"), eq("balanced"));
         assertThat(prior.getValue()).contains("早前结论：X 已验证");
     }
@@ -186,7 +186,7 @@ class DeepResearchServiceTest {
 
         // 记忆召回失败按无结论降级，不阻断研究主链路
         assertThat(result.getStatus()).isEqualTo("DONE");
-        verify(plannerAgent).plan(eq("测试主题"), anyString(), eq("research_task-1"),
+        verify(plannerAgent).plan(eq("测试主题"), anyString(), eq("research::task-1"),
                 eq("tenant-a"), eq("balanced"));
     }
 
