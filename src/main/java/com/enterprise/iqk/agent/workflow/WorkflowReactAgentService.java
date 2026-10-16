@@ -66,6 +66,8 @@ public class WorkflowReactAgentService {
     private final AgentPromptMerger promptMerger;
     /** 智能体运行时共享组件：装载/拦截/绑定模型调用/回填/调用日志。 */
     private final AgentChatRuntime agentRuntime;
+    /** 规划提示词组装（含 per-agent 绑定工具目录，R7.3）。 */
+    private final WorkflowPlannerPrompts plannerPrompts;
 
     /** 同步 ReAct：跑完循环后一次性返回答案+轨迹+引用；异常置任务 FAILED 后上抛。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
@@ -129,7 +131,7 @@ public class WorkflowReactAgentService {
                 workflowEngine.transitionStatus(task.getTaskId(), currentState, nextState);
                 currentState = nextState;
 
-                Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
+                Object observation = executeAction(request, runState, decision.action(), decision.actionInput(), tenantId,
                         task.getTaskId(), stepRecord.getStepId());
                 trace.add(buildTraceStep(stepNum, decision, observation, elapsedMs(stepStartNs)));
                 workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED", null, observation,
@@ -256,7 +258,7 @@ public class WorkflowReactAgentService {
             }
 
             transitionWorkflowState(state, WorkflowState.forAction(decision.action()));
-            Object observation = executeAction(state.request(), decision.action(), decision.actionInput(),
+            Object observation = executeAction(state.request(), state.runState(), decision.action(), decision.actionInput(),
                     state.tenantId(), state.task().getTaskId(), stepRecord.getStepId());
             ReactTraceStepVO stepVo = buildTraceStep(stepNum, decision, observation, elapsedMs(stepStartNs));
             state.trace().add(stepVo);
@@ -326,23 +328,8 @@ public class WorkflowReactAgentService {
                                   String tenantId,
                                   String knownMemory,
                                   AgentChatRuntime.RunState runState) {
-        // 提示词用中文驱动，模型 thought/answer 才会用中文；JSON 键名与动作名保持英文，解析逻辑依赖它们。
-        String planningPrompt = """
-                你是一个企业智能助手场景的 ReAct 规划器，为下一步选择且仅选择一个动作。
-                thought（思考）与 answer（回答）必须使用简体中文书写。
-                %s
-                规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
-                如果已知记忆中已包含用户问题的答案（如用户姓名、身份、偏好、之前结论），直接选择 finish 并引用记忆内容作答，不要执行 rag_search。
-                如果用户询问你是谁/你能做什么/有什么功能，直接选择 finish 并介绍自己的能力（知识库检索问答RAG、业务数据查询、任务创建、天气查询、深度研究），不要执行 rag_search。
-                只返回 JSON：{"thought": "简短的中文推理", "action": "动作名", "action_input": {"key":"value"}, "answer": "仅 finish 时提供，用中文作答"}
-                用户问题：
-                %s
-                滚动上下文：
-                %s
-                已知记忆（用户画像 / 近期对话 / 已确认事实，作为背景参考）：
-                %s
-                已有轨迹：%s""".formatted(plannerActionCatalog.workflowActionsSection(), request.getPrompt(),
-                emptyIfBlank(knownMemory), emptyIfBlank(rollingContext), responseFormatter.traceSummary(trace));
+        String planningPrompt = plannerPrompts.planningPrompt(
+                request, rollingContext, trace, knownMemory, tenantId, runState);
 
         try {
             String raw = agentRuntime.call(
@@ -356,11 +343,12 @@ public class WorkflowReactAgentService {
         }
     }
 
-    private Map<String, Object> executeAction(ReactChatRequestVO request, String action,
-                                              Map<String, Object> actionInput, String tenantId,
+    private Map<String, Object> executeAction(ReactChatRequestVO request, AgentChatRuntime.RunState runState,
+                                              String action, Map<String, Object> actionInput, String tenantId,
                                               String taskId, String stepId) {
         return agentHarnessService.execute(new AgentAction(action, actionInput, request.getPrompt(),
-                tenantId, request.getChatId(), request.getModelProfile(), taskId, stepId)).toMap();
+                tenantId, request.getChatId(), request.getModelProfile(), taskId, stepId,
+                runState == null ? 0L : runState.config().agentId(), false)).toMap();
     }
 
     /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败给兜底文案。 */

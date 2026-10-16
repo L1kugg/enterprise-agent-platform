@@ -105,7 +105,14 @@ class WorkflowReactAgentServiceStreamTest {
                 memoryService,
                 new ReactResponseFormatter(new ObjectMapper()),
                 new AgentPromptMerger(),
-                agentRuntime);
+                agentRuntime,
+                new com.enterprise.iqk.agent.workflow.WorkflowPlannerPrompts(
+                        new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
+                        new com.enterprise.iqk.service.agent.AgentToolCatalog(
+                                mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
+                                mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
+                                new ObjectMapper()),
+                        new ReactResponseFormatter(new ObjectMapper())));
     }
 
     private ReactChatRequestVO request() {

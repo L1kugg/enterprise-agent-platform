@@ -54,6 +54,17 @@ public class ActionSchemaRegistry {
                 "调用标准 MCP 协议的外部工具（server/tool 组合以规划器提示词列出的为准），"
                         + "action_input 形如 {\"server\":\"...\",\"tool\":\"...\",\"arguments\":{...}}"));
 
+        // tool_call（R7.3）：调用智能体绑定的平台工具（FORM_API 真实 HTTP / SQL 只读执行）。
+        // 与 mcp_call 同套路：只读外部调用不设 trustedOnly，风险由工具类型白名单
+        // （CODE_API 拒绝/高危 executionConfirm 拒绝）+ disabled-actions / 租户白名单兜底；
+        // 可用工具以规划器提示词列出的绑定工具目录为准（AgentToolCatalog 按 agent 动态生成），
+        // 运行时会校验工具确在绑定列表内，未绑定直接拒绝。
+        register(new ActionSchema("tool_call", "tool",
+                Set.of("tool", "arguments"), Set.of(),
+                Set.of("arguments"), "external", false,
+                "调用智能体绑定的平台工具（tool 以规划器提示词列出的绑定工具为准），"
+                        + "action_input 形如 {\"tool\":\"工具名\",\"arguments\":{参数名:值}}"));
+
         register(new ActionSchema("workspace_list_files", "workspace",
                 Set.of(), Set.of("path", "maxDepth"), Set.of(), "read", true));
         register(new ActionSchema("workspace_read_file", "workspace",

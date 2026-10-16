@@ -62,7 +62,11 @@ class ReactAgentServiceTest {
                 mock(MemoryService.class),
                 mock(ChatTurnMemoryRecorder.class),
                 new AgentPromptMerger(),
-                routerOnlyRuntime(mock(ChatClient.class))
+                routerOnlyRuntime(mock(ChatClient.class)),
+                new com.enterprise.iqk.service.agent.AgentToolCatalog(
+                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
+                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
+                        new ObjectMapper())
         );
         ReactChatRequestVO missingPrompt = new ReactChatRequestVO();
         missingPrompt.setChatId("chat-1");
@@ -96,7 +100,11 @@ class ReactAgentServiceTest {
                 mock(MemoryService.class),
                 mock(ChatTurnMemoryRecorder.class),
                 new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient)
+                routerOnlyRuntime(chatClient),
+                new com.enterprise.iqk.service.agent.AgentToolCatalog(
+                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
+                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
+                        new ObjectMapper())
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("高温健康风险有哪些？");
@@ -139,7 +147,11 @@ class ReactAgentServiceTest {
                 memoryService,
                 recorder,
                 new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient)
+                routerOnlyRuntime(chatClient),
+                new com.enterprise.iqk.service.agent.AgentToolCatalog(
+                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
+                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
+                        new ObjectMapper())
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");
@@ -194,7 +206,11 @@ class ReactAgentServiceTest {
                 memoryService,
                 mock(ChatTurnMemoryRecorder.class),
                 new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient)
+                routerOnlyRuntime(chatClient),
+                new com.enterprise.iqk.service.agent.AgentToolCatalog(
+                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
+                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
+                        new ObjectMapper())
         );
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");

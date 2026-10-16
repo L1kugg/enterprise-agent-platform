@@ -29,6 +29,8 @@ public record AgentAction(
         String taskId,
         /** 工作流步骤 ID */
         String stepId,
+        /** 发起智能体的资产 ID（平台工具运行时据此校验绑定关系；默认助手为 0） */
+        Long agentId,
         /** 是否经受信运行时（token 确认流程）发起——只有受信动作需要 */
         boolean trustedRuntimeAccess
 ) {
@@ -40,7 +42,19 @@ public record AgentAction(
                        String modelProfile,
                        String taskId,
                        String stepId) {
-        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, false);
+        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, false);
+    }
+
+    public AgentAction(String action,
+                       Map<String, Object> actionInput,
+                       String prompt,
+                       String tenantId,
+                       String chatId,
+                       String modelProfile,
+                       String taskId,
+                       String stepId,
+                       boolean trustedRuntimeAccess) {
+        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, trustedRuntimeAccess);
     }
 
     /** 规范化：动作名小写去空白、输入包成只读 Map、空字段统一为空串 */
@@ -55,6 +69,7 @@ public record AgentAction(
         modelProfile = emptyIfBlank(modelProfile);
         taskId = emptyIfBlank(taskId);
         stepId = emptyIfBlank(stepId);
+        agentId = agentId == null ? 0L : agentId;
     }
 
     private static String normalize(String value) {

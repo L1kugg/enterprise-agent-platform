@@ -260,6 +260,16 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- 覆盖 Boot 3.4.5 BOM 的 Testcontainers 1.20.6：其 docker-java 与 Docker 29
+                 （Desktop 最新版）API 不兼容（/info 返回 400），Testcontainers 探测失败
+                 导致冒烟用例静默 skip。1.21.3 已修复（另见 CHANGELOG V28 条目教训）。 -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.21.3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <build>

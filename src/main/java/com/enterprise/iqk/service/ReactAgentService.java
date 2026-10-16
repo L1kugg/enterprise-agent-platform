@@ -73,6 +73,8 @@ public class ReactAgentService {
     private final AgentPromptMerger promptMerger;
     /** 智能体运行时共享组件：装载/拦截/绑定模型调用/回填/调用日志。 */
     private final AgentChatRuntime agentRuntime;
+    /** 绑定工具目录（R7.3）：per-agent 生成 tool_call 可用工具清单提示词段。 */
+    private final com.enterprise.iqk.service.agent.AgentToolCatalog agentToolCatalog;
 
     /** 同步对话：跑完 ReAct 循环后一次性返回完整响应（含轨迹、引用与路由信息）。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
@@ -128,7 +130,7 @@ public class ReactAgentService {
                     return agentRuntime.enrichAndRecord(request, tenantId, runState, response, elapsedMs(startedNs));
                 }
 
-                Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
+                Object observation = executeAction(request, runState, decision.action(), decision.actionInput(), tenantId);
                 trace.add(buildTraceStep(step, decision, observation, stepStartNs));
 
                 rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
@@ -201,7 +203,7 @@ public class ReactAgentService {
                             break;
                         }
 
-                        Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
+                        Object observation = executeAction(request, runState, decision.action(), decision.actionInput(), tenantId);
                         trace.add(buildTraceStep(step, decision, observation, stepStartNs));
                         rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
                     }
@@ -265,12 +267,16 @@ public class ReactAgentService {
                                   MemoryService.MemoryContextSnapshot memorySnapshot,
                                   AgentChatRuntime.RunState runState) {
         // 提示词用中文驱动，模型的 thought/answer 才会用中文输出；JSON 键名与动作名保持英文（解析器依赖）。
+        // 绑定工具目录（R7.3）：per-agent 动态段，紧跟动作块之后；未绑定工具时为空串零变化
+        String toolCatalogSection = agentToolCatalog.catalogSection(
+                runState == null ? null : runState.config().agentId(), tenantId);
         String planningPrompt = """
                 你是一个企业智能助手场景的 ReAct 规划器，负责为下一步选择且仅选择一个动作。
                 thought（思考）与 answer（回答）必须使用简体中文书写。
                 %n
                 %s
                 %n
+                %s
                 只返回 JSON，格式如下：
                 规则：即使记忆提示知识库无相关内容，也必须先执行一次 rag_search 验证（记忆可能过时）；仅当本次轨迹里的 rag_search 返回空结果或证据明显无关时，不要换关键词重试，直接 finish 并建议用户到「知识库」页上传相关文档。
                 如果已知记忆中已包含用户问题的答案（如用户姓名、身份、偏好、之前结论），直接选择 finish 并引用记忆内容作答，不要执行 rag_search。
@@ -294,6 +300,7 @@ public class ReactAgentService {
                 已有轨迹：
                 %s%n""".formatted(
                 plannerActionCatalog.standardActionsBlock(),
+                toolCatalogSection,
                 request.getPrompt(),
                 memoryBlock(memorySnapshot),
                 emptyIfBlank(rollingContext),
@@ -316,8 +323,9 @@ public class ReactAgentService {
         }
     }
 
-    /** 把决策动作交给 AgentHarnessService（守卫/运行时/消毒/留痕），返回观测 Map。 */
+    /** 把决策动作交给 AgentHarnessService（守卫/运行时/消毒/留痕），返回观测 Map；agentId 供平台工具运行时校验绑定 */
     private Map<String, Object> executeAction(ReactChatRequestVO request,
+                                              AgentChatRuntime.RunState runState,
                                               String action,
                                               Map<String, Object> actionInput,
                                               String tenantId) {
@@ -329,7 +337,9 @@ public class ReactAgentService {
                 request.getChatId(),
                 request.getModelProfile(),
                 "",
-                ""
+                "",
+                runState == null ? 0L : runState.config().agentId(),
+                false
         )).toMap();
     }
 
