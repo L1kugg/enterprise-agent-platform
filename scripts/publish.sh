@@ -37,6 +37,7 @@ scp $SSH_OPTS "$PKG" "$SERVER:/tmp/"
 echo "==> [4/4] 解压并重建容器（构建约 1-3 分钟）"
 ssh $SSH_OPTS "$SERVER" "set -e; \
   sudo mkdir -p $APP_DIR/target; \
+  sudo rm -rf $APP_DIR/frontend/src; \
   sudo tar xzf /tmp/$PKG_NAME -C $APP_DIR; \
   sudo rm /tmp/$PKG_NAME; \
   cd $APP_DIR/deploy && sudo docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build app web"
