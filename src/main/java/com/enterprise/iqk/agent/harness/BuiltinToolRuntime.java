@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -80,6 +81,7 @@ public class BuiltinToolRuntime implements AgentRuntime {
     /**
      * RAG 检索动作（四路混合管线）：query 缺省退回用户原始问题；
      * 会话 ID 用 react 前缀派生（与直连聊天链路隔离），chatId 先去单引号防注入。
+     * 知识库作用域（FR-R5-01）：智能体绑定了知识库时只在绑定范围内召回（scope 透传四路检索）。
      * 载荷形状与旧向量单路一致：query/answer/citations/evidence/weights，
      * citations 映射回前端可解析的 "source=..., chunk=..." 文本。
      */
@@ -91,7 +93,8 @@ public class BuiltinToolRuntime implements AgentRuntime {
                 action.tenantId(),
                 sanitizeChatId(action.chatId()),
                 conversationId,
-                action.modelProfile()
+                action.modelProfile(),
+                com.enterprise.iqk.retrieval.KnowledgeScope.of(action.knowledgeBaseIds())
         );
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("query", query);
@@ -103,8 +106,23 @@ public class BuiltinToolRuntime implements AgentRuntime {
                 .map(EvidenceItem::getSnippet)
                 .filter(StringUtils::hasText)
                 .toList());
+        // 召回知识库溯源（FR-R5-03）：本次实际命中切片的归属知识库 ID 去重集合，
+        // 供调试面板验证"只在绑定知识库范围内召回"
+        payload.put("recalledKnowledgeBaseIds", recalledKnowledgeBaseIds(result));
         payload.put("weights", result.getWeights() == null ? Map.of() : result.getWeights());
         return payload;
+    }
+
+    /** 引用携带的知识库 ID 去重（保序）；null 过滤，圈定范围模式下用于核对命中范围。 */
+    private static List<Long> recalledKnowledgeBaseIds(HybridRagAnswerService.HybridRagResult result) {
+        if (result.getCitations() == null) {
+            return List.of();
+        }
+        return result.getCitations().stream()
+                .map(CitationItem::getKnowledgeBaseId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     /**

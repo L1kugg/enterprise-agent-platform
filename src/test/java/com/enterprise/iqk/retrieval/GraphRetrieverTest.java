@@ -47,4 +47,58 @@ class GraphRetrieverTest {
         assertThat(retriever.extractKeywords("")).isEmpty();
         assertThat(retriever.extractKeywords("   ")).isEmpty();
     }
+
+    @Test
+    void scopedRetrievePassesBoundKnowledgeBasesToGraphQueries() {
+        com.enterprise.iqk.graph.KgEntityRecord entity = com.enterprise.iqk.graph.KgEntityRecord.builder()
+                .entityId("e-1").name("订单服务").type("SERVICE").build();
+        com.enterprise.iqk.graph.KgFactRecord fact = com.enterprise.iqk.graph.KgFactRecord.builder()
+                .factId("f-1").subject("订单服务").predicate("依赖").object("库存服务").confidence(0.9).build();
+        GraphService graphService = mock(GraphService.class);
+        org.mockito.Mockito.when(graphService.searchEntitiesByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.eq(List.of(1L, 2L))))
+                .thenReturn(List.of(entity));
+        org.mockito.Mockito.when(graphService.searchFactsByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.eq(List.of(1L, 2L))))
+                .thenReturn(List.of(fact));
+        GraphRetriever scopedRetriever = new GraphRetriever(graphService, new SimpleMeterRegistry());
+
+        List<ScoredDocument> docs = scopedRetriever.retrieve("订单服务", "tenant", 5, KnowledgeScope.of(List.of(1L, 2L)));
+
+        // 实体 + 事实都只取自绑定知识库圈定的图谱子集
+        assertThat(docs).hasSize(2);
+        org.mockito.Mockito.verify(graphService).searchEntitiesByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.eq(List.of(1L, 2L)));
+        org.mockito.Mockito.verify(graphService).searchFactsByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.eq(List.of(1L, 2L)));
+    }
+
+    @Test
+    void unrestrictedRetrieveUsesUnscopedGraphQueries() {
+        GraphService graphService = mock(GraphService.class);
+        org.mockito.Mockito.when(graphService.searchEntitiesByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(List.of());
+        org.mockito.Mockito.when(graphService.searchFactsByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(List.of());
+        GraphRetriever unscopedRetriever = new GraphRetriever(graphService, new SimpleMeterRegistry());
+
+        unscopedRetriever.retrieve("订单服务", "tenant", 5);
+
+        // 不限库走原路径：kbIds 传 null，服务层保持租户级查询
+        org.mockito.Mockito.verify(graphService).searchEntitiesByKeywords(
+                org.mockito.ArgumentMatchers.eq("tenant"), org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.isNull());
+    }
 }

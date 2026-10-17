@@ -35,14 +35,23 @@ public class RetrievalPreviewService {
     private final GraphRetriever graphRetriever;
 
     public RetrievalPreviewResult search(String tenantId, String query, int topK) {
+        return search(tenantId, query, topK, KnowledgeScope.unrestricted());
+    }
+
+    /**
+     * 知识库作用域版试搜（FR-R5-01）：knowledgeBaseIds 非空时三条本地路都只在指定知识库内检索，
+     * 用于验证"文档挂在知识库 A 上、智能体绑定 A 后能不能搜到"。
+     */
+    public RetrievalPreviewResult search(String tenantId, String query, int topK, KnowledgeScope knowledgeScope) {
+        KnowledgeScope scope = knowledgeScope == null ? KnowledgeScope.unrestricted() : knowledgeScope;
         String normalizedTenantId = tenantId == null ? "" : tenantId.trim();
         int safeTopK = Math.max(1, Math.min(topK, 20));
 
         Set<String> degraded = new LinkedHashSet<>();
         List<ScoredDocument> all = new ArrayList<>();
-        collectLane("vector", degraded, all, () -> vectorRetriever.retrieve(query, normalizedTenantId, ""));
-        collectLane("keyword", degraded, all, () -> keywordRetriever.retrieve(query, normalizedTenantId, "", safeTopK));
-        collectLane("graph", degraded, all, () -> graphRetriever.retrieve(query, normalizedTenantId, safeTopK));
+        collectLane("vector", degraded, all, () -> vectorRetriever.retrieve(query, normalizedTenantId, "", scope));
+        collectLane("keyword", degraded, all, () -> keywordRetriever.retrieve(query, normalizedTenantId, "", safeTopK, scope));
+        collectLane("graph", degraded, all, () -> graphRetriever.retrieve(query, normalizedTenantId, safeTopK, scope));
 
         List<ScoredDocument> merged = deduplicate(all);
         merged.sort(Comparator.comparingDouble(ScoredDocument::getRetrievalScore).reversed());

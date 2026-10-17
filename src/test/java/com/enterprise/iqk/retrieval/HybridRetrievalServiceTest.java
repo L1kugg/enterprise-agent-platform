@@ -59,11 +59,11 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true,
                 new HybridWeights(0.7, 0.1, 0.1, 0.1));
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vec-1", "vector", "vector lane content", 0.5)));
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "keyword lane content", 0.5)));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt()))
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("graph-1", "graph", "graph lane content", 0.5)));
         when(webRetriever.retrieve(anyString(), anyInt()))
                 .thenReturn(List.of(doc("web-1", "web", "web lane content", 0.5)));
@@ -82,10 +82,10 @@ class HybridRetrievalServiceTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         HybridRetrievalService service = service(registry, 3000, 8, 64, true);
 
-        when(vectorRetriever.retrieve("spring ai", "tenant", "chat")).thenThrow(new IllegalStateException("down"));
-        when(keywordRetriever.retrieve("spring ai", "tenant", "chat", 3))
+        when(vectorRetriever.retrieve(eq("spring ai"), eq("tenant"), eq("chat"), any())).thenThrow(new IllegalStateException("down"));
+        when(keywordRetriever.retrieve(eq("spring ai"), eq("tenant"), eq("chat"), eq(3), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "same content", 0.4)));
-        when(graphRetriever.retrieve("spring ai", "tenant", 3))
+        when(graphRetriever.retrieve(eq("spring ai"), eq("tenant"), eq(3), any()))
                 .thenReturn(List.of(doc("graph-1", "graph", "same content", 0.9)));
         when(webRetriever.retrieve("spring ai", 3)).thenReturn(List.of(doc("web-1", "web", "web content", 0.7)));
 
@@ -105,12 +105,12 @@ class HybridRetrievalServiceTest {
     void fusesDuplicateContentAcrossLanesWithWeightedRrf() {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vec-1", "vector", "spring ai tutorial basics", 0.9)));
-        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(5)))
+        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(5), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "spring ai tutorial basics", 0.5),
                         doc("kw-2", "keyword", "another unique chunk", 0.4)));
-        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(5)))
+        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(5), any()))
                 .thenReturn(List.of());
         when(webRetriever.retrieve(eq("q"), eq(5))).thenReturn(List.of());
 
@@ -133,11 +133,11 @@ class HybridRetrievalServiceTest {
         String sharedPrefix = ("合同编号：HT-2026-001 甲方：同一模板主体 乙方：同一模板主体 "
                 + "条款：本合同适用于知识库模板场景，以下内容为模板共享前缀，用于验证去重指纹不会截断。").repeat(4);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vec-template-a", "vector", sharedPrefix + " 结论：向量侧版本。", 0.9),
                         doc("vec-template-b", "vector", sharedPrefix + " 结论：关键词侧版本。", 0.8)));
-        when(keywordRetriever.retrieve(any(), any(), any(), anyInt())).thenReturn(List.of());
-        when(graphRetriever.retrieve(any(), any(), anyInt())).thenReturn(List.of());
+        when(keywordRetriever.retrieve(any(), any(), any(), anyInt(), any())).thenReturn(List.of());
+        when(graphRetriever.retrieve(any(), any(), anyInt(), any())).thenReturn(List.of());
         when(webRetriever.retrieve(any(), anyInt())).thenReturn(List.of());
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 5);
@@ -150,9 +150,9 @@ class HybridRetrievalServiceTest {
     void allSourcesFailingReturnsEmptyResult() {
         HybridRetrievalService service = service(new SimpleMeterRegistry(), 3000, 8, 64, true);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat")).thenThrow(new RuntimeException("a"));
-        when(keywordRetriever.retrieve(any(), any(), any(), anyInt())).thenThrow(new RuntimeException("b"));
-        when(graphRetriever.retrieve(any(), any(), anyInt())).thenThrow(new RuntimeException("c"));
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any())).thenThrow(new RuntimeException("a"));
+        when(keywordRetriever.retrieve(any(), any(), any(), anyInt(), any())).thenThrow(new RuntimeException("b"));
+        when(graphRetriever.retrieve(any(), any(), anyInt(), any())).thenThrow(new RuntimeException("c"));
         when(webRetriever.retrieve(any(), anyInt())).thenThrow(new RuntimeException("d"));
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 3);
@@ -170,11 +170,11 @@ class HybridRetrievalServiceTest {
         // 模拟 pgvector 抖动：向量路阻塞不返回（只能被中断打破），其余路健康
         HybridRetrievalService service = service(registry, 150, 8, 64, true);
         CountDownLatch interrupted = new CountDownLatch(1);
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenAnswer(inv -> blockingRetrieval(interrupted));
-        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(3)))
+        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(3), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "课程内容", 0.5)));
-        when(graphRetriever.retrieve("q", "tenant", 3)).thenReturn(List.of());
+        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(3), any())).thenReturn(List.of());
         when(webRetriever.retrieve("q", 3)).thenReturn(List.of());
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 3);
@@ -193,11 +193,11 @@ class HybridRetrievalServiceTest {
         // 四路全部阻塞：此时用户"看到空"必须是显式降级，而非系统性空结果
         HybridRetrievalService service = service(registry, 100, 8, 64, true);
         CountDownLatch latch = new CountDownLatch(1);
-        when(vectorRetriever.retrieve(anyString(), anyString(), anyString()))
+        when(vectorRetriever.retrieve(anyString(), anyString(), anyString(), any()))
                 .thenAnswer(inv -> blockingRetrieval(latch));
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenAnswer(inv -> blockingRetrieval(latch));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt()))
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any()))
                 .thenAnswer(inv -> blockingRetrieval(latch));
         when(webRetriever.retrieve(anyString(), anyInt()))
                 .thenAnswer(inv -> blockingRetrieval(latch));
@@ -217,14 +217,14 @@ class HybridRetrievalServiceTest {
 
         // RRF 使用每路排名，不使用来源轮转配额：topK=2 时向量两段排名更靠前，
         // 低相关的图谱单路命中不再强制占用名额。
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(
                         doc("vec-1", "vector", "vector chunk one", 0.9),
                         doc("vec-2", "vector", "vector chunk two", 0.9),
                         doc("vec-3", "vector", "vector chunk three", 0.9)));
-        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(2)))
+        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(2), any()))
                 .thenReturn(List.of());
-        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(2)))
+        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(2), any()))
                 .thenReturn(List.of(doc("graph-1", "graph", "graph entity evidence", 0.85)));
         when(webRetriever.retrieve(eq("q"), eq(2))).thenReturn(List.of());
 
@@ -244,15 +244,15 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService service = service(registry, 300, 1, 64, true);
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        when(vectorRetriever.retrieve(anyString(), anyString(), anyString()))
+        when(vectorRetriever.retrieve(anyString(), anyString(), anyString(), any()))
                 .thenAnswer(inv -> {
                     started.countDown();
                     release.await();
                     return List.of(doc("vec-1", "vector", "vector chunk", 0.9));
                 });
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "keyword chunk", 0.5)));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any())).thenReturn(List.of());
         when(webRetriever.retrieve(anyString(), anyInt())).thenReturn(List.of());
 
         AtomicReference<HybridRetrievalService.HybridRetrievalResult> firstResult = new AtomicReference<>();
@@ -288,15 +288,15 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService service = service(registry, 3000, 1, 1, false);
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        when(vectorRetriever.retrieve(anyString(), anyString(), anyString()))
+        when(vectorRetriever.retrieve(anyString(), anyString(), anyString(), any()))
                 .thenAnswer(inv -> {
                     started.countDown();
                     release.await();
                     return List.of(doc("vec-1", "vector", "vector chunk", 0.9));
                 });
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "keyword chunk", 0.5)));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any())).thenReturn(List.of());
 
         AtomicReference<HybridRetrievalService.HybridRetrievalResult> firstResult = new AtomicReference<>();
         Thread first = new Thread(() -> firstResult.set(service.retrieve("q", "tenant", "chat", 3)));
@@ -328,11 +328,11 @@ class HybridRetrievalServiceTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         HybridRetrievalService service = service(registry, 3000, 8, 64, false);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vec-1", "vector", "vector chunk", 0.9)));
-        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(3)))
+        when(keywordRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), eq(3), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "keyword chunk", 0.5)));
-        when(graphRetriever.retrieve("q", "tenant", 3)).thenReturn(List.of());
+        when(graphRetriever.retrieve(eq("q"), eq("tenant"), eq(3), any())).thenReturn(List.of());
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 3);
 
@@ -350,13 +350,13 @@ class HybridRetrievalServiceTest {
         HybridRetrievalService service = service(registry, 3000, 8, 64, false);
 
         // 停机中断以受检异常出现：catch 必须接住并完成 promise，否则调用线程 join 永挂
-        when(vectorRetriever.retrieve(anyString(), anyString(), anyString()))
+        when(vectorRetriever.retrieve(anyString(), anyString(), anyString(), any()))
                 .thenAnswer(inv -> {
                     throw new InterruptedException("simulated shutdown interrupt");
                 });
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("kw-1", "keyword", "keyword chunk", 0.5)));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any())).thenReturn(List.of());
 
         HybridRetrievalService.HybridRetrievalResult result = service.retrieve("q", "tenant", "chat", 3);
 
@@ -371,11 +371,11 @@ class HybridRetrievalServiceTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         HybridRetrievalService service = service(registry, 3000, 8, 64, true);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vec-1", "vector", "vector chunk", 0.9)));
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of());
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any())).thenReturn(List.of());
         when(webRetriever.retrieve(anyString(), anyInt())).thenReturn(List.of());
 
         service.retrieve("q", "tenant", "chat", 3);

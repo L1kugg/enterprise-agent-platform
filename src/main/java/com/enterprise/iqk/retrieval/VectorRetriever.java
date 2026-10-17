@@ -30,31 +30,45 @@ public class VectorRetriever {
 
     /** 按配置阈值（rag.similarity-threshold）检索；四路混合检索的常规入口。 */
     public List<ScoredDocument> retrieve(String query, String tenantId, String chatId) {
-        return retrieve(query, tenantId, chatId, ragProperties.getSimilarityThreshold());
+        return retrieve(query, tenantId, chatId, ragProperties.getSimilarityThreshold(), KnowledgeScope.unrestricted());
+    }
+
+    /** 知识库作用域检索（FR-R5-01）：scope 限定绑定知识库列表，unrestricted 保持租户级行为。 */
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, KnowledgeScope scope) {
+        return retrieve(query, tenantId, chatId, ragProperties.getSimilarityThreshold(), scope);
     }
 
     /**
      * 向量相似度检索并映射为 ScoredDocument（docId 形如 vec-0，sourceType=vector），
      * 相似度阈值由调用方显式给定——HybridRagAnswerService 的无关线兜底用
      * SIMILARITY_THRESHOLD_ACCEPT_ALL 放宽重试就走这个重载。
+     * 知识库作用域（FR-R5-01）：restricted 时按切片元数据 knowledge_base_id 后置过滤，
+     * 并把候选池放大 3 倍（封顶 60）补偿过滤损耗——圈定子集远小于租户全集，
+     * 不放大就会出现"绑定了知识库反而召回变稀"的退化。
      * 记录延迟指标；异常不在此捕获、直接上抛，由 HybridRetrievalService 统一降级为空结果。
      */
-    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, double similarityThreshold) {
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId,
+                                         double similarityThreshold, KnowledgeScope scope) {
+        KnowledgeScope effectiveScope = scope == null ? KnowledgeScope.unrestricted() : scope;
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
             String filter = filterExpression(tenantId);
+            int candidateTopK = effectiveScope.restricted()
+                    ? Math.min(ragProperties.getRetrieveTopK() * 3, 60)
+                    : ragProperties.getRetrieveTopK();
             SearchRequest request = SearchRequest.builder()
                     .query(query)
-                    .topK(ragProperties.getRetrieveTopK())
+                    .topK(candidateTopK)
                     .similarityThreshold(similarityThreshold)
                     .filterExpression(filter)
                     .build();
             List<Document> docs = vectorStore.similaritySearch(request);
-            outcome = docs.isEmpty() ? "empty" : "success";
+            List<Document> scopedDocs = docs.stream().filter(effectiveScope::allows).toList();
+            outcome = scopedDocs.isEmpty() ? "empty" : "success";
             List<ScoredDocument> results = new ArrayList<>();
-            for (int i = 0; i < docs.size(); i++) {
-                Document d = docs.get(i);
+            for (int i = 0; i < scopedDocs.size(); i++) {
+                Document d = scopedDocs.get(i);
                 results.add(ScoredDocument.builder()
                         .docId("vec-" + i)
                         .sourceType("vector")
@@ -75,6 +89,11 @@ public class VectorRetriever {
                     .publishPercentileHistogram()
                     .register(meterRegistry));
         }
+    }
+
+    /** 兼容旧签名（阈值显式、不限库）：放宽重试等既有调用方逐步迁移。 */
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, double similarityThreshold) {
+        return retrieve(query, tenantId, chatId, similarityThreshold, KnowledgeScope.unrestricted());
     }
 
     /**

@@ -142,7 +142,13 @@ public class HybridRetrievalService {
      * @return 混合检索结果，包含去重且已评分的文档与本次实际生效的权重
      */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
-        return retrieve(query, tenantId, chatId, topK, configuredWeights);
+        return retrieve(query, tenantId, chatId, topK, configuredWeights, KnowledgeScope.unrestricted());
+    }
+
+    /** 知识库作用域版混合检索（FR-R5-01）：scope 透传向量/关键词/图谱三路，web 路无租户归属不受限。 */
+    public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK,
+                                          KnowledgeScope knowledgeScope) {
+        return retrieve(query, tenantId, chatId, topK, configuredWeights, knowledgeScope);
     }
 
     /**
@@ -161,6 +167,17 @@ public class HybridRetrievalService {
      * @return 混合检索结果，包含去重且已评分的文档
      */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK, HybridWeights weights) {
+        return retrieve(query, tenantId, chatId, topK, weights, KnowledgeScope.unrestricted());
+    }
+
+    /**
+     * 全参检索：按来源可配置权重 + 知识库作用域。
+     * 向量/关键词/图谱三路按 scope 圈定召回范围（智能体绑定知识库后只在绑定范围内召回，FR-R5-01）；
+     * web 路是外部网络内容、无租户/知识库归属，不受作用域约束。
+     */
+    public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK,
+                                          HybridWeights weights, KnowledgeScope knowledgeScope) {
+        KnowledgeScope scope = knowledgeScope == null ? KnowledgeScope.unrestricted() : knowledgeScope;
 
         // 将权重归一化为总和 1.0
         HybridWeights normalized = weights.normalize();
@@ -169,11 +186,11 @@ public class HybridRetrievalService {
         String outcome = "error";
         try {
             CompletableFuture<RouteResult> vectorFuture = retrieveAsync("vector",
-                    () -> vectorRetriever.retrieve(query, tenantId, chatId), normalized.vectorWeight());
+                    () -> vectorRetriever.retrieve(query, tenantId, chatId, scope), normalized.vectorWeight());
             CompletableFuture<RouteResult> keywordFuture = retrieveAsync("keyword",
-                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), normalized.keywordWeight());
+                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK, scope), normalized.keywordWeight());
             CompletableFuture<RouteResult> graphFuture = retrieveAsync("graph",
-                    () -> graphRetriever.retrieve(query, tenantId, topK), normalized.graphWeight());
+                    () -> graphRetriever.retrieve(query, tenantId, topK, scope), normalized.graphWeight());
             // web 路禁用时不提交任务：不占线程槽、不产生按路计数（禁用是配置而非故障）
             CompletableFuture<RouteResult> webFuture = webSearchProperties.isEnabled()
                     ? retrieveAsync("web", () -> webRetriever.retrieve(query, topK), normalized.webWeight())

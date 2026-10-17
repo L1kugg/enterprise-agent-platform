@@ -22,6 +22,8 @@ public class IngestionJob {
     private String jobId;
     private String tenantId;
     private String chatId;
+    /** 归属知识库资产 ID（platform_asset.id，FR-R5-01）；NULL = 未归属，仅租户级检索可见 */
+    private Long knowledgeBaseId;
     private String sourceType;
     private String sourceName;
     private String filePath;

@@ -323,7 +323,8 @@ public class ReactAgentService {
         }
     }
 
-    /** 把决策动作交给 AgentHarnessService（守卫/运行时/消毒/留痕），返回观测 Map；agentId 供平台工具运行时校验绑定 */
+    /** 把决策动作交给 AgentHarnessService（守卫/运行时/消毒/留痕），返回观测 Map；
+     *  agentId 供平台工具运行时校验绑定，绑定知识库列表供 rag_search 圈定召回范围（FR-R5-01） */
     private Map<String, Object> executeAction(ReactChatRequestVO request,
                                               AgentChatRuntime.RunState runState,
                                               String action,
@@ -339,7 +340,8 @@ public class ReactAgentService {
                 "",
                 "",
                 runState == null ? 0L : runState.config().agentId(),
-                false
+                false,
+                runState == null ? List.of() : runState.config().knowledgeBaseIds()
         )).toMap();
     }
 

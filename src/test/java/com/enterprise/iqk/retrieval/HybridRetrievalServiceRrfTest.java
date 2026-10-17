@@ -7,8 +7,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,11 +29,11 @@ class HybridRetrievalServiceRrfTest {
                 webProperties, new SimpleMeterRegistry(), 3000, 8, 64,
                 60, 0.30, 0.50, 0.10, 0.10);
 
-        when(vectorRetriever.retrieve("q", "tenant", "chat"))
+        when(vectorRetriever.retrieve(eq("q"), eq("tenant"), eq("chat"), any()))
                 .thenReturn(List.of(doc("vector-rank2", 0.98)));
-        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(keywordRetriever.retrieve(anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(List.of(doc("keyword-rank1", 0.61)));
-        when(graphRetriever.retrieve(anyString(), anyString(), anyInt())).thenReturn(List.of());
+        when(graphRetriever.retrieve(anyString(), anyString(), anyInt(), any())).thenReturn(List.of());
         when(webRetriever.retrieve(anyString(), anyInt())).thenReturn(List.of());
 
         var result = service.retrieve("q", "tenant", "chat", 2);

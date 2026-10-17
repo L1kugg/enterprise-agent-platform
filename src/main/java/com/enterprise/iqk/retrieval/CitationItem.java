@@ -23,6 +23,8 @@ public class CitationItem {
     private String url;
     /** 原文 chunk 序号或图谱实体/事实 ID */
     private String chunkId;
+    /** 归属知识库资产 ID（FR-R5-03 引用溯源）；未归属/图谱/网络来源为 null */
+    private Long knowledgeBaseId;
     private double confidence;   // 0-1
     private String excerpt;      // 从来源摘录的原文
 

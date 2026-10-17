@@ -61,7 +61,8 @@ class HybridRagAnswerServiceJudgingTest {
                 .docId("doc-b").sourceType("vector").title("最新指引.pdf")
                 .chunkId("chunk-b").content("乙文档内容：最新操作指引")
                 .retrievalScore(0.5).metadata(Map.of()).build();
-        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt(),
+                any(com.enterprise.iqk.retrieval.KnowledgeScope.class)))
                 .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
                         List.of(docA, docB), 2, 2, List.of(), HybridWeights.DEFAULT));
         when(evidenceJudgeService.judge(any(), anyString())).thenReturn(judgedEvidence);
@@ -167,7 +168,8 @@ class HybridRagAnswerServiceJudgingTest {
                 .docId("doc-a").sourceType("vector").title("企业选型.md")
                 .chunkId("chunk-0").content("企业级正文：Keystone幻觉率6.5%")
                 .retrievalScore(0.8).metadata(Map.of()).build();
-        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt(),
+                any(com.enterprise.iqk.retrieval.KnowledgeScope.class)))
                 .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
                         List.of(consumerDoc, enterpriseDoc), 2, 2, List.of(), HybridWeights.DEFAULT));
         // 判分把消费级排前、企业级排后——两份都必须按各自的正文进上下文

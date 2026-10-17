@@ -101,14 +101,6 @@ export interface WorkflowTestRunResult {
 
 export type ToolParamType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'OBJECT' | 'ARRAY';
 
-export interface ToolParamSchema {
-  name: string;
-  type: ToolParamType;
-  required: boolean;
-  defaultValue?: string;
-  description?: string;
-}
-
 export interface ToolTestResult {
   status?: string | number;
   latencyMs?: number;
@@ -135,6 +127,8 @@ export interface AgentDebugStep {
   action: string;
   elapsedMs?: number | null;
   status?: string;
+  /** rag_search 步骤的引用列表（"source=..., chunk=..." 文本），其他动作为空 */
+  citations?: string[];
 }
 
 /** 智能体调试响应（POST /platform/agents/{id}/debug）。 */
@@ -159,6 +153,13 @@ export interface AgentDebugResult {
   memorySummary?: {
     memoryTurns?: number;
     injectedLabels?: string[];
+  };
+  /** 知识库召回摘要（FR-R5-03）：绑定范围与本次实际命中，验证召回圈定范围生效 */
+  knowledgeSummary?: {
+    scoped?: boolean;
+    knowledgeBaseIds?: number[];
+    knowledgeBaseNames?: string[];
+    recalledKnowledgeBaseIds?: number[];
   };
   steps?: AgentDebugStep[];
 }

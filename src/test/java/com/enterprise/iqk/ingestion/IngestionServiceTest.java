@@ -49,7 +49,8 @@ class IngestionServiceTest {
                 org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class),
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(vectorStoreProperties),
-                mock(com.enterprise.iqk.memory.MemoryService.class)
+                mock(com.enterprise.iqk.memory.MemoryService.class),
+                mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class)
         );
     }
 
@@ -175,5 +176,67 @@ class IngestionServiceTest {
         Object createdAt = chunk.getMetadata().get("created_at");
         assertTrue(createdAt instanceof Long);
         assertTrue((Long) createdAt > 0);
+    }
+
+    @Test
+    void chunkMetadataCarriesKnowledgeBaseBindingOnlyWhenPresent() {
+        IngestionService service = buildService(
+                mock(IngestionJobMapper.class),
+                mock(org.springframework.ai.vectorstore.VectorStore.class),
+                new IngestionProperties(), new VectorStoreProperties(),
+                mock(IngestionQueue.class), mock(FileSafetyScanner.class));
+        String pageText = "企业级检索增强生成系统的设计与实践。".repeat(30);
+
+        // 归属知识库的文档：切片元数据带 knowledge_base_id（FR-R5-01 检索圈定依据）
+        IngestionJob boundJob = IngestionJob.builder()
+                .jobId("job-kb").tenantId("public").chatId("chat-kb")
+                .knowledgeBaseId(42L)
+                .sourceName("a.pdf").sourceType("pdf").build();
+        List<Document> boundChunks = service.splitDocuments(
+                List.of(Document.builder().text(pageText).build()), boundJob);
+        assertEquals(42L, boundChunks.get(0).getMetadata().get("knowledge_base_id"));
+
+        // 未归属文档：不写该键（避免检索侧把"无归属"误判成"库 0"）
+        IngestionJob unboundJob = IngestionJob.builder()
+                .jobId("job-free").tenantId("public").chatId("chat-free")
+                .sourceName("b.pdf").sourceType("pdf").build();
+        List<Document> freeChunks = service.splitDocuments(
+                List.of(Document.builder().text(pageText).build()), unboundJob);
+        assertFalse(freeChunks.get(0).getMetadata().containsKey("knowledge_base_id"));
+    }
+
+    @Test
+    void submitDocumentStoresResolvedKnowledgeBaseBinding() {
+        IngestionJobMapper mapper = mock(IngestionJobMapper.class);
+        when(mapper.findByIdempotencyKey(anyString(), anyString())).thenReturn(null);
+        com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService catalog =
+                mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class);
+        when(catalog.resolveUploadTarget("public", 42L)).thenReturn(42L);
+
+        IngestionProperties ingestionProperties = new IngestionProperties();
+        try {
+            ingestionProperties.setStorageDir(Files.createTempDirectory("ingestion-test").toString());
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+        IngestionService service = new IngestionService(
+                mapper,
+                mock(org.springframework.ai.vectorstore.VectorStore.class),
+                ingestionProperties,
+                new VectorStoreProperties(),
+                new RagProperties(),
+                new SimpleMeterRegistry(),
+                mock(IngestionQueue.class),
+                mock(FileSafetyScanner.class),
+                mock(com.enterprise.iqk.graph.GraphExtractionService.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties()),
+                mock(com.enterprise.iqk.memory.MemoryService.class),
+                catalog
+        );
+
+        IngestionJob job = service.submitDocument("public", "chat-kb",
+                new MockMultipartFile("file", "a.pdf", "application/pdf", "pdf".getBytes()), null, "trace", 42L);
+        assertEquals(42L, job.getKnowledgeBaseId());
     }
 }

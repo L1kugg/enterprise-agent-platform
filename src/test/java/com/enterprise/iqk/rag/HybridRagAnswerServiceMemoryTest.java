@@ -59,7 +59,8 @@ class HybridRagAnswerServiceMemoryTest {
                 .docId("doc-1").sourceType("vector").title("redis.pdf")
                 .content("缓存穿透的解决方案").retrievalScore(0.9)
                 .metadata(Map.of()).build();
-        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt(),
+                any(com.enterprise.iqk.retrieval.KnowledgeScope.class)))
                 .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
                         List.of(doc), 1, 1, List.of(), HybridWeights.DEFAULT));
         when(evidenceJudgeService.judge(any(), anyString())).thenReturn(List.of());

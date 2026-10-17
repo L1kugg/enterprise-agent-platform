@@ -12,7 +12,7 @@ import java.util.List;
 @Service
 public class CitationService {
 
-    /** 将证据按顺序转成编号引用（编号从 1 起），摘录取证据的 snippet */
+    /** 将证据按顺序转成编号引用（编号从 1 起），摘录取证据的 snippet，知识库 ID 随证据透传（FR-R5-03） */
     public List<CitationItem> buildCitations(List<EvidenceItem> evidence) {
         List<CitationItem> citations = new ArrayList<>();
         for (int i = 0; i < evidence.size(); i++) {
@@ -23,6 +23,7 @@ public class CitationService {
                     .title(e.getTitle())
                     .url(e.getUrl())
                     .chunkId(e.getChunkId())
+                    .knowledgeBaseId(e.getKnowledgeBaseId())
                     .confidence(e.getScore())
                     .excerpt(e.getSnippet())
                     .build());

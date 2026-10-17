@@ -53,6 +53,10 @@ public class PlatformAssetService {
     private final AgentBindingSyncService agentBindingSyncService;
     /** model-services 配置变更/删除时失效绑定模型客户端缓存 */
     private final PlatformChatModelRegistry chatModelRegistry;
+    /** 知识库删除时解绑文档记录（FR-R5-01 删除策略） */
+    private final com.enterprise.iqk.mapper.IngestionJobMapper ingestionJobMapper;
+    /** 知识库删除时解绑关键词索引切片（FR-R5-01 删除策略） */
+    private final com.enterprise.iqk.retrieval.KeywordIndexStore keywordIndexStore;
 
     public long count(String assetType, String search) {
         String type = normalizeType(assetType);
@@ -165,6 +169,10 @@ public class PlatformAssetService {
                     .eq(PlatformAsset::getTenantId, asset.getTenantId())
                     .eq(PlatformAsset::getAssetType, "knowledge-files")
                     .eq(PlatformAsset::getParentId, asset.getId()));
+            // 删除策略（FR-R5-01）：文档与向量/关键词索引数据保留，归属置空回退为"未归属"，
+            // 继续走租户级共享检索——删库不等于删资料；绑定了该库的智能体召回范围自然收窄。
+            ingestionJobMapper.clearKnowledgeBase(asset.getTenantId(), asset.getId(), LocalDateTime.now());
+            keywordIndexStore.clearKnowledgeBase(asset.getTenantId(), asset.getId());
         }
     }
 

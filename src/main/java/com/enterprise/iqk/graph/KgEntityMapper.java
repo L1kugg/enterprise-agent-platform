@@ -61,4 +61,35 @@ public interface KgEntityMapper extends BaseMapper<KgEntityRecord> {
     List<KgEntityRecord> searchByKeywords(@Param("tenantId") String tenantId,
                                           @Param("keywords") List<String> keywords,
                                           @Param("limit") int limit);
+
+    /**
+     * 知识库作用域版关键词检索（FR-R5-01）：只取 source_id（约定存 chatId）命中
+     * 归属指定知识库文档的实体——图谱数据按 chat 沉淀，经 ingestion_job 的
+     * knowledge_base_id 反查归属，不改 kg 表结构。
+     */
+    @Select("""
+            <script>
+            SELECT * FROM kg_entity
+            WHERE tenant_id = #{tenantId}
+              AND source_id IN (
+                  SELECT DISTINCT chat_id FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                    AND knowledge_base_id IN
+                    <foreach collection='knowledgeBaseIds' item='kb' open='(' separator=',' close=')'>
+                      #{kb}
+                    </foreach>
+              )
+              AND (
+              <foreach collection='keywords' item='kw' separator=' OR '>
+                (name LIKE CONCAT('%', #{kw}, '%')
+                 OR JSON_CONTAINS(aliases, JSON_QUOTE(#{kw})))
+              </foreach>
+              )
+            LIMIT #{limit}
+            </script>
+            """)
+    List<KgEntityRecord> searchByKeywordsScoped(@Param("tenantId") String tenantId,
+                                                @Param("keywords") List<String> keywords,
+                                                @Param("knowledgeBaseIds") List<Long> knowledgeBaseIds,
+                                                @Param("limit") int limit);
 }

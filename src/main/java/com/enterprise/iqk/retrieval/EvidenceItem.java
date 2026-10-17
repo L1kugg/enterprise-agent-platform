@@ -18,6 +18,8 @@ public class EvidenceItem {
     private String title;
     private String url;
     private String chunkId;
+    /** 命中切片归属的知识库 ID（FR-R5-03 引用溯源）；未归属/图谱/网络证据为 null */
+    private Long knowledgeBaseId;
     private double score;        // 0-1 综合得分
     private String reason;       // 人类可读的评分理由
     private double relevanceScore;

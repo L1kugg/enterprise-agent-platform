@@ -13,6 +13,7 @@ import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.retrieval.EvidenceJudgeService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
 import com.enterprise.iqk.retrieval.HybridWeights;
+import com.enterprise.iqk.retrieval.KnowledgeScope;
 import com.enterprise.iqk.retrieval.ScoredDocument;
 import com.enterprise.iqk.retrieval.VectorRetriever;
 import com.enterprise.iqk.retrieval.RetrievalResultItem;
@@ -73,6 +74,16 @@ public class HybridRagAnswerService {
     /** 执行完整混合 RAG 管线：检索为空返回固定话术；每轮生成 traceId 供日志关联，全链路埋点。 */
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
                                    String conversationId, String modelProfile) {
+        return answer(prompt, tenantId, chatId, conversationId, modelProfile, KnowledgeScope.unrestricted());
+    }
+
+    /**
+     * 知识库作用域版 RAG 管线（FR-R5-01）：scope restricted 时四路检索（web 路除外）
+     * 只在绑定知识库范围内召回；unrestricted 保持租户级行为，既有调用方零变化。
+     */
+    public HybridRagResult answer(String prompt, String tenantId, String chatId,
+                                   String conversationId, String modelProfile, KnowledgeScope knowledgeScope) {
+        KnowledgeScope scope = knowledgeScope == null ? KnowledgeScope.unrestricted() : knowledgeScope;
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
         String traceId = "trace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String pipelineOutcome = "error";
@@ -83,7 +94,7 @@ public class HybridRagAnswerService {
             // 第 1 步：混合检索（向量 + 关键词 + 图谱 + 网络）
             HybridRetrievalService.HybridRetrievalResult retrievalResult =
                     hybridRetrievalService.retrieve(prompt, normalizedTenantId, chatId,
-                            ragProperties.getRetrieveTopK());
+                            ragProperties.getRetrieveTopK(), scope);
 
             List<ScoredDocument> retrievedDocs = retrievalResult.documents();
             // 当次实际生效的归一化召回路权重，随结果回传（前端轨迹色条按此绘制，空结果也带）
@@ -105,7 +116,7 @@ public class HybridRagAnswerService {
             // 整批低于线时走向量放宽重试，仍无过线文档则不调模型直接返回固定话术
             List<ScoredDocument> usableDocs = filterUsable(retrievedDocs);
             if (usableDocs.isEmpty()) {
-                usableDocs = relaxedVectorRetry(prompt, normalizedTenantId, chatId, retrievalResult.weights());
+                usableDocs = relaxedVectorRetry(prompt, normalizedTenantId, chatId, retrievalResult.weights(), scope);
             }
             if (usableDocs.isEmpty()) {
                 pipelineOutcome = "empty";
@@ -254,10 +265,10 @@ public class HybridRagAnswerService {
      * 任何异常降级为空列表：兜底通道的故障不升级成整次回答 error。
      */
     private List<ScoredDocument> relaxedVectorRetry(String query, String tenantId, String chatId,
-                                                    HybridWeights weights) {
+                                                    HybridWeights weights, KnowledgeScope scope) {
         try {
             List<ScoredDocument> docs = vectorRetriever.retrieve(query, tenantId, chatId,
-                    SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL);
+                    SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL, scope);
             double vectorWeight = weights != null ? weights.vectorWeight() : HybridWeights.DEFAULT.vectorWeight();
             for (ScoredDocument d : docs) {
                 d.setFinalScore(d.getRetrievalScore() * vectorWeight);

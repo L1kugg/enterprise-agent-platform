@@ -39,9 +39,22 @@ public class GraphService {
      * 按多候选关键词批量 OR 检索实体（中文滑窗候选），关键词逐一转义。
      */
     public List<KgEntityRecord> searchEntitiesByKeywords(String tenantId, List<String> keywords, int limit) {
+        return searchEntitiesByKeywords(tenantId, keywords, limit, null);
+    }
+
+    /**
+     * 知识库作用域版实体检索（FR-R5-01）：knowledgeBaseIds 非空时只取归属绑定库文档的实体，
+     * null/空 = 不限库走原路径。转义仍在服务层统一做。
+     */
+    public List<KgEntityRecord> searchEntitiesByKeywords(String tenantId, List<String> keywords, int limit,
+                                                         java.util.Collection<Long> knowledgeBaseIds) {
         List<String> escaped = escapeKeywords(keywords);
         if (escaped.isEmpty()) return List.of();
-        return entityMapper.searchByKeywords(tenantId, escaped, Math.max(1, limit));
+        int safeLimit = Math.max(1, limit);
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return entityMapper.searchByKeywords(tenantId, escaped, safeLimit);
+        }
+        return entityMapper.searchByKeywordsScoped(tenantId, escaped, List.copyOf(knowledgeBaseIds), safeLimit);
     }
 
     /**
@@ -81,9 +94,19 @@ public class GraphService {
      * 按多候选关键词批量 OR 检索事实（中文滑窗候选），关键词逐一转义。
      */
     public List<KgFactRecord> searchFactsByKeywords(String tenantId, List<String> keywords, int limit) {
+        return searchFactsByKeywords(tenantId, keywords, limit, null);
+    }
+
+    /** 知识库作用域版事实检索（FR-R5-01），语义同实体侧作用域重载。 */
+    public List<KgFactRecord> searchFactsByKeywords(String tenantId, List<String> keywords, int limit,
+                                                    java.util.Collection<Long> knowledgeBaseIds) {
         List<String> escaped = escapeKeywords(keywords);
         if (escaped.isEmpty()) return List.of();
-        return factMapper.searchByKeywords(tenantId, escaped, Math.max(1, limit));
+        int safeLimit = Math.max(1, limit);
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return factMapper.searchByKeywords(tenantId, escaped, safeLimit);
+        }
+        return factMapper.searchByKeywordsScoped(tenantId, escaped, List.copyOf(knowledgeBaseIds), safeLimit);
     }
 
     /** 关键词列表清洗：去空、trim、LIKE 通配符转义。 */

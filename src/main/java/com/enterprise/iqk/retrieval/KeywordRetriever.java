@@ -43,10 +43,19 @@ public class KeywordRetriever {
      * 仅保留得分 &gt; 0.05 的条目并截断到 topK；异常上抛由混合检索层降级。
      */
     public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, int topK) {
+        return retrieve(query, tenantId, chatId, topK, KnowledgeScope.unrestricted());
+    }
+
+    /**
+     * 知识库作用域版（FR-R5-01）：全文索引路 SQL 级过滤；向量候选回退路按切片元数据
+     * knowledge_base_id 后置过滤（与 {@link VectorRetriever} 同策略），并放大候选池补偿损耗。
+     */
+    public List<ScoredDocument> retrieve(String query, String tenantId, String chatId, int topK, KnowledgeScope scope) {
+        KnowledgeScope effectiveScope = scope == null ? KnowledgeScope.unrestricted() : scope;
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            List<ScoredDocument> indexed = keywordIndexStore.search(query, tenantId, chatId, topK);
+            List<ScoredDocument> indexed = keywordIndexStore.search(query, tenantId, chatId, topK, effectiveScope);
             if (!indexed.isEmpty()) {
                 outcome = "success";
                 return indexed;
@@ -54,13 +63,19 @@ public class KeywordRetriever {
 
             // 候选池：租户级 + 相似度阈值放开，让词面精确命中但语义距离远的文档也能入选
             String filter = filterExpression(tenantId);
+            int candidateTopK = effectiveScope.restricted()
+                    ? Math.max(topK * 8, 80)
+                    : Math.max(topK * 4, 40);
             List<Document> docs = vectorStore.similaritySearch(
                     SearchRequest.builder()
                             .query(query)
-                            .topK(Math.max(topK * 4, 40))
+                            .topK(candidateTopK)
                             .similarityThreshold(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL)
                             .filterExpression(filter)
                             .build());
+            if (effectiveScope.restricted()) {
+                docs = docs.stream().filter(effectiveScope::allows).toList();
+            }
 
             Set<String> queryTokens = LexicalMatcher.tokenize(query);
             if (queryTokens.isEmpty()) {

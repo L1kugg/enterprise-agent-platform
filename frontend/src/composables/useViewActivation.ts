@@ -8,7 +8,9 @@ import { isAdmin } from './useAuthState';
 import type { ConsoleView } from '../types/console';
 import { evalDatasets, evalLoading, loadEvalDatasets } from './useEvaluation';
 import {
+  knowledgeCatalog,
   knowledgeLoading,
+  loadKnowledgeCatalog,
   loadKnowledgeDocuments,
   loadKnowledgeJobs,
 } from './useKnowledge';
@@ -25,6 +27,10 @@ export function activateView(view: ConsoleView): void {
   if (view === 'knowledge' && !knowledgeLoading.value) {
     void loadKnowledgeJobs();
     void loadKnowledgeDocuments();
+  }
+  // 知识库目录（FR-R5-01）：上传归属/按库过滤/试搜圈库的选择器数据源，首次进入加载
+  if (view === 'knowledge' && knowledgeCatalog.value.length === 0) {
+    void loadKnowledgeCatalog();
   }
   if (view === 'platform' && isAdmin.value) {
     void loadPlatformOverview();

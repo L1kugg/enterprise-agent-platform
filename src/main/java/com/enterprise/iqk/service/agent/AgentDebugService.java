@@ -30,6 +30,8 @@ public class AgentDebugService {
 
     private final AgentRuntimeConfigService agentRuntimeConfigService;
     private final ReactAgentService reactAgentService;
+    /** 知识库召回摘要的绑定库名称解析（FR-R5-03） */
+    private final com.enterprise.iqk.mapper.PlatformAssetMapper platformAssetMapper;
 
     public AgentDebugResponseVO debug(Long agentId, String message, String chatIdHint) {
         if (!StringUtils.hasText(message) || message.isBlank()) {
@@ -87,6 +89,7 @@ public class AgentDebugService {
                         .blockMessage(response.getBlockMessage())
                         .build())
                 .memorySummary(memorySummary(config, response.getMemoryUsed()))
+                .knowledgeSummary(knowledgeSummary(config, response))
                 .steps(steps)
                 .build();
     }
@@ -100,7 +103,66 @@ public class AgentDebugService {
                 .action(step.getAction())
                 .elapsedMs(step.getElapsedMs())
                 .status(status == null ? "completed" : String.valueOf(status))
+                .citations(citationsOf(step))
                 .build();
+    }
+
+    /** rag_search 步骤的引用文本（"source=..., chunk=..."），缺失/非 rag 动作返回空列表。 */
+    @SuppressWarnings("unchecked")
+    private List<String> citationsOf(ReactTraceStepVO step) {
+        if (step.getObservation() instanceof Map<?, ?> observation
+                && observation.get("citations") instanceof List<?> citations) {
+            return citations.stream().map(String::valueOf).toList();
+        }
+        return List.of();
+    }
+
+    /**
+     * 知识库召回摘要（FR-R5-03）：绑定范围（ID+名称）与本次实际命中的知识库 ID 集合
+     * （rag_search 观测的 recalledKnowledgeBaseIds 跨步骤聚合去重）。scoped=true 即召回已圈定范围。
+     */
+    private AgentDebugResponseVO.KnowledgeSummary knowledgeSummary(AgentRuntimeConfig config,
+                                                                   ReactChatResponseVO response) {
+        List<Long> boundIds = config.knowledgeBaseIds() == null ? List.of() : config.knowledgeBaseIds();
+        java.util.LinkedHashSet<Long> recalled = new java.util.LinkedHashSet<>();
+        if (response.getTrace() != null) {
+            for (ReactTraceStepVO step : response.getTrace()) {
+                recalledIdsFromObservation(step.getObservation()).forEach(recalled::add);
+            }
+        }
+        return AgentDebugResponseVO.KnowledgeSummary.builder()
+                .scoped(!boundIds.isEmpty())
+                .knowledgeBaseIds(boundIds)
+                .knowledgeBaseNames(boundIds.stream().map(this::knowledgeBaseName).toList())
+                .recalledKnowledgeBaseIds(List.copyOf(recalled))
+                .build();
+    }
+
+    /** rag_search 观测里的 recalledKnowledgeBaseIds 列表，缺失/形状不符返回空。 */
+    private List<Long> recalledIdsFromObservation(Object observation) {
+        if (!(observation instanceof Map<?, ?> map)
+                || !(map.get("recalledKnowledgeBaseIds") instanceof List<?> ids)) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(id -> {
+                    try {
+                        return Long.parseLong(String.valueOf(id));
+                    } catch (NumberFormatException ignored) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /** 知识库资产名称解析：不存在/不可见时回退为 "知识库#id"。 */
+    private String knowledgeBaseName(Long kbId) {
+        String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+        com.enterprise.iqk.domain.platform.PlatformAsset kb =
+                platformAssetMapper.findByIdAndTypeVisible(kbId, tenantId, "knowledge-bases");
+        return kb == null ? "知识库#" + kbId : kb.getName();
     }
 
     private AgentDebugResponseVO.MemorySummary memorySummary(AgentRuntimeConfig config, List<String> injected) {

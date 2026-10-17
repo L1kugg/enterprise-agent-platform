@@ -70,7 +70,7 @@ class IngestionControllerWebMvcTest {
     void shouldAcceptUploadJob() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "sample.pdf", "application/pdf", "data".getBytes());
         when(ingestionProperties.getQueueBackend()).thenReturn("redis_stream");
-        when(ingestionService.submitDocument(any(), any(), any(), any(), any())).thenReturn(IngestionJob.builder()
+        when(ingestionService.submitDocument(any(), any(), any(), any(), any(), any())).thenReturn(IngestionJob.builder()
                 .jobId("job-1")
                 .tenantId("public")
                 .chatId("chat-1")
@@ -114,7 +114,8 @@ class IngestionControllerWebMvcTest {
 
     @Test
     void shouldListTenantDocuments() throws Exception {
-        when(ingestionService.listDocumentsByTenant(any(), any(), eq(1), eq(20)))
+        when(ingestionService.listDocumentsByTenant(any(), any(), eq(1), eq(20),
+                org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new PagedResult<>(List.of(IngestionJob.builder()
                         .jobId("job-1")
                         .chatId("doc-1")
@@ -167,7 +168,7 @@ class IngestionControllerWebMvcTest {
 
     @Test
     void shouldPreviewSearchKnowledgeBase() throws Exception {
-        when(retrievalPreviewService.search(any(), eq("测试查询"), anyInt()))
+        when(retrievalPreviewService.search(any(), eq("测试查询"), anyInt(), any()))
                 .thenReturn(new RetrievalPreviewResult(
                         List.of(new RetrievalPreviewItem("vector", "a.md", "chunk-0", 0.81, "命中片段")),
                         List.of()));

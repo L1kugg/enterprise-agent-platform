@@ -20,12 +20,12 @@ import type {
   IngestionDocumentSummary,
   IngestionJob,
   IngestionSubmitResponse,
+  KnowledgeBaseCatalogItem,
   RetrievalPreviewResult,
   ReactChatRequest,
   ReactChatResponse,
   ReactStreamEvent,
   SessionState,
-  TenantBudgetUpdate,
   TenantCostSummary,
   TenantCostTrendPoint,
   WorkflowTask,
@@ -341,7 +341,7 @@ export async function streamReactChat(
   }
 }
 
-export interface PagedResult<T> {
+interface PagedResult<T> {
   items: T[];
   total: number;
   page: number;
@@ -411,46 +411,6 @@ export async function saveSessionState(
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, '会话保存失败');
-  }
-  return payload;
-}
-
-export async function setSessionPinned(
-  sessionId: string,
-  value: boolean,
-  auth?: AuthContext,
-): Promise<SessionState> {
-  const response = await fetch(
-    resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/pin`, { value })),
-    {
-      credentials: 'include',
-      method: 'POST',
-      headers: buildAuthHeaders(auth),
-    },
-  );
-  const payload = await parseJsonSafely<SessionState>(response);
-  if (!response.ok || !payload) {
-    throw formatHttpError(response.status, '会话置顶设置失败');
-  }
-  return payload;
-}
-
-export async function setSessionArchived(
-  sessionId: string,
-  value: boolean,
-  auth?: AuthContext,
-): Promise<SessionState> {
-  const response = await fetch(
-    resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/archive`, { value })),
-    {
-      credentials: 'include',
-      method: 'POST',
-      headers: buildAuthHeaders(auth),
-    },
-  );
-  const payload = await parseJsonSafely<SessionState>(response);
-  if (!response.ok || !payload) {
-    throw formatHttpError(response.status, '会话归档设置失败');
   }
   return payload;
 }
@@ -573,26 +533,6 @@ export async function getTenantCostTrend(
   const payload = await parseJsonSafely<TenantCostTrendPoint[]>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, '用量趋势加载失败');
-  }
-  return payload;
-}
-
-export async function updateTenantBudget(
-  request: TenantBudgetUpdate,
-  auth?: AuthContext,
-): Promise<TenantCostSummary> {
-  const response = await fetch(resolveApi('/cost/budget'), {
-    credentials: 'include',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildAuthHeaders(auth),
-    },
-    body: JSON.stringify(request),
-  });
-  const payload = await parseJsonSafely<TenantCostSummary>(response);
-  if (!response.ok || !payload) {
-    throw formatHttpError(response.status, '预算更新失败');
   }
   return payload;
 }
@@ -729,10 +669,17 @@ export async function uploadIngestionDocument(
   chatId: string,
   file: File,
   auth?: AuthContext,
+  knowledgeBaseId?: number,
 ): Promise<IngestionSubmitResponse> {
   const form = new FormData();
   form.append('file', file);
-  const response = await fetch(resolveApi(`/ingestion/upload/${encodeURIComponent(chatId)}`), {
+  // 归属知识库（FR-R5-01）：指定后检索按库圈定范围；不选保持租户级共享
+  const url = resolveApi(
+    withQuery(`/ingestion/upload/${encodeURIComponent(chatId)}`, {
+      knowledgeBaseId: knowledgeBaseId ?? '',
+    }),
+  );
+  const response = await fetch(url, {
     credentials: 'include',
     method: 'POST',
     // 不手动设 Content-Type：multipart 的边界串由浏览器自动生成
@@ -775,10 +722,10 @@ export async function deleteIngestionDocument(chatId: string, auth?: AuthContext
   return payload.msg;
 }
 
-/** 知识库文档清单：本租户内按 chat 分组的文档，分页 + 按文件名/批次搜索。 */
+/** 知识库文档清单：本租户内按 chat 分组的文档，分页 + 按文件名/批次搜索；knowledgeBaseId 按库过滤（FR-R5-01）。 */
 export async function listIngestionDocuments(
   auth?: AuthContext,
-  params?: { page?: number; pageSize?: number; search?: string },
+  params?: { page?: number; pageSize?: number; search?: string; knowledgeBaseId?: number },
 ): Promise<PagedResult<IngestionDocumentSummary>> {
   const response = await fetch(
     resolveApi(
@@ -786,6 +733,7 @@ export async function listIngestionDocuments(
         page: params?.page ?? 1,
         pageSize: params?.pageSize ?? 20,
         search: params?.search ?? '',
+        knowledgeBaseId: params?.knowledgeBaseId ?? '',
       }),
     ),
     {
@@ -801,20 +749,44 @@ export async function listIngestionDocuments(
   return payload;
 }
 
-/** 知识库试搜：只召回不出答案（不调 LLM），用于验证内容能否被检索到。 */
+/** 知识库试搜：只召回不出答案（不调 LLM）；knowledgeBaseIds 圈定检索范围（FR-R5-01）。 */
 export async function searchIngestionPreview(
   query: string,
   auth?: AuthContext,
   topK = 6,
+  knowledgeBaseIds?: number[],
 ): Promise<RetrievalPreviewResult> {
-  const response = await fetch(resolveApi(withQuery('/ingestion/search', { q: query, topK })), {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ingestion/search', {
+        q: query,
+        topK,
+        knowledgeBaseIds: knowledgeBaseIds?.length ? knowledgeBaseIds.join(',') : '',
+      }),
+    ),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<RetrievalPreviewResult>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '试搜失败');
+  }
+  return payload;
+}
+
+/** 用户侧知识库目录（GET /ai/knowledge-bases，FR-R5-01）：上传/试搜选择器数据源，附真实文档统计。 */
+export async function listKnowledgeBaseCatalog(auth?: AuthContext): Promise<KnowledgeBaseCatalogItem[]> {
+  const response = await fetch(resolveApi('/ai/knowledge-bases'), {
     credentials: 'include',
     method: 'GET',
     headers: buildAuthHeaders(auth),
   });
-  const payload = await parseJsonSafely<RetrievalPreviewResult>(response);
+  const payload = await parseJsonSafely<KnowledgeBaseCatalogItem[]>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, '试搜失败');
+    throw formatHttpError(response.status, '知识库目录加载失败');
   }
   return payload;
 }
@@ -900,24 +872,6 @@ export async function deleteAdminDocument(
     throw formatHttpError(response.status, payload?.msg ?? '文档删除失败');
   }
   return payload.msg;
-}
-
-/** 工作流任务列表（含深度研究任务，按 type 过滤；后端返回裸数组，元素带 steps）。 */
-export async function listWorkflowTasks(
-  auth?: AuthContext,
-  page = 1,
-  pageSize = 20,
-): Promise<WorkflowTask[]> {
-  const response = await fetch(resolveApi(withQuery('/ai/workflow/tasks', { page, pageSize })), {
-    credentials: 'include',
-    method: 'GET',
-    headers: buildAuthHeaders(auth),
-  });
-  const payload = await parseJsonSafely<WorkflowTask[]>(response);
-  if (!response.ok || !payload) {
-    throw formatHttpError(response.status, '任务列表加载失败');
-  }
-  return payload;
 }
 
 /** 发起深度研究：后端异步受理即返回 202（report 为空，状态 PLANNING），报告经 getResearchReport 轮询获取。 */

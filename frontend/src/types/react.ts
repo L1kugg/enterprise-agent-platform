@@ -171,12 +171,6 @@ export interface TenantCostSummary {
   budgetExceeded: boolean;
 }
 
-export interface TenantBudgetUpdate {
-  tenantId?: string;
-  monthlyBudgetUsd?: number;
-  hardLimitEnabled?: boolean;
-}
-
 /** 用量趋势单日数据点（GET /cost/trend，裸数组元素，缺天由后端补零）。 */
 export interface TenantCostTrendPoint {
   date: string;
@@ -336,11 +330,25 @@ export interface IngestionDocumentSummary {
   chatId: string;
   sourceName: string;
   sourceType?: string;
+  /** 归属知识库资产 ID（FR-R5-01）；null = 未归属，仅租户级检索可见 */
+  knowledgeBaseId?: number | null;
   status: IngestionJobStatus;
   chunkCount?: number | null;
   fileSize?: number | null;
   createdAt?: string;
   finishedAt?: string;
+}
+
+/** 用户侧知识库目录项（GET /ai/knowledge-bases，FR-R5-01）：上传/试搜选择器数据源。 */
+export interface KnowledgeBaseCatalogItem {
+  id: number;
+  name: string;
+  description?: string | null;
+  status?: string;
+  /** 归属文档数（后端真实聚合） */
+  fileCount?: number;
+  /** 可用切片总数（后端真实聚合） */
+  chunkCount?: number;
 }
 
 /** 知识库「试搜」单条命中（对应后端 RetrievalPreviewItem）。 */

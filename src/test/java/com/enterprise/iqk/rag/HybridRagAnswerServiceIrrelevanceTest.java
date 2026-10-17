@@ -94,7 +94,8 @@ class HybridRagAnswerServiceIrrelevanceTest {
     }
 
     private void strictRetrievalReturns(ScoredDocument... docs) {
-        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt()))
+        when(retrievalService.retrieve(anyString(), anyString(), anyString(), anyInt(),
+                any(com.enterprise.iqk.retrieval.KnowledgeScope.class)))
                 .thenReturn(new HybridRetrievalService.HybridRetrievalResult(
                         List.of(docs), docs.length, docs.length, List.of(), HybridWeights.DEFAULT));
     }
@@ -110,7 +111,7 @@ class HybridRagAnswerServiceIrrelevanceTest {
     void allDocsBelowFloorShortCircuitsToFixedMessageWithoutModelCall() {
         strictRetrievalReturns(doc("doc-a", 0.10), doc("doc-b", 0.20));
         when(vectorRetriever.retrieve(anyString(), anyString(), anyString(),
-                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL))).thenReturn(List.of());
+                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL), any())).thenReturn(List.of());
 
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("推荐几个长春美食", "tenant-1", "chat-1", "conv-1", null);
@@ -137,7 +138,7 @@ class HybridRagAnswerServiceIrrelevanceTest {
         strictRetrievalReturns(doc("doc-a", 0.10), doc("doc-b", 0.20));
         ScoredDocument rescued = doc("doc-rescued", 0.55);
         when(vectorRetriever.retrieve(anyString(), anyString(), anyString(),
-                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL))).thenReturn(List.of(rescued));
+                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL), any())).thenReturn(List.of(rescued));
         // 手动捕获判分入参（List 泛型 captor 需强转，这里用 thenAnswer 更直白）
         List<List<ScoredDocument>> judgedInputs = new ArrayList<>();
         when(evidenceJudgeService.judge(any(), anyString())).thenAnswer(invocation -> {
@@ -165,7 +166,7 @@ class HybridRagAnswerServiceIrrelevanceTest {
     void relaxedRetryFailureDegradesToFixedMessageNotError() {
         strictRetrievalReturns(doc("doc-a", 0.10));
         when(vectorRetriever.retrieve(anyString(), anyString(), anyString(),
-                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL)))
+                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL), any()))
                 .thenThrow(new RuntimeException("vector down"));
 
         HybridRagAnswerService.HybridRagResult result =
@@ -182,7 +183,7 @@ class HybridRagAnswerServiceIrrelevanceTest {
     void retryResultStillBelowFloorReturnsFixedMessage() {
         strictRetrievalReturns(doc("doc-a", 0.10));
         when(vectorRetriever.retrieve(anyString(), anyString(), anyString(),
-                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL))).thenReturn(List.of(doc("doc-r", 0.20)));
+                eq(SearchRequest.SIMILARITY_THRESHOLD_ACCEPT_ALL), any())).thenReturn(List.of(doc("doc-r", 0.20)));
 
         HybridRagAnswerService.HybridRagResult result =
                 service.answer("随便问问", "tenant-1", "chat-1", "conv-1", null);

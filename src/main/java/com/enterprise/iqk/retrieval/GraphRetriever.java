@@ -40,6 +40,18 @@ public class GraphRetriever {
      * 提取不到有效关键词时返回空列表；异常上抛由混合检索层降级。
      */
     public List<ScoredDocument> retrieve(String query, String tenantId, int topK) {
+        return retrieve(query, tenantId, topK, KnowledgeScope.unrestricted());
+    }
+
+    /**
+     * 知识库作用域版图谱检索（FR-R5-01）：scope restricted 时实体与事实只取
+     * 归属绑定知识库文档（经 source/chat → ingestion_job.knowledge_base_id 反查）的结果；
+     * 一跳邻居扩展作用于已圈定的实体，属同簇上下文，不再二次圈库。
+     */
+    public List<ScoredDocument> retrieve(String query, String tenantId, int topK, KnowledgeScope scope) {
+        KnowledgeScope effectiveScope = scope == null ? KnowledgeScope.unrestricted() : scope;
+        java.util.Collection<Long> kbIds = effectiveScope.restricted()
+                ? effectiveScope.knowledgeBaseIds() : null;
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
@@ -53,7 +65,7 @@ public class GraphRetriever {
             }
 
             // 按关键词候选批量搜索实体
-            List<KgEntityRecord> entities = graphService.searchEntitiesByKeywords(tenantId, keywords, topK);
+            List<KgEntityRecord> entities = graphService.searchEntitiesByKeywords(tenantId, keywords, topK, kbIds);
             for (int i = 0; i < entities.size(); i++) {
                 KgEntityRecord e = entities.get(i);
                 // 获取一跳邻居以丰富上下文
@@ -73,7 +85,7 @@ public class GraphRetriever {
             }
 
             // 按关键词候选批量搜索事实
-            List<KgFactRecord> facts = graphService.searchFactsByKeywords(tenantId, keywords, topK);
+            List<KgFactRecord> facts = graphService.searchFactsByKeywords(tenantId, keywords, topK, kbIds);
             for (int i = 0; i < facts.size(); i++) {
                 KgFactRecord f = facts.get(i);
                 results.add(ScoredDocument.builder()

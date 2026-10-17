@@ -19,6 +19,8 @@ public class AgentDebugResponseVO {
     private ModelSummary modelSummary;
     private SafetyResult safetyResult;
     private MemorySummary memorySummary;
+    /** 知识库召回摘要（FR-R5-03）：绑定范围 + 各步骤引用，验证"只在绑定范围内召回" */
+    private KnowledgeSummary knowledgeSummary;
     private List<DebugStep> steps;
 
     @Data
@@ -48,6 +50,20 @@ public class AgentDebugResponseVO {
         private List<String> injectedLabels;
     }
 
+    /** 知识库召回摘要：scoped=true 表示召回已严格限定在绑定知识库内（FR-R5-01）。 */
+    @Data
+    @Builder
+    public static class KnowledgeSummary {
+        /** 是否处于圈定范围模式（绑定了知识库） */
+        private Boolean scoped;
+        /** 绑定的知识库 ID 列表 */
+        private List<Long> knowledgeBaseIds;
+        /** 绑定的知识库名称列表（与 ID 同序） */
+        private List<String> knowledgeBaseNames;
+        /** 本次调试命中的知识库 ID 去重集合（引用溯源，来自切片元数据） */
+        private List<Long> recalledKnowledgeBaseIds;
+    }
+
     @Data
     @Builder
     public static class DebugStep {
@@ -55,5 +71,7 @@ public class AgentDebugResponseVO {
         private String action;
         private Long elapsedMs;
         private String status;
+        /** rag_search 步骤的引用列表（"source=..., chunk=..." 文本），其他动作为空 */
+        private List<String> citations;
     }
 }

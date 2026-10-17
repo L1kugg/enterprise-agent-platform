@@ -140,10 +140,13 @@
               <el-option
                 v-for="item in knowledgeBases"
                 :key="item.id"
-                :label="item.name"
+                :label="kbOptionLabel(item)"
                 :value="item.id"
               />
             </el-select>
+            <p class="binding-hint">
+              绑定后智能体只在所选知识库内召回（FR-R5-01）；不绑定则检索本租户全部文档。
+            </p>
           </el-form-item>
           <el-form-item label="安全防护">
             <el-select v-model="form.safetyGuardIds" multiple filterable class="full-width">
@@ -244,12 +247,19 @@
             <span class="debug-meta-text">{{ safetySummaryText }}</span>
             <p>记忆注入</p>
             <span class="debug-meta-text">{{ memorySummaryText }}</span>
+            <template v-if="knowledgeSummaryText">
+              <p>知识召回</p>
+              <span class="debug-meta-text">{{ knowledgeSummaryText }}</span>
+            </template>
           </div>
           <el-collapse v-if="debugResult.steps?.length" class="debug-steps">
             <el-collapse-item :title="`执行步骤（${debugResult.steps.length}）`">
               <div v-for="step in debugResult.steps" :key="step.step" class="debug-step">
                 <span>#{{ step.step }} {{ step.action }}</span>
                 <small>{{ step.status }} · {{ step.elapsedMs ?? '-' }}ms</small>
+                <div v-if="step.citations?.length" class="debug-step-citations">
+                  <small v-for="citation in step.citations" :key="citation">{{ citation }}</small>
+                </div>
               </div>
             </el-collapse-item>
           </el-collapse>
@@ -324,6 +334,12 @@ const form = reactive({
   memoryTurns: 10,
 });
 
+/** 绑定选项展示真实可用状态（FR-R5-01）：非 ACTIVE 的知识库标注不可用，绑定前可辨。 */
+function kbOptionLabel(item: PlatformAsset): string {
+  const active = (item.status ?? '').toUpperCase() === 'ACTIVE';
+  return active ? item.name : `${item.name}（${item.status || '未知状态'}，不可用）`;
+}
+
 const configObject = computed(() => {
   const questions = form.openingQuestions
     .split(/\r?\n/)
@@ -371,6 +387,16 @@ const memorySummaryText = computed(() => {
   const summary = debugResult.value?.memorySummary;
   if (!summary) return '-';
   return `最近 ${summary.memoryTurns ?? '-'} 轮 · 注入 ${summary.injectedLabels?.length ?? 0} 条`;
+});
+
+/** 知识召回摘要（FR-R5-03）：圈定范围 + 本次命中的知识库数；未绑定智能体知识库时返回空串不占位。 */
+const knowledgeSummaryText = computed(() => {
+  const summary = debugResult.value?.knowledgeSummary;
+  if (!summary?.scoped) return '';
+  const boundNames = summary.knowledgeBaseNames ?? [];
+  const recalledCount = summary.recalledKnowledgeBaseIds?.length ?? 0;
+  const boundText = boundNames.length ? boundNames.join('、') : `${summary.knowledgeBaseIds?.length ?? 0} 个`;
+  return `范围：${boundText} · 命中 ${recalledCount} 库`;
 });
 
 function debugStatusTag(status: AgentDebugResult['status']): 'success' | 'warning' | 'danger' {
@@ -720,6 +746,13 @@ onMounted(() => {
 .full-width {
   width: 100%;
 }
+
+.binding-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-muted);
+}
 .mono :deep(textarea) {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 12px;
@@ -784,6 +817,12 @@ onMounted(() => {
 }
 .debug-step small {
   color: var(--ui-muted);
+}
+.debug-step-citations {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
 }
 .debug-meta {
   display: grid;

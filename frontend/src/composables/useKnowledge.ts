@@ -12,6 +12,7 @@ import {
   downloadIngestionOriginalFile,
   getIngestionDocumentContent,
   listIngestionDocuments,
+  listKnowledgeBaseCatalog,
   listRecentIngestionJobs,
   searchIngestionPreview,
   uploadIngestionDocument,
@@ -20,6 +21,7 @@ import type {
   DocumentContent,
   IngestionDocumentSummary,
   IngestionJob,
+  KnowledgeBaseCatalogItem,
   RetrievalPreviewResult,
 } from '../types/react';
 import { isAuthError, shortId } from '../utils/format';
@@ -39,6 +41,12 @@ export const knowledgeDocsTotal = ref(0);
 export const knowledgeDocsPage = ref(1);
 export const knowledgeDocsPageSize = ref(20);
 export const knowledgeDocsSearch = ref('');
+// 知识库目录（FR-R5-01）：上传归属选择 + 文档清单/试搜按库过滤；0 = 不限库
+export const knowledgeCatalog = ref<KnowledgeBaseCatalogItem[]>([]);
+export const knowledgeCatalogLoading = ref(false);
+export const uploadKnowledgeBaseId = ref(0);
+export const docsKnowledgeBaseId = ref(0);
+export const previewKnowledgeBaseId = ref(0);
 // 试搜（检索预览）：只召回不出答案，验证内容能否被检索到
 export const previewQuery = ref('');
 export const previewLoading = ref(false);
@@ -91,6 +99,7 @@ export async function loadKnowledgeDocuments(silent = false): Promise<void> {
       page: knowledgeDocsPage.value,
       pageSize: knowledgeDocsPageSize.value,
       search: knowledgeDocsSearch.value.trim() || undefined,
+      knowledgeBaseId: docsKnowledgeBaseId.value || undefined,
     });
     knowledgeDocuments.value = page.items;
     knowledgeDocsTotal.value = page.total;
@@ -110,8 +119,37 @@ export async function loadKnowledgeDocuments(silent = false): Promise<void> {
   }
 }
 
+/** 加载用户侧知识库目录（ACTIVE 库 + 真实文档统计），上传/过滤/试搜选择器共用。 */
+export async function loadKnowledgeCatalog(silent = false): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    knowledgeCatalog.value = [];
+    return;
+  }
+  if (!silent) {
+    knowledgeCatalogLoading.value = true;
+  }
+  try {
+    knowledgeCatalog.value = await listKnowledgeBaseCatalog(authContext());
+  } catch (error) {
+    if (!isAuthError(error) && !silent) {
+      const message = error instanceof Error ? error.message : '知识库目录加载失败';
+      ElMessage.error(message);
+    }
+  } finally {
+    if (!silent) {
+      knowledgeCatalogLoading.value = false;
+    }
+  }
+}
+
 /** 搜索条件变了要回到第一页，避免停在过滤后的空页上。 */
 export function searchKnowledgeDocuments(): void {
+  knowledgeDocsPage.value = 1;
+  void loadKnowledgeDocuments();
+}
+
+/** 按知识库过滤文档清单：过滤条件变了回到第一页。 */
+export function filterKnowledgeDocumentsByKb(): void {
   knowledgeDocsPage.value = 1;
   void loadKnowledgeDocuments();
 }
@@ -192,7 +230,12 @@ export async function runPreviewSearch(): Promise<void> {
   }
   previewLoading.value = true;
   try {
-    previewResult.value = await searchIngestionPreview(query, authContext(), 6);
+    previewResult.value = await searchIngestionPreview(
+      query,
+      authContext(),
+      6,
+      previewKnowledgeBaseId.value ? [previewKnowledgeBaseId.value] : undefined,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : '试搜失败';
     ElMessage.error(message);
@@ -215,6 +258,15 @@ export function previewSourceLabel(source: string): string {
   return source;
 }
 
+/** 文档清单里的知识库列展示名：目录未加载/已删除时回退为 ID，未归属明示。 */
+export function knowledgeBaseLabel(id?: number | null): string {
+  if (!id) {
+    return '未归属';
+  }
+  const kb = knowledgeCatalog.value.find((item) => item.id === id);
+  return kb ? kb.name : `知识库#${id}`;
+}
+
 // 上传批次的 chatId：doc-年月日-时分秒，知识库页和输入框上传共用
 export function mintIngestionChatId(): string {
   const stamp = new Date();
@@ -225,7 +277,7 @@ export function mintIngestionChatId(): string {
 export async function submitIngestionUpload(
   files: Ref<UploadUserFile[]>,
   loading: Ref<boolean>,
-  opts?: { afterUpload?: (chatId: string) => void },
+  opts?: { afterUpload?: (chatId: string) => void; knowledgeBaseId?: number },
 ): Promise<void> {
   const file = files.value[0]?.raw;
   if (!(file instanceof File)) {
@@ -236,7 +288,7 @@ export async function submitIngestionUpload(
   try {
     // 每次上传独立批次：chatId 用时间戳生成，入库任务按批次隔离
     const chatId = mintIngestionChatId();
-    const result = await uploadIngestionDocument(chatId, file, authContext());
+    const result = await uploadIngestionDocument(chatId, file, authContext(), opts?.knowledgeBaseId);
     ElMessage.success(`已提交入库任务 ${shortId(result.job?.jobId ?? '')}，切分入库需要一点时间`);
     files.value = [];
     opts?.afterUpload?.(chatId);
@@ -255,6 +307,7 @@ export function submitKnowledgeUpload(): Promise<void> {
       void loadKnowledgeDocuments(true);
       startKnowledgePolling();
     },
+    knowledgeBaseId: uploadKnowledgeBaseId.value || undefined,
   });
 }
 

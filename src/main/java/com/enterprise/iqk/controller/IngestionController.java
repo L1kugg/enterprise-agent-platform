@@ -59,12 +59,15 @@ public class IngestionController {
     private final RetrievalPreviewService retrievalPreviewService;
 
     @PostMapping("/upload/{chatId}")
-    /** 上传文档（PDF/DOC/DOCX/MD）创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。 */
+    /** 上传文档（PDF/DOC/DOCX/MD）创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。
+     *  knowledgeBaseId 可选：指定归属知识库（FR-R5-01），服务端校验存在/可见/ACTIVE。 */
     public IngestionSubmitVO uploadDocument(@PathVariable String chatId,
                                             @RequestParam("file") MultipartFile file,
-                                            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+                                            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+                                            @RequestParam(value = "knowledgeBaseId", required = false) Long knowledgeBaseId) {
         String traceId = currentTraceId();
-        IngestionJob job = ingestionService.submitDocument(currentTenantId(), chatId, file, idempotencyKey, traceId);
+        IngestionJob job = ingestionService.submitDocument(currentTenantId(), chatId, file, idempotencyKey, traceId,
+                knowledgeBaseId);
         chatHistoryRepository.save("pdf", chatId);
         return IngestionSubmitVO.builder()
                 .ok(1)
@@ -103,13 +106,15 @@ public class IngestionController {
     }
 
     @GetMapping("/documents")
-    /** 知识库文档清单：本租户内按 chat 分组的文档（每份取最新任务），分页 + 按文件名/批次搜索。 */
+    /** 知识库文档清单：本租户内按 chat 分组的文档（每份取最新任务），分页 + 按文件名/批次搜索。
+     *  knowledgeBaseId 可选：只列归属指定知识库的文档（FR-R5-01）。 */
     public PagedResult<IngestionDocumentVO> listDocuments(
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
-            @RequestParam(value = "search", required = false) String search) {
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "knowledgeBaseId", required = false) Long knowledgeBaseId) {
         PagedResult<IngestionJob> result = ingestionService.listDocumentsByTenant(
-                currentTenantId(), search, page, pageSize);
+                currentTenantId(), search, page, pageSize, knowledgeBaseId);
         List<IngestionDocumentVO> items = result.getItems().stream().map(this::toDocumentVO).toList();
         return new PagedResult<>(items, result.getTotal(), result.getPage(), result.getPageSize());
     }
@@ -121,14 +126,36 @@ public class IngestionController {
     }
 
     @GetMapping("/search")
-    /** 知识库试搜：只走向量/关键词/图谱三条本地检索路返回原始命中，不调 LLM、不出答案。 */
+    /** 知识库试搜：只走向量/关键词/图谱三条本地检索路返回原始命中，不调 LLM、不出答案。
+     *  knowledgeBaseIds 可选（逗号分隔）：只在指定知识库内试搜（FR-R5-01）。 */
     public RetrievalPreviewResult previewSearch(
             @RequestParam("q") String query,
-            @RequestParam(value = "topK", defaultValue = "6") int topK) {
+            @RequestParam(value = "topK", defaultValue = "6") int topK,
+            @RequestParam(value = "knowledgeBaseIds", required = false) String knowledgeBaseIds) {
         if (!StringUtils.hasText(query) || !StringUtils.hasText(query.trim())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query q is required");
         }
-        return retrievalPreviewService.search(currentTenantId(), query.trim(), topK);
+        return retrievalPreviewService.search(currentTenantId(), query.trim(), topK,
+                parseKnowledgeScope(knowledgeBaseIds));
+    }
+
+    /** 逗号分隔知识库 ID 解析为作用域；空白/解析失败（非数字段）按不限库处理。 */
+    private static com.enterprise.iqk.retrieval.KnowledgeScope parseKnowledgeScope(String knowledgeBaseIds) {
+        if (!StringUtils.hasText(knowledgeBaseIds)) {
+            return com.enterprise.iqk.retrieval.KnowledgeScope.unrestricted();
+        }
+        List<Long> ids = new java.util.ArrayList<>();
+        for (String part : knowledgeBaseIds.split(",")) {
+            try {
+                long id = Long.parseLong(part.trim());
+                if (id > 0) {
+                    ids.add(id);
+                }
+            } catch (NumberFormatException ignored) {
+                return com.enterprise.iqk.retrieval.KnowledgeScope.unrestricted();
+            }
+        }
+        return com.enterprise.iqk.retrieval.KnowledgeScope.of(ids);
     }
 
     @DeleteMapping("/documents/{chatId}")
@@ -186,12 +213,13 @@ public class IngestionController {
                 .build();
     }
 
-    /** 领域对象转文档清单视图：附带切片数与磁盘文件大小（缺失为 null，不影响列表）。 */
+    /** 领域对象转文档清单视图：附带知识库归属、切片数与磁盘文件大小（缺失为 null，不影响列表）。 */
     private IngestionDocumentVO toDocumentVO(IngestionJob job) {
         return IngestionDocumentVO.builder()
                 .chatId(job.getChatId())
                 .sourceName(job.getSourceName())
                 .sourceType(job.getSourceType())
+                .knowledgeBaseId(job.getKnowledgeBaseId())
                 .status(job.getStatus())
                 .chunkCount(job.getChunkCount())
                 .fileSize(resolveFileSize(job.getFilePath()))

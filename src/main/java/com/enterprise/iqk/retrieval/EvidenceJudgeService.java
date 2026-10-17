@@ -49,6 +49,7 @@ public class EvidenceJudgeService {
                         .title(doc.getTitle())
                         .url(doc.getUrl())
                         .chunkId(doc.getChunkId())
+                        .knowledgeBaseId(KnowledgeScope.kbIdOf(doc))
                         .score(composite)
                         .reason(buildReason(doc, relevance, authority, timeliness))
                         .relevanceScore(relevance)

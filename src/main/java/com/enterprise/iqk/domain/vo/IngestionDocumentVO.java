@@ -17,6 +17,8 @@ public class IngestionDocumentVO {
     private String chatId;
     private String sourceName;
     private String sourceType;
+    /** 归属知识库资产 ID（FR-R5-01）；null = 未归属，仅租户级检索可见 */
+    private Long knowledgeBaseId;
     private IngestionJobStatus status;
     private Integer chunkCount;
     private Long fileSize;

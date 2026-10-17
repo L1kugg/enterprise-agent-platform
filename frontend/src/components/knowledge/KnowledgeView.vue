@@ -20,6 +20,28 @@
         </p>
       </el-upload>
 
+      <div class="kb-upload-target">
+        <p class="kb-target-label">归属知识库</p>
+        <el-select
+          v-model="uploadKnowledgeBaseId"
+          class="kb-target-select"
+          size="small"
+          placeholder="选择上传目标知识库"
+          :loading="knowledgeCatalogLoading"
+        >
+          <el-option label="不归属（租户内共享检索）" :value="0" />
+          <el-option
+            v-for="kb in knowledgeCatalog"
+            :key="kb.id"
+            :label="`${kb.name}（${kb.fileCount ?? 0} 文档）`"
+            :value="kb.id"
+          />
+        </el-select>
+        <p class="kb-target-hint">
+          指定知识库后，智能体绑定该库即可把召回范围限定在这批文档内。
+        </p>
+      </div>
+
       <el-button
         type="primary"
         :loading="knowledgeUploading"
@@ -46,6 +68,21 @@
       <el-tabs v-model="knowledgeTab" class="kb-tabs">
         <el-tab-pane label="文档清单" name="documents" class="kb-pane">
           <div class="kb-toolbar">
+            <el-select
+              v-model="docsKnowledgeBaseId"
+              class="kb-filter-select"
+              size="small"
+              placeholder="全部知识库"
+              @change="filterKnowledgeDocumentsByKb"
+            >
+              <el-option label="全部知识库" :value="0" />
+              <el-option
+                v-for="kb in knowledgeCatalog"
+                :key="kb.id"
+                :label="kb.name"
+                :value="kb.id"
+              />
+            </el-select>
             <el-input
               v-model="knowledgeDocsSearch"
               class="kb-search-input"
@@ -77,6 +114,18 @@
               </el-table-column>
               <el-table-column label="类型" width="80">
                 <template #default="{ row }">{{ row.sourceType || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="知识库" width="130" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-tag
+                    v-if="row.knowledgeBaseId"
+                    size="small"
+                    effect="plain"
+                    type="info"
+                    >{{ knowledgeBaseLabel(row.knowledgeBaseId) }}</el-tag
+                  >
+                  <span v-else class="kb-unbound">未归属</span>
+                </template>
               </el-table-column>
               <el-table-column label="状态" width="110">
                 <template #default="{ row }">
@@ -162,6 +211,20 @@
         </el-tab-pane>
         <el-tab-pane label="试搜" name="search" class="kb-pane">
           <div class="kb-toolbar">
+            <el-select
+              v-model="previewKnowledgeBaseId"
+              class="kb-filter-select"
+              size="small"
+              placeholder="全部知识库"
+            >
+              <el-option label="全部知识库" :value="0" />
+              <el-option
+                v-for="kb in knowledgeCatalog"
+                :key="kb.id"
+                :label="kb.name"
+                :value="kb.id"
+              />
+            </el-select>
             <el-input
               v-model="previewQuery"
               class="kb-search-input"
@@ -215,6 +278,11 @@
 import { ElMessage } from 'element-plus';
 import DocumentViewerDrawer from './DocumentViewerDrawer.vue';
 import {
+  docsKnowledgeBaseId,
+  filterKnowledgeDocumentsByKb,
+  knowledgeBaseLabel,
+  knowledgeCatalog,
+  knowledgeCatalogLoading,
   knowledgeDocuments,
   knowledgeDocsPage,
   knowledgeDocsPageSize,
@@ -229,6 +297,7 @@ import {
   loadKnowledgeDocuments,
   loadKnowledgeJobs,
   openKnowledgeDocument,
+  previewKnowledgeBaseId,
   previewLoading,
   previewQuery,
   previewResult,
@@ -238,6 +307,7 @@ import {
   runPreviewSearch,
   searchKnowledgeDocuments,
   submitKnowledgeUpload,
+  uploadKnowledgeBaseId,
 } from '../../composables/useKnowledge';
 import { isAdmin } from '../../composables/useAuthState';
 import { formatFileSize, formatJobTime, statusTagType } from '../../utils/format';
@@ -283,6 +353,41 @@ import { formatFileSize, formatJobTime, statusTagType } from '../../utils/format
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--ui-muted);
+}
+
+/* ---------- 上传归属知识库（FR-R5-01） ---------- */
+
+.kb-upload-target {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-target-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.kb-target-select {
+  width: 100%;
+}
+
+.kb-target-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-muted);
+}
+
+.kb-filter-select {
+  width: 150px;
+}
+
+.kb-unbound {
+  font-size: 12px;
   color: var(--ui-muted);
 }
 

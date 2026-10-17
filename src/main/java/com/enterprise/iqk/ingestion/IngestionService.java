@@ -73,9 +73,17 @@ public class IngestionService {
     private final KeywordIndexStore keywordIndexStore;
     private final SimpleVectorStoreSnapshotPersister snapshotPersister;
     private final MemoryService memoryService;
+    /** 上传目标知识库校验与归属（FR-R5-01），校验逻辑在目录服务内闭环 */
+    private final com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService knowledgeBaseCatalogService;
 
-    /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。 */
+    /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。
+     *  knowledgeBaseId 非空时校验知识库资产（本租户可见且 ACTIVE），文档归属该库，检索按库圈定范围（FR-R5-01）。 */
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
+        return submitDocument(tenantId, chatId, file, idempotencyKey, traceId, null);
+    }
+
+    public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file,
+                                       String idempotencyKey, String traceId, Long knowledgeBaseId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         if (!StringUtils.hasText(chatId)) {
             throw new IllegalArgumentException("会话 ID 不能为空");
@@ -83,6 +91,7 @@ public class IngestionService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("请选择要上传的文件");
         }
+        Long resolvedKnowledgeBaseId = knowledgeBaseCatalogService.resolveUploadTarget(normalizedTenantId, knowledgeBaseId);
         fileSafetyScanner.scan(file);
 
         String sourceName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "document";
@@ -100,6 +109,7 @@ public class IngestionService {
                 .jobId(jobId)
                 .tenantId(normalizedTenantId)
                 .chatId(chatId)
+                .knowledgeBaseId(resolvedKnowledgeBaseId)
                 .sourceType(sourceType)
                 .sourceName(sourceName)
                 .filePath(filePath)
@@ -149,19 +159,25 @@ public class IngestionService {
     /**
      * 知识库文档清单：当前租户内按 chat_id 分组、每组取最新一条任务代表一份文档，
      * 分页 + 按文件名/批次模糊搜索。与管理员总览同一套"最新任务代表文档"的语义，但严格限定本租户。
+     * knowledgeBaseId 非空时只列归属该知识库的文档（FR-R5-01 按库过滤）；null = 全部文档。
      */
     public PagedResult<IngestionJob> listDocumentsByTenant(String tenantId, String search, int page, int pageSize) {
+        return listDocumentsByTenant(tenantId, search, page, pageSize, null);
+    }
+
+    public PagedResult<IngestionJob> listDocumentsByTenant(String tenantId, String search, int page, int pageSize,
+                                                           Long knowledgeBaseId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
         String keyword = StringUtils.hasText(search) ? SqlLikeUtils.escapeForLike(search.trim()) : null;
-        long total = ingestionJobMapper.countLatestPerChatByTenant(normalizedTenantId, keyword);
+        long total = ingestionJobMapper.countLatestPerChatByTenant(normalizedTenantId, keyword, knowledgeBaseId);
         if (total == 0) {
             return new PagedResult<>(List.of(), 0, safePage, safePageSize);
         }
         long offset = (long) (safePage - 1) * safePageSize;
         List<IngestionJob> items =
-                ingestionJobMapper.findLatestPerChatByTenant(normalizedTenantId, keyword, offset, safePageSize);
+                ingestionJobMapper.findLatestPerChatByTenant(normalizedTenantId, keyword, offset, safePageSize, knowledgeBaseId);
         return new PagedResult<>(items, total, safePage, safePageSize);
     }
 
@@ -386,7 +402,7 @@ public class IngestionService {
             throw new IllegalStateException("source file missing: " + job.getFilePath());
         }
         List<Document> pages;
-        if (isPdf(job.getSourceName())) {
+        if (job.getSourceName() != null && job.getSourceName().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
             PagePdfDocumentReader reader = new PagePdfDocumentReader(
                     new FileSystemResource(source),
                     PdfDocumentReaderConfig.builder()
@@ -401,26 +417,13 @@ public class IngestionService {
         return splitDocuments(pages, job);
     }
 
-    /** 文件名是否为 PDF（大小写不敏感）；其余后缀走 Tika 分发。 */
-    private boolean isPdf(String sourceName) {
-        return sourceName != null && sourceName.toLowerCase(Locale.ROOT).endsWith(".pdf");
-    }
-
     /** 按文件后缀推导入库来源类型（PDF/DOC/DOCX/MD），未知后缀兜底 OTHER。 */
     private String sourceTypeOf(String sourceName) {
         String lower = sourceName.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".pdf")) {
-            return "PDF";
-        }
-        if (lower.endsWith(".doc")) {
-            return "DOC";
-        }
-        if (lower.endsWith(".docx")) {
-            return "DOCX";
-        }
-        if (lower.endsWith(".md")) {
-            return "MD";
-        }
+        if (lower.endsWith(".pdf")) return "PDF";
+        if (lower.endsWith(".doc")) return "DOC";
+        if (lower.endsWith(".docx")) return "DOCX";
+        if (lower.endsWith(".md")) return "MD";
         return "OTHER";
     }
 
@@ -450,6 +453,10 @@ public class IngestionService {
             metadata.put("source_type", job.getSourceType());
             metadata.put("chunk_index", i);
             metadata.put("created_at", ingestedAt);
+            // 知识库归属（FR-R5-01）：检索侧按此元数据圈定召回范围；未归属文档不写该键
+            if (job.getKnowledgeBaseId() != null) {
+                metadata.put("knowledge_base_id", job.getKnowledgeBaseId());
+            }
             chunk.getMetadata().clear();
             chunk.getMetadata().putAll(metadata);
         }
@@ -486,9 +493,6 @@ public class IngestionService {
 
     /** 错误信息截断到 1000 字符，空消息归一为 unknown error。 */
     private String truncateError(String msg) {
-        if (!StringUtils.hasText(msg)) {
-            return "unknown error";
-        }
-        return msg.length() <= 1000 ? msg : msg.substring(0, 1000);
+        return !StringUtils.hasText(msg) ? "unknown error" : msg.length() <= 1000 ? msg : msg.substring(0, 1000);
     }
 }

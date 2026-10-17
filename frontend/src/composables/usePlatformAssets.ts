@@ -147,14 +147,6 @@ async function loadKnowledgeBaseOptions(): Promise<void> {
   }
 }
 
-export function switchPlatformType(type: PlatformAssetType): void {
-  if (activePlatformType.value === type) return;
-  activePlatformType.value = type;
-  platformPage.value = 1;
-  platformSearch.value = '';
-  void loadPlatformAssets();
-}
-
 export function handlePlatformSearch(): void {
   platformPage.value = 1;
   void loadPlatformAssets();

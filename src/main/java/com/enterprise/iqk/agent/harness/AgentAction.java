@@ -4,6 +4,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -32,7 +33,9 @@ public record AgentAction(
         /** 发起智能体的资产 ID（平台工具运行时据此校验绑定关系；默认助手为 0） */
         Long agentId,
         /** 是否经受信运行时（token 确认流程）发起——只有受信动作需要 */
-        boolean trustedRuntimeAccess
+        boolean trustedRuntimeAccess,
+        /** 发起智能体绑定的知识库 ID 列表（FR-R5-01）：rag_search 据此圈定召回范围；空 = 不限库 */
+        List<Long> knowledgeBaseIds
 ) {
     public AgentAction(String action,
                        Map<String, Object> actionInput,
@@ -42,7 +45,7 @@ public record AgentAction(
                        String modelProfile,
                        String taskId,
                        String stepId) {
-        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, false);
+        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, false, List.of());
     }
 
     public AgentAction(String action,
@@ -54,7 +57,20 @@ public record AgentAction(
                        String taskId,
                        String stepId,
                        boolean trustedRuntimeAccess) {
-        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, trustedRuntimeAccess);
+        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, 0L, trustedRuntimeAccess, List.of());
+    }
+
+    public AgentAction(String action,
+                       Map<String, Object> actionInput,
+                       String prompt,
+                       String tenantId,
+                       String chatId,
+                       String modelProfile,
+                       String taskId,
+                       String stepId,
+                       Long agentId,
+                       boolean trustedRuntimeAccess) {
+        this(action, actionInput, prompt, tenantId, chatId, modelProfile, taskId, stepId, agentId, trustedRuntimeAccess, List.of());
     }
 
     /** 规范化：动作名小写去空白、输入包成只读 Map、空字段统一为空串 */
@@ -70,6 +86,7 @@ public record AgentAction(
         taskId = emptyIfBlank(taskId);
         stepId = emptyIfBlank(stepId);
         agentId = agentId == null ? 0L : agentId;
+        knowledgeBaseIds = knowledgeBaseIds == null ? List.of() : List.copyOf(knowledgeBaseIds);
     }
 
     private static String normalize(String value) {

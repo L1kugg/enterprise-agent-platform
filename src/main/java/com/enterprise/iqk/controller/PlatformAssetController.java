@@ -45,6 +45,7 @@ public class PlatformAssetController {
     private final PlatformSqlTestService sqlTestService;
     private final PlatformAdminService adminService;
     private final AgentDebugService agentDebugService;
+    private final com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService knowledgeBaseCatalogService;
 
     public record AssetUpsertRequest(
             @NotBlank(message = "name is required") String name,
@@ -231,6 +232,40 @@ public class PlatformAssetController {
     @PreAuthorize("hasRole('ADMIN')")
     public PlatformAsset testModel(@PathVariable Long id) {
         return service.testModel(id);
+    }
+
+    /** 知识库真实统计（FR-R5-02）：文件数/解析中/失败/切片数/存储大小/最近完成时间，全部来自 ingestion_job 聚合。 */
+    @GetMapping("/knowledge-bases/{id}/stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public KnowledgeBaseStatsVO knowledgeBaseStats(@PathVariable Long id) {
+        var stats = knowledgeBaseCatalogService.stats(
+                com.enterprise.iqk.security.TenantContext.currentTenantId(), id);
+        return KnowledgeBaseStatsVO.builder()
+                .knowledgeBaseId(stats.getKnowledgeBaseId())
+                .name(stats.getName())
+                .status(stats.getStatus())
+                .fileCount(stats.getFileCount())
+                .parsingCount(stats.getParsingCount())
+                .failedCount(stats.getFailedCount())
+                .chunkCount(stats.getChunkCount())
+                .storageSize(stats.getStorageSize())
+                .lastFinishedAt(stats.getLastFinishedAt())
+                .build();
+    }
+
+    /** 知识库统计视图（管理侧）。 */
+    @lombok.Data
+    @lombok.Builder
+    public static class KnowledgeBaseStatsVO {
+        private Long knowledgeBaseId;
+        private String name;
+        private String status;
+        private long fileCount;
+        private long parsingCount;
+        private long failedCount;
+        private long chunkCount;
+        private long storageSize;
+        private java.time.LocalDateTime lastFinishedAt;
     }
 }
 

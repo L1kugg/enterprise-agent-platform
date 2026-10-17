@@ -85,25 +85,6 @@ export const streamStatusLabel = computed(() => {
   }
 });
 
-export const streamStatusTagType = computed(() => {
-  switch (streamPhase.value) {
-    case 'thinking':
-      return 'warning';
-    case 'tool':
-      return 'success';
-    case 'streaming':
-      return 'primary';
-    case 'done':
-      return 'success';
-    case 'error':
-      return 'danger';
-    case 'stopped':
-      return 'info';
-    default:
-      return 'info';
-  }
-});
-
 export function scheduleStreamReset(): void {
   if (streamResetTimer) {
     window.clearTimeout(streamResetTimer);

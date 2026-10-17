@@ -67,6 +67,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 智能体目录：普通用户挑选可用智能体，权限与聊天写侧一致（只出展示字段）
                     .requestMatchers(HttpMethod.GET, "/ai/agents").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 知识库目录：上传/试搜选择器数据源（FR-R5-01），读侧口径与知识库文档清单一致
+                    .requestMatchers(HttpMethod.GET, "/ai/knowledge-bases").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_READ", "PERM_EVAL_WRITE", "ROLE_ADMIN", "ROLE_OPS")

@@ -135,7 +135,10 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                          @Param("chunkCount") int chunkCount,
                          @Param("updatedAt") LocalDateTime updatedAt);
 
-    /** 知识库文档清单：当前租户内每个 chat_id 取最新一条任务代表一份文档，搜索作用于文件名/批次。 */
+    /**
+     * 知识库文档清单：当前租户内每个 chat_id 取最新一条任务代表一份文档，搜索作用于文件名/批次。
+     * knowledgeBaseId 非空时只列归属该知识库的文档（FR-R5-01）；NULL 表示不限库（含未归属文档）。
+     */
     @Select("""
             <script>
             SELECT * FROM ingestion_job
@@ -143,6 +146,9 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
               AND id IN (
                   SELECT MAX(id) FROM ingestion_job
                   WHERE tenant_id = #{tenantId}
+                  <if test="knowledgeBaseId != null">
+                    AND knowledge_base_id = #{knowledgeBaseId}
+                  </if>
                   GROUP BY chat_id
               )
             <if test="search != null and search != ''">
@@ -158,7 +164,8 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
     List<IngestionJob> findLatestPerChatByTenant(@Param("tenantId") String tenantId,
                                                  @Param("search") String search,
                                                  @Param("offset") long offset,
-                                                 @Param("pageSize") int pageSize);
+                                                 @Param("pageSize") int pageSize,
+                                                 @Param("knowledgeBaseId") Long knowledgeBaseId);
 
     /** 与 findLatestPerChatByTenant 同过滤条件的总数。 */
     @Select("""
@@ -168,6 +175,9 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
               AND id IN (
                   SELECT MAX(id) FROM ingestion_job
                   WHERE tenant_id = #{tenantId}
+                  <if test="knowledgeBaseId != null">
+                    AND knowledge_base_id = #{knowledgeBaseId}
+                  </if>
                   GROUP BY chat_id
               )
             <if test="search != null and search != ''">
@@ -178,7 +188,45 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
             </if>
             </script>
             """)
-    long countLatestPerChatByTenant(@Param("tenantId") String tenantId, @Param("search") String search);
+    long countLatestPerChatByTenant(@Param("tenantId") String tenantId,
+                                    @Param("search") String search,
+                                    @Param("knowledgeBaseId") Long knowledgeBaseId);
+
+    /**
+     * 知识库真实统计（FR-R5-02）：按"最新任务代表文档"口径聚合归属指定知识库的
+     * 文件数（= 文档数）、解析中、失败、切片总数与最近完成时间。
+     * 返回 Map 由服务层转换（MyBatis 对 record 构造映射不可靠）。
+     */
+    @Select("""
+            SELECT
+              COUNT(*) AS file_count,
+              COALESCE(SUM(CASE WHEN status IN ('PENDING','RUNNING','RETRY') THEN 1 ELSE 0 END), 0) AS parsing_count,
+              COALESCE(SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0) AS failed_count,
+              COALESCE(SUM(chunk_count), 0) AS chunk_count,
+              MAX(finished_at) AS last_finished_at
+            FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND id IN (
+                  SELECT MAX(id) FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                    AND knowledge_base_id = #{knowledgeBaseId}
+                  GROUP BY chat_id
+              )
+            """)
+    java.util.Map<String, Object> statsByKnowledgeBaseRaw(
+            @Param("tenantId") String tenantId,
+            @Param("knowledgeBaseId") Long knowledgeBaseId);
+
+    /** 知识库删除时解绑文档（FR-R5-01 删除策略）：数据保留，归属置空回退为未归属。 */
+    @Update("""
+            UPDATE ingestion_job
+            SET knowledge_base_id = NULL, updated_at = #{updatedAt}
+            WHERE tenant_id = #{tenantId}
+              AND knowledge_base_id = #{knowledgeBaseId}
+            """)
+    int clearKnowledgeBase(@Param("tenantId") String tenantId,
+                           @Param("knowledgeBaseId") Long knowledgeBaseId,
+                           @Param("updatedAt") LocalDateTime updatedAt);
 
     /** 管理员跨租户文档总览：每个 (tenant_id, chat_id) 取最新一条任务代表文档状态，搜索作用于展示行。 */
     @Select("""
