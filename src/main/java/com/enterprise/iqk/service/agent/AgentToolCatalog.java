@@ -30,7 +30,9 @@ public class AgentToolCatalog {
 
     /**
      * 生成绑定工具目录段（无绑定时返回空串，调用方不追加任何内容）。
-     * 每行格式：- 工具名（FORM_API，参数：city, date）：描述
+     * 每行格式：- 工具名（FORM_API，必填参数：city, date）：描述；
+     * executionConfirm=true 的工具追加【需人工确认】——模型知道调用后会挂起等审批，
+     * 不要在未获结果时反复重试同一工具。
      */
     public String catalogSection(Long agentId, String tenantId) {
         if (agentId == null || agentId <= 0) {
@@ -48,9 +50,13 @@ public class AgentToolCatalog {
                 if (tool == null || !"ENABLED".equalsIgnoreCase(tool.getStatus())) {
                     continue;
                 }
+                JsonNode config = parseConfig(tool);
                 section.append("- ").append(tool.getName())
-                        .append("（").append(toolTypeOf(tool)).append("）");
-                String required = requiredParams(tool);
+                        .append("（").append(config.path("toolType").asText("FORM_API").toUpperCase()).append("）");
+                if (config.path("executionConfirm").asBoolean(false)) {
+                    section.append("【需人工确认：调用后会挂起等待用户在聊天界面审批，审批后才有结果，勿重复调用】");
+                }
+                String required = requiredParams(config);
                 if (!required.isEmpty()) {
                     section.append("，必填参数：").append(required);
                 }
@@ -69,37 +75,30 @@ public class AgentToolCatalog {
         }
     }
 
-    private String toolTypeOf(PlatformAsset tool) {
+    private JsonNode parseConfig(PlatformAsset tool) {
         try {
-            JsonNode config = objectMapper.readTree(tool.getConfigJson() == null
+            return objectMapper.readTree(tool.getConfigJson() == null
                     || tool.getConfigJson().isBlank() ? "{}" : tool.getConfigJson());
-            return config.path("toolType").asText("FORM_API").toUpperCase();
         } catch (Exception ex) {
-            return "FORM_API";
+            return objectMapper.createObjectNode();
         }
     }
 
     /** 从 params 定义数组提取必填参数名（逗号分隔）。 */
-    private String requiredParams(PlatformAsset tool) {
-        try {
-            JsonNode config = objectMapper.readTree(tool.getConfigJson() == null
-                    || tool.getConfigJson().isBlank() ? "{}" : tool.getConfigJson());
-            JsonNode definitions = config.path("params");
-            StringBuilder names = new StringBuilder();
-            if (definitions.isArray()) {
-                for (JsonNode definition : definitions) {
-                    if (!definition.path("required").asBoolean(false)) {
-                        continue;
-                    }
-                    if (!names.isEmpty()) {
-                        names.append(", ");
-                    }
-                    names.append(definition.path("name").asText());
+    private String requiredParams(JsonNode config) {
+        JsonNode definitions = config.path("params");
+        StringBuilder names = new StringBuilder();
+        if (definitions.isArray()) {
+            for (JsonNode definition : definitions) {
+                if (!definition.path("required").asBoolean(false)) {
+                    continue;
                 }
+                if (!names.isEmpty()) {
+                    names.append(", ");
+                }
+                names.append(definition.path("name").asText());
             }
-            return names.toString();
-        } catch (Exception ex) {
-            return "";
         }
+        return names.toString();
     }
 }

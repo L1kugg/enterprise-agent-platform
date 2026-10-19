@@ -2,9 +2,8 @@ package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.domain.AuditLog;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
-import com.enterprise.iqk.mapper.AgentBindingMapper;
 import com.enterprise.iqk.mapper.AuditLogMapper;
-import com.enterprise.iqk.mapper.PlatformAssetMapper;
+import com.enterprise.iqk.service.platform.PlatformToolInvoker;
 import com.enterprise.iqk.service.platform.ToolInvocationService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,25 +15,26 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
  * 平台工具运行时（R7.3）：处理 tool_call 动作——模型按名字调用**当前智能体绑定的**
- * 平台工具，FORM_API 走真实 HTTP、SQL 走只读执行器、CODE_API 显式拒绝。
+ * 平台工具，FORM_API 走真实 HTTP、SQL 走只读执行器、CODE_API 走 GraalJS 纯计算沙箱。
  * 安全边界：工具必须（1）存在（2）启用（3）确在发起智能体的绑定列表内（agentId 反查，
- * 防越权调用未绑定工具）；工具级 executionConfirm=true 视为需人工确认，确认流程未接入前
- * 保守拒绝。失败一律转 error 观测不抛异常；返回值由 harness 统一消毒截断。
+ * 防越权调用未绑定工具）；工具级 executionConfirm=true 时**挂起待人工确认**——
+ * 创建确认任务返回 pending_confirmation 观测，用户在聊天界面审批后才执行，
+ * 模型不会在未获确认时拿到执行结果。失败一律转 error 观测不抛异常；
+ * 返回值由 harness 统一消毒截断。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class PlatformToolRuntime implements AgentRuntime {
 
-    private final PlatformAssetMapper assetMapper;
-    private final AgentBindingMapper bindingMapper;
+    private final PlatformToolInvoker toolInvoker;
     private final ToolInvocationService toolInvocationService;
+    private final com.enterprise.iqk.service.platform.PlatformToolConfirmationService confirmationService;
     private final AuditLogMapper auditLogMapper;
     private final MeterRegistry meterRegistry;
 
@@ -55,7 +55,7 @@ public class PlatformToolRuntime implements AgentRuntime {
         Map<String, Object> arguments = mapVal(action.actionInput().get("arguments"));
 
         // 绑定校验：发起智能体绑定的工具里找这个名字（默认助手/未带 agentId 一律无绑定可用）
-        PlatformAsset tool = findBoundTool(action.agentId(), action.tenantId(), toolName);
+        PlatformAsset tool = toolInvoker.findBoundTool(action.agentId(), action.tenantId(), toolName);
         if (tool == null) {
             recordMetric(toolName, "not_bound");
             recordAudit(action, toolName, "not_bound");
@@ -66,17 +66,25 @@ public class PlatformToolRuntime implements AgentRuntime {
 
         var config = toolInvocationService.parseToolConfig(tool);
         if (config.path("executionConfirm").asBoolean(false)) {
-            log.info("平台工具需人工确认，确认流程未接入前保守拒绝: agentId={}, tool={}",
-                    action.agentId(), toolName);
-            recordMetric(toolName, "confirm_required");
-            recordAudit(action, toolName, "confirm_required");
-            return AgentObservation.error(source(),
-                    "工具「" + toolName + "」配置为需人工确认，确认流程尚未接入，已拒绝执行",
-                    elapsedMs(startedNs));
+            var pending = confirmationService.create(action.agentId(), action.tenantId(),
+                    action.chatId(), tool, arguments);
+            log.info("平台工具需人工确认，已挂起待审: agentId={}, tool={}, confirmationId={}",
+                    action.agentId(), toolName, pending.getId());
+            recordMetric(toolName, "confirm_pending");
+            recordAudit(action, toolName, "confirm_pending");
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("status", "pending_confirmation");
+            payload.put("confirmationId", pending.getId());
+            payload.put("tool", toolName);
+            payload.put("toolId", tool.getId());
+            payload.put("arguments", arguments);
+            payload.put("expiresAt", pending.getExpiresAt().toString());
+            payload.put("message", "工具「" + toolName + "」需用户确认后才执行，请在聊天界面审批或取消");
+            return AgentObservation.success(source(), payload, elapsedMs(startedNs));
         }
 
         try {
-            Map<String, Object> result = toolInvocationService.invoke(config, arguments);
+            Map<String, Object> result = toolInvoker.invoke(tool, config, arguments);
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("tool", toolName);
             payload.put("toolId", tool.getId());
@@ -91,35 +99,6 @@ public class PlatformToolRuntime implements AgentRuntime {
             return AgentObservation.error(source(),
                     "工具调用失败：" + rootMessage(ex), elapsedMs(startedNs));
         }
-    }
-
-    /**
-     * 在发起智能体的绑定列表内按名字找工具：
-     * agent_tool_binding（tenant+agent 界内）→ 逐个 mapper 原始读取（不过脱敏，credential 保真）→
-     * 名字精确匹配（忽略大小写）且 ENABLED。绑定行为空或全不匹配返回 null（上层报未绑定）。
-     */
-    private PlatformAsset findBoundTool(Long agentId, String tenantId, String toolName) {
-        if (agentId == null || agentId <= 0 || !StringUtils.hasText(toolName)) {
-            return null;
-        }
-        List<Long> toolIds;
-        try {
-            toolIds = bindingMapper.findByAgent("agent_tool_binding", tenantId, agentId)
-                    .stream().map(row -> row.getResourceId()).toList();
-        } catch (Exception ex) {
-            log.warn("读取智能体工具绑定失败: agentId={}, reason={}", agentId, ex.toString());
-            return null;
-        }
-        for (Long toolId : toolIds) {
-            PlatformAsset tool = assetMapper.findByIdAndTypeVisible(toolId, tenantId, "tools");
-            if (tool == null || !"ENABLED".equalsIgnoreCase(tool.getStatus())) {
-                continue;
-            }
-            if (toolName.equalsIgnoreCase(tool.getName())) {
-                return tool;
-            }
-        }
-        return null;
     }
 
     /** 计数器：按工具与结局打标（not_bound/confirm_required 属策略拒绝面）。 */

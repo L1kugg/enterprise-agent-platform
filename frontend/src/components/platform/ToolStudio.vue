@@ -149,13 +149,12 @@
             show-icon
             :closable="false"
             class="form-alert"
-            title="代码在服务端沙箱执行"
-            description="限制 CPU、内存、执行时间、网络与文件系统访问；凭据通过受控注入，不允许写入代码明文。前端不执行任何代码。"
+            title="代码在服务端沙箱执行（纯计算）"
+            description="GraalJS 隔离环境：无网络、无文件系统、无 Java/进程/环境变量访问；语句数上限防死循环 + 超时中断；返回值超 16KB 截断。调用参数以 input 对象注入，return 结果（或给 output 赋值）即为工具输出。前端不执行任何代码。"
           />
           <el-form-item label="运行语言" required>
             <el-select v-model="form.language" class="half-width">
-              <el-option label="JavaScript" value="JAVASCRIPT" />
-              <el-option label="Python" value="PYTHON" />
+              <el-option label="JavaScript（沙箱唯一支持）" value="JAVASCRIPT" />
             </el-select>
           </el-form-item>
           <el-form-item label="工具代码" required>
@@ -165,7 +164,7 @@
               :rows="14"
               spellcheck="false"
               class="mono"
-              placeholder="// 入口函数：export default async function handler(input, context)"
+              placeholder="// 示例：const rate = Number(input.rate); return { cny: Number(input.amount) * rate }"
             />
           </el-form-item>
           <el-form-item label="执行超时（毫秒）">

@@ -791,6 +791,46 @@ export async function listKnowledgeBaseCatalog(auth?: AuthContext): Promise<Know
   return payload;
 }
 
+/** 平台工具人工确认审批（R7.3）：CAS 抢占 PENDING 后真实执行，返回执行结果或失败文案。 */
+export async function approveToolConfirmation(
+  id: number,
+  auth?: AuthContext,
+): Promise<{ status: string; result?: unknown; message?: string }> {
+  const response = await fetch(
+    resolveApi(`/ai/agent-tool-confirmations/${encodeURIComponent(id)}/approve`),
+    {
+      credentials: 'include',
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<{ status: string; result?: unknown; message?: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.message ?? '确认审批失败');
+  }
+  return payload;
+}
+
+/** 平台工具人工确认取消：PENDING → CANCELLED。 */
+export async function cancelToolConfirmation(
+  id: number,
+  auth?: AuthContext,
+): Promise<{ status: string }> {
+  const response = await fetch(
+    resolveApi(`/ai/agent-tool-confirmations/${encodeURIComponent(id)}/cancel`),
+    {
+      credentials: 'include',
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<{ status: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '取消失败');
+  }
+  return payload;
+}
+
 /** 文档内容预览：后端重解析磁盘原文件返回切片文本块（超长已截断）。 */
 export async function getIngestionDocumentContent(
   chatId: string,

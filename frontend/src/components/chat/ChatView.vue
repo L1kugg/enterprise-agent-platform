@@ -164,6 +164,76 @@
                             }}</pre>
                           </div>
                         </details>
+                        <!-- 平台工具人工确认卡片（R7.3）：高危工具挂起时在此审批/取消 -->
+                        <div v-if="pendingConfirmationOf(ts)" class="tool-confirm-card">
+                          <div class="tool-confirm-head">
+                            <span class="trace-field-label">⚠️ 工具待人工确认</span>
+                            <el-tag size="small" type="warning">{{
+                              pendingConfirmationOf(ts)!.tool
+                            }}</el-tag>
+                          </div>
+                          <p class="tool-confirm-msg">{{ pendingConfirmationOf(ts)!.message }}</p>
+                          <pre class="tool-confirm-args">{{
+                            JSON.stringify(pendingConfirmationOf(ts)!.arguments, null, 2)
+                          }}</pre>
+                          <div
+                            v-if="confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).state === 'pending'"
+                            class="tool-confirm-actions"
+                          >
+                            <el-button
+                              size="small"
+                              type="primary"
+                              :loading="
+                                confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).loading
+                              "
+                              @click="approveToolConfirm(pendingConfirmationOf(ts)!.confirmationId)"
+                              >确认执行</el-button
+                            >
+                            <el-button
+                              size="small"
+                              :loading="
+                                confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).loading
+                              "
+                              @click="cancelToolConfirm(pendingConfirmationOf(ts)!.confirmationId)"
+                              >取消</el-button
+                            >
+                          </div>
+                          <el-alert
+                            v-else-if="
+                              confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).state ===
+                              'executed'
+                            "
+                            type="success"
+                            show-icon
+                            :closable="false"
+                            title="已确认并执行"
+                            :description="
+                              JSON.stringify(
+                                confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).result,
+                                null,
+                                2,
+                              )
+                            "
+                          />
+                          <el-alert
+                            v-else-if="
+                              confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).state ===
+                              'failed'
+                            "
+                            type="error"
+                            show-icon
+                            :closable="false"
+                            title="执行失败"
+                            :description="confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).message"
+                          />
+                          <el-alert
+                            v-else
+                            type="info"
+                            show-icon
+                            :closable="false"
+                            title="已取消该工具调用"
+                          />
+                        </div>
                         <!-- 检索召回路色条：照后端观测里当次实际生效的权重绘制（无 weights 数据不画） -->
                         <div v-if="retrievalLanes(ts)" class="trace-retrieval-lanes">
                           <span class="trace-field-label">检索召回路（当次实际）</span>
@@ -440,6 +510,12 @@ import {
   selectedAgent,
   selectedAgentId,
 } from '../../composables/useAgentCatalog';
+import {
+  approveToolConfirm,
+  cancelToolConfirm,
+  confirmStateOf,
+  pendingConfirmationOf,
+} from '../../composables/useToolConfirmation';
 
 // 选中智能体的引导问题（空列表时不渲染 chips，退回纯文案）
 const agentOpeningQuestions = computed(
@@ -939,6 +1015,49 @@ onMounted(() => {
 .badge-error {
   background: #f59e0b;
 }
+/* ---------- 平台工具人工确认卡片（R7.3） ---------- */
+
+.tool-confirm-card {
+  margin-top: 8px;
+  border: 1px solid color-mix(in oklab, var(--el-color-warning) 45%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--el-color-warning) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-confirm-msg {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-text);
+}
+
+.tool-confirm-args {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--ui-panel);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .trace-field-label {
   font-size: 10px;
   font-weight: 700;

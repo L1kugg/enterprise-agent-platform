@@ -1,13 +1,17 @@
 package com.enterprise.iqk.agent.harness;
 
+import com.enterprise.iqk.domain.AgentToolConfirmationRecord;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.mapper.AgentBindingMapper;
+import com.enterprise.iqk.mapper.AgentToolConfirmationMapper;
 import com.enterprise.iqk.mapper.AuditLogMapper;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
+import com.enterprise.iqk.service.platform.PlatformToolInvoker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -17,9 +21,11 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,14 +40,22 @@ class PlatformToolRuntimeTest {
     @Mock
     private AuditLogMapper auditLogMapper;
 
-    /** 真实服务实例的 spy：parseToolConfig 走真实逻辑，仅 stub invoke（不发真实 HTTP/SQL）。 */
+    @Mock
+    private AgentToolConfirmationMapper confirmationMapper;
+
+    /** 真实服务实例的 spy：parseToolConfig 走真实逻辑，仅 stub invoke（不发真实 HTTP/SQL/沙箱）。 */
     private final com.enterprise.iqk.service.platform.ToolInvocationService invocation =
             org.mockito.Mockito.spy(new com.enterprise.iqk.service.platform.ToolInvocationService(
                     mock(com.enterprise.iqk.service.platform.PlatformSqlTestService.class),
+                    mock(com.enterprise.iqk.service.platform.CodeToolSandboxService.class),
                     new ObjectMapper()));
 
     private PlatformToolRuntime runtime() {
-        return new PlatformToolRuntime(assetMapper, bindingMapper, invocation, auditLogMapper,
+        PlatformToolInvoker invoker = new PlatformToolInvoker(assetMapper, bindingMapper, invocation);
+        com.enterprise.iqk.service.platform.PlatformToolConfirmationService confirmationService =
+                new com.enterprise.iqk.service.platform.PlatformToolConfirmationService(
+                        confirmationMapper, invoker, invocation, new ObjectMapper());
+        return new PlatformToolRuntime(invoker, invocation, confirmationService, auditLogMapper,
                 new SimpleMeterRegistry());
     }
 
@@ -112,16 +126,29 @@ class PlatformToolRuntimeTest {
     }
 
     @Test
-    void refusesExecutionConfirmToolsConservatively() {
+    void confirmRequiredToolSuspendsIntoPendingTaskInsteadOfExecuting() {
         bindTools(7L, 9L);
         when(assetMapper.findByIdAndTypeVisible(9L, "t-1", "tools"))
                 .thenReturn(toolAsset(9L, "高危工具", "{\"toolType\":\"FORM_API\",\"executionConfirm\":true}"));
+        doAnswer(invocation -> {
+            invocation.getArgument(0, AgentToolConfirmationRecord.class).setId(55L);
+            return 1;
+        }).when(confirmationMapper).insert(any(AgentToolConfirmationRecord.class));
 
-        AgentObservation observation = runtime().execute(toolCallAction(7L, "高危工具", Map.of()));
+        AgentObservation observation = runtime().execute(toolCallAction(7L, "高危工具", Map.of("amount", 100)));
 
+        // 高危工具不再保守拒绝：挂起为待确认任务（观测 status=pending_confirmation，前端按此渲染审批卡片）
         Map<String, Object> map = observation.toMap();
-        assertThat(map).containsEntry("status", "error");
-        assertThat(String.valueOf(map.get("message"))).contains("人工确认");
+        assertThat(map).containsEntry("status", "pending_confirmation");
+        assertThat(map).containsEntry("confirmationId", 55L);
+        assertThat(map).containsEntry("tool", "高危工具");
+        assertThat(String.valueOf(map.get("message"))).contains("确认");
+        // 参数快照原样落库，审批后按快照执行
+        ArgumentCaptor<AgentToolConfirmationRecord> captor =
+                ArgumentCaptor.forClass(AgentToolConfirmationRecord.class);
+        verify(confirmationMapper).insert(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo("PENDING");
+        assertThat(captor.getValue().getArgumentsJson()).contains("amount");
     }
 
     @Test

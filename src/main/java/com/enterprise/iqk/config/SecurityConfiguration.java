@@ -65,6 +65,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/auth/api-keys/**").hasAnyAuthority("PERM_AUTH_KEY_MANAGE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/chat", "/ai/chat/stream", "/ai/service").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 平台工具人工确认（R7.3）：高危工具审批/取消与会话写侧同权限
+                    .requestMatchers(HttpMethod.POST, "/ai/agent-tool-confirmations/**").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 智能体目录：普通用户挑选可用智能体，权限与聊天写侧一致（只出展示字段）
                     .requestMatchers(HttpMethod.GET, "/ai/agents").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 知识库目录：上传/试搜选择器数据源（FR-R5-01），读侧口径与知识库文档清单一致

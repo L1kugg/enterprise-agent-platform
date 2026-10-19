@@ -39,6 +39,8 @@
         <spring-security.version>6.5.9</spring-security.version>
         <spring-framework.version>6.2.11</spring-framework.version>
         <mcp-sdk.version>1.1.4</mcp-sdk.version>
+        <!-- GraalJS 社区版：CODE_API 工具沙箱执行引擎（无主机访问/无 IO/无进程，语句数+超时双限制） -->
+        <graalvm-polyglot.version>24.1.2</graalvm-polyglot.version>
     </properties>
     <dependencies>
         <dependency>
@@ -78,6 +80,21 @@
             <groupId>io.modelcontextprotocol.sdk</groupId>
             <artifactId>mcp-json-jackson2</artifactId>
             <version>${mcp-sdk.version}</version>
+        </dependency>
+        <!-- GraalJS 沙箱（CODE_API 工具，R7.2）：Community 版内嵌于普通 Hotspot JVM 运行。
+             polyglot 是核心 API（Context/ResourceLimits），js-community 是 JS 引擎实现。
+             沙箱策略：allowHostAccess(NONE)/allowIO(NONE)/allowCreateProcess(NONE)，
+             脚本只能做纯计算——网络/文件/环境变量/Java 类全部不可达。 -->
+        <dependency>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>polyglot</artifactId>
+            <version>${graalvm-polyglot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>js-community</artifactId>
+            <version>${graalvm-polyglot.version}</version>
+            <type>pom</type>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
