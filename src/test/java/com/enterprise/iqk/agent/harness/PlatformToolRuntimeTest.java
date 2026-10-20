@@ -191,6 +191,37 @@ class PlatformToolRuntimeTest {
     }
 
     @Test
+    void typeSuffixAppendedByModelIsToleratedWhenUnique() throws Exception {
+        // 生产实证（2026-10-20）：模型从工具目录行解析名字时把类型括号一起带上（「汇率查询（FORM_API）」），
+        // 精确匹配失败被误报未绑定。唯一候选时按去后缀归一化宽容匹配。
+        bindTools(7L, 4L);
+        when(assetMapper.findByIdAndTypeVisible(4L, "t-1", "tools"))
+                .thenReturn(toolAsset(4L, "汇率查询", "{\"toolType\":\"FORM_API\"}"));
+        doReturn(Map.of("status", 200)).when(invocation).invoke(any(), any());
+
+        AgentObservation observation = runtime().execute(
+                toolCallAction(7L, "汇率查询（FORM_API）", Map.of()));
+
+        assertThat(observation.toMap()).containsEntry("status", "success");
+        assertThat(observation.toMap()).containsEntry("tool", "汇率查询");
+    }
+
+    @Test
+    void ambiguousLooseMatchDoesNotGuess() throws Exception {
+        // 宽容匹配命中多个绑定工具时不猜，仍报未绑定（避免误调别的工具）
+        bindTools(7L, 4L, 6L);
+        when(assetMapper.findByIdAndTypeVisible(4L, "t-1", "tools"))
+                .thenReturn(toolAsset(4L, "汇率查询", "{\"toolType\":\"FORM_API\"}"));
+        when(assetMapper.findByIdAndTypeVisible(6L, "t-1", "tools"))
+                .thenReturn(toolAsset(6L, "汇率查询加强版", "{\"toolType\":\"FORM_API\"}"));
+
+        AgentObservation observation = runtime().execute(toolCallAction(7L, "汇率查询（FORM_API）", Map.of()));
+
+        assertThat(observation.toMap()).containsEntry("status", "error");
+        assertThat(String.valueOf(observation.toMap().get("message"))).contains("未绑定");
+    }
+
+    @Test
     void unknownActionFieldsAreGuardedBySchema() {
         // 守卫层测试点：tool_call 的 schema 外字段（如 secret 注入）必须被拒——此处验证注册表形状
         var registry = new ActionSchemaRegistry();

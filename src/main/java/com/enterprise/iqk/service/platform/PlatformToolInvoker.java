@@ -29,7 +29,9 @@ public class PlatformToolInvoker {
     /**
      * 在发起智能体的绑定列表内按名字找工具：
      * agent_tool_binding（tenant+agent 界内）→ 逐个 mapper 原始读取（不过脱敏，credential 保真）→
-     * 名字精确匹配（忽略大小写）且 ENABLED。绑定行为空或全不匹配返回 null（上层报未绑定）。
+     * 先精确匹配（忽略大小写），未中再做**宽容匹配**——模型从工具目录行解析名字时可能把
+     * 类型括号一起带上（实证：「汇率查询（FORM_API）」），去掉括号后缀归一化后比对；
+     * 宽容匹配命中多个时不猜（避免误调），返回 null 让上层报未绑定。
      */
     public PlatformAsset findBoundTool(Long agentId, String tenantId, String toolName) {
         if (agentId == null || agentId <= 0 || !StringUtils.hasText(toolName)) {
@@ -43,16 +45,44 @@ public class PlatformToolInvoker {
             log.warn("读取智能体工具绑定失败: agentId={}, reason={}", agentId, ex.toString());
             return null;
         }
+        List<PlatformAsset> enabledTools = new java.util.ArrayList<>();
         for (Long toolId : toolIds) {
             PlatformAsset tool = assetMapper.findByIdAndTypeVisible(toolId, tenantId, "tools");
-            if (tool == null || !"ENABLED".equalsIgnoreCase(tool.getStatus())) {
-                continue;
-            }
-            if (toolName.equalsIgnoreCase(tool.getName())) {
-                return tool;
+            if (tool != null && "ENABLED".equalsIgnoreCase(tool.getStatus())) {
+                if (toolName.equalsIgnoreCase(tool.getName())) {
+                    return tool;
+                }
+                enabledTools.add(tool);
             }
         }
-        return null;
+        List<PlatformAsset> looseMatches = enabledTools.stream()
+                .filter(tool -> matchesLoosely(tool.getName(), toolName))
+                .toList();
+        return looseMatches.size() == 1 ? looseMatches.get(0) : null;
+    }
+
+    /** 宽容匹配：去掉全角/半角括号及其后的类型后缀，归一化后互相前缀比对。 */
+    static boolean matchesLoosely(String boundName, String modelName) {
+        String bound = stripTypeSuffix(boundName).toLowerCase();
+        String model = stripTypeSuffix(modelName).toLowerCase();
+        if (bound.isEmpty() || model.isEmpty()) {
+            return false;
+        }
+        return bound.equals(model) || bound.startsWith(model) || model.startsWith(bound);
+    }
+
+    /** 截掉第一个全角/半角左括号及其后的全部内容并 trim（「汇率查询（FORM_API）」→「汇率查询」）。 */
+    private static String stripTypeSuffix(String name) {
+        if (name == null) {
+            return "";
+        }
+        int cut = name.indexOf('(');
+        int full = name.indexOf('（');
+        if (full >= 0 && (cut < 0 || full < cut)) {
+            cut = full;
+        }
+        String result = cut >= 0 ? name.substring(0, cut) : name;
+        return result.trim();
     }
 
     /** 按 config 真实执行（测试/运行时/审批执行同一入口）。 */

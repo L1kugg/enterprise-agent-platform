@@ -58,7 +58,7 @@ public class PlatformToolRuntime implements AgentRuntime {
         PlatformAsset tool = toolInvoker.findBoundTool(action.agentId(), action.tenantId(), toolName);
         if (tool == null) {
             recordMetric(toolName, "not_bound");
-            recordAudit(action, toolName, "not_bound");
+            recordAudit(action, toolName, "not_bound", elapsedMs(startedNs));
             return AgentObservation.error(source(),
                     "工具未绑定或不存在：" + toolName + "（只能调用规划器提示词列出的绑定工具）",
                     elapsedMs(startedNs));
@@ -71,11 +71,12 @@ public class PlatformToolRuntime implements AgentRuntime {
             log.info("平台工具需人工确认，已挂起待审: agentId={}, tool={}, confirmationId={}",
                     action.agentId(), toolName, pending.getId());
             recordMetric(toolName, "confirm_pending");
-            recordAudit(action, toolName, "confirm_pending");
+            recordAudit(action, toolName, "confirm_pending", elapsedMs(startedNs));
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("status", "pending_confirmation");
             payload.put("confirmationId", pending.getId());
-            payload.put("tool", toolName);
+            // 回显绑定工具的规范名（模型传入名可能带类型后缀，已宽容匹配）
+            payload.put("tool", tool.getName());
             payload.put("toolId", tool.getId());
             payload.put("arguments", arguments);
             payload.put("expiresAt", pending.getExpiresAt().toString());
@@ -86,16 +87,16 @@ public class PlatformToolRuntime implements AgentRuntime {
         try {
             Map<String, Object> result = toolInvoker.invoke(tool, config, arguments);
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("tool", toolName);
+            payload.put("tool", tool.getName());
             payload.put("toolId", tool.getId());
             payload.put("result", result);
             recordMetric(toolName, "success");
-            recordAudit(action, toolName, "success");
+            recordAudit(action, toolName, "success", elapsedMs(startedNs));
             return AgentObservation.success(source(), payload, elapsedMs(startedNs));
         } catch (Exception ex) {
             log.warn("平台工具调用失败: agentId={}, tool={}, reason={}", action.agentId(), toolName, ex.toString());
             recordMetric(toolName, "error");
-            recordAudit(action, toolName, "error");
+            recordAudit(action, toolName, "error", elapsedMs(startedNs));
             return AgentObservation.error(source(),
                     "工具调用失败：" + rootMessage(ex), elapsedMs(startedNs));
         }
@@ -112,7 +113,7 @@ public class PlatformToolRuntime implements AgentRuntime {
     }
 
     /** 聊天路径留痕（R7.3"工具结果写入调用日志"）：每次执行落一条审计；失败只告警不影响执行。 */
-    private void recordAudit(AgentAction action, String toolName, String outcome) {
+    private void recordAudit(AgentAction action, String toolName, String outcome, long latencyMs) {
         try {
             auditLogMapper.insert(AuditLog.builder()
                     .requestId(MDC.get("request_id"))
@@ -122,6 +123,7 @@ public class PlatformToolRuntime implements AgentRuntime {
                     .method("TOOL_CALL")
                     .path("/agent-runtime/tool-call/" + toolName)
                     .statusCode("success".equals(outcome) ? 200 : 500)
+                    .durationMs(latencyMs)
                     .chatId(action.chatId())
                     .extraPayload("agentId=%s,outcome=%s".formatted(action.agentId(), outcome))
                     .createdAt(LocalDateTime.now())

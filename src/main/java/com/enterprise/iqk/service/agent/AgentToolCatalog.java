@@ -68,7 +68,9 @@ public class AgentToolCatalog {
             if (section.isEmpty()) {
                 return "";
             }
-            return "当前智能体绑定的可用平台工具（tool_call 动作，tool 填工具名）：\n" + section;
+            return "当前智能体绑定的可用平台工具（tool_call 动作，tool 填工具名）：\n"
+                    + "注意：tool 参数必须严格填每行开头的名称本身，不要带上括号、类型标注或参数说明。\n"
+                    + section;
         } catch (Exception ex) {
             log.warn("生成绑定工具目录失败（不阻断会话）: agentId={}, reason={}", agentId, ex.toString());
             return "";
