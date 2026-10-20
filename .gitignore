@@ -81,3 +81,5 @@ dist/
 
 # Local agent workspace memory
 .workbuddy/
+.claude/
+.zcode/

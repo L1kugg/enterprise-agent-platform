@@ -13,11 +13,9 @@
 
 Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、**可视化平台工作台（智能体/工作流/工具/安全防护/模型服务编排）**、**知识库运行时绑定**、**代码沙箱工具与高危工具人工确认**、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
 
-> 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、平台工作台（智能体/工作流/工具/安全防护编排）、知识库运行时绑定、代码沙箱工具与人工确认、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
+> 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
 
-![RAG Evaluation Studio report](docs/assets/evaluation-report-studio.png)
 
-![Enterprise Agent Platform demo](docs/assets/screenshots/demo.gif)
 
 ## 为什么它不止是一个 Demo
 
@@ -42,11 +40,11 @@ Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring A
 | API 面 | Swagger UI、curl 示例、chat/RAG/ingestion/auth/audit/platform 端点 |
 | 运维面 | 健康检查、Prometheus 指标、端到端产物、回归报告、容器镜像 |
 
-![RAG answer with citations](docs/assets/rag-answer-citations.png)
+
 
 ## 架构一览
 
-![Enterprise Agent Platform architecture](docs/assets/architecture-overview.svg)
+
 
 ## 5 分钟验证路径
 
@@ -157,7 +155,7 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 | 可部署的完整技术栈 | Spring Boot API、Vue 控制台、MySQL、Redis/RabbitMQ、pgvector、Docker Compose | 通常只有 API 或 notebook 级别 | 通常只聚焦单个框架特性 |
 | 租户感知的安全 | API Key、JWT、Refresh Token、RBAC、由认证身份派生的租户范围、审计日志、限流 | 很少包含 | 为清晰起见通常省略 |
 | 异步入库 | Redis Stream 或 RabbitMQ 队列、重试、DLQ、幂等、任务状态 | 常为同步上传与解析 | 通常随示例而定 |
-| RAG 生产化路径 | 租户隔离检索、绑定知识库圈定召回、引用（含知识库溯源）、切片、重排器扩展点（默认恒等实现）、pgvector 索引 | 基础向量查询 | 演示核心 API 用法 |
+| RAG 生产化路径 | 租户隔离检索、引用、切片、重排器扩展点（默认恒等实现）、pgvector 索引 | 基础向量查询 | 演示核心 API 用法 |
 | 可观测性 | Prometheus、Loki、Tempo、Alertmanager、结构化日志、运维手册 | 通常缺失 | 极少或依赖外部 |
 | 质量门禁 | 全模块 JaCoCo 门禁、MySQL/Flyway 启动测试、评测器契约测试、真实 API 评测、k6 脚本 | 人工验证 | 因示例而异 |
 
@@ -375,7 +373,6 @@ docker compose up --build -d
 - `enterprise-agent-platform-mysql`
 - `enterprise-agent-platform-redis`
 - `enterprise-agent-platform-rabbitmq`
-- `enterprise-agent-platform-pgvector`（向量检索）
 - `enterprise-agent-platform-tempo-lite`
 - `enterprise-agent-platform-web`（Vue3 + Element Plus + Nginx）
 
@@ -700,12 +697,6 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] 证据评分与引用溯源（三维评分 + 编号引用）
 - [x] 知识图谱（kg_entity/kg_relation/kg_fact + GraphRetriever）
 - [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆，读写闭环接入生成链路 + `/ai/memory` REST）
-- [x] 智能体运行时闭环（agentId 驱动会话、绑定模型路由、记忆裁剪、安全拦截、调用日志与调试面板）
-- [x] 平台资产工作台（七类资产 CRUD + 系统共享 scope + 用户/角色管理）
-- [x] 工作流可视化编排（拖拽画布/协议校验/导入导出/试运行/上下线）
-- [x] 工具结构化配置与执行（FORM_API 映射重试 / SQL 只读 / CODE_API GraalJS 沙箱 + 高危工具人工确认）
-- [x] 知识库运行时绑定（上传归属知识库、召回按库圈定、真实统计与用户侧目录、引用溯源）
-- [x] 会话上下文窗口治理（窗口显式化 + Token 预算裁剪 + RAG 上下文瘦身）
 - [x] 安全响应头 + CORS 白名单
 - [x] 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）
 - [x] Resilience4j 熔断/重试/超时接入 LLM 调用链（`llm.ModelCallGuard` 编程式装饰，6 个调用点按场景独立熔断）
@@ -713,13 +704,9 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
 - [x] 前端工程化（ESLint / Prettier / vue-tsc）
 - [x] Grafana 预置仪表盘 + 增强告警规则
-- [ ] 敏感字段密文存储（当前模型 API Key/数据库密码/工具凭据明文入库，响应侧掩码）
-- [ ] 资源级授权（角色绑定具体智能体/知识库/工具，当前为前端占位）
-- [ ] 智能体版本化发布与回滚（发布记录/版本号）
-- [ ] 知识库分段治理（切片查看/编辑/拆分合并/重建向量）
-- [ ] 引用可点击跳转原文片段
-- [ ] 检索重排策略可插拔实现（LLM-as-reranker）
 - [ ] tianji-ai-agent Enterprise Agent PlatformClient 端到端联调
+- [ ] 检索重排策略可插拔实现（LLM-as-reranker）
+- [ ] Memory REST API 与默认 Agent/RAG 主链路接入
 - [ ] Redis/其他共享后端的分布式限流
 - [ ] 评测数据集（路由准确率、检索命中率、证据质量）
 - [ ] 企业 SSO（OIDC/SAML）接入
