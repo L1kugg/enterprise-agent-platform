@@ -14,23 +14,19 @@ import java.util.Map;
 @Mapper
 public interface AgentInvocationLogMapper extends BaseMapper<AgentInvocationLogRecord> {
 
-    String SUMMARY_COLUMNS = """
-            COUNT(*) AS total,
-            SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS success_count,
-            SUM(CASE WHEN status = 'BLOCKED' THEN 1 ELSE 0 END) AS blocked_count,
-            SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END) AS error_count,
-            COALESCE(ROUND(AVG(NULLIF(latency_ms, 0))), 0) AS avg_latency_ms,
-            COALESCE(MAX(latency_ms), 0) AS max_latency_ms,
-            COALESCE(SUM(input_tokens), 0) AS input_tokens,
-            COALESCE(SUM(output_tokens), 0) AS output_tokens,
-            COALESCE(SUM(CASE WHEN fallback_applied = 1 THEN 1 ELSE 0 END), 0) AS fallback_count,
-            MIN(created_at) AS first_invocation_at,
-            MAX(created_at) AS last_invocation_at
-            """;
-
     /** 汇总统计：无数据返回一行全 0（服务层判 total=0 走空态）。 */
     @Select("""
-            SELECT """ + SUMMARY_COLUMNS + """
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS success_count,
+                   SUM(CASE WHEN status = 'BLOCKED' THEN 1 ELSE 0 END) AS blocked_count,
+                   SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END) AS error_count,
+                   COALESCE(ROUND(AVG(NULLIF(latency_ms, 0))), 0) AS avg_latency_ms,
+                   COALESCE(MAX(latency_ms), 0) AS max_latency_ms,
+                   COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                   COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                   COALESCE(SUM(CASE WHEN fallback_applied = 1 THEN 1 ELSE 0 END), 0) AS fallback_count,
+                   MIN(created_at) AS first_invocation_at,
+                   MAX(created_at) AS last_invocation_at
             FROM agent_invocation_log
             WHERE tenant_id = #{tenantId} AND agent_id = #{agentId}
               AND created_at >= #{since}
