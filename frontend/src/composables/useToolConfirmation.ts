@@ -58,8 +58,11 @@ export function confirmStateOf(id: number): ConfirmationState {
   return confirmStates[id];
 }
 
-/** 审批并执行：EXECUTED 展示结果，FAILED 展示失败文案。 */
-export async function approveToolConfirm(id: number): Promise<void> {
+/** 审批并执行：EXECUTED 展示结果并触发回流回调，FAILED 展示失败文案。 */
+export async function approveToolConfirm(
+  id: number,
+  opts?: { onExecuted?: (resultJson: string) => void },
+): Promise<void> {
   const state = confirmStateOf(id);
   state.loading = true;
   try {
@@ -68,6 +71,10 @@ export async function approveToolConfirm(id: number): Promise<void> {
       state.state = 'executed';
       state.result = res.result;
       ElMessage.success('工具已执行');
+      // 结果回流：让模型基于真实执行数据生成最终回答（回调由聊天视图提供续跑逻辑）
+      if (opts?.onExecuted) {
+        opts.onExecuted(JSON.stringify(res.result ?? null, null, 2));
+      }
     } else {
       state.state = 'failed';
       state.message = res.message ?? '执行失败';

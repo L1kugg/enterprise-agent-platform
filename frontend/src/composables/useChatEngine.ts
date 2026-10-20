@@ -379,6 +379,27 @@ export async function send(): Promise<void> {
   await ask(question, true);
 }
 
+/**
+ * 工具审批后的结果回流（R7.3）：高危工具经人工确认执行完成后，把工具返回结果作为
+ * 上下文在同会话续跑一轮，让模型基于真实数据生成最终回答——否则确认卡片只显示
+ * 原始 JSON、模型永远不参与补答（生产实测用户反馈"没有输出答案"即此缺口）。
+ * appendUser=false：合成指令不渲染为用户气泡，聊天里只出现模型的最终回答。
+ */
+export async function continueWithToolResult(
+  question: string,
+  toolName: string,
+  resultJson: string,
+): Promise<void> {
+  const trimmedResult = resultJson.length > 4000 ? resultJson.slice(0, 4000) + '...[truncated]' : resultJson;
+  const continuation = [
+    `[系统续答指令] 工具「${toolName}」已经用户人工确认并执行完成,返回结果如下(JSON):`,
+    trimmedResult,
+    `请严格基于以上工具返回的真实数据,重新回答用户之前的问题:「${question}」。`,
+    '不要再次调用任何工具,直接用中文给出最终答案。',
+  ].join('\n');
+  await ask(continuation, false);
+}
+
 export async function regenerateFrom(assistantIndex: number): Promise<void> {
   for (let i = assistantIndex - 1; i >= 0; i -= 1) {
     const candidate = messages.value[i];

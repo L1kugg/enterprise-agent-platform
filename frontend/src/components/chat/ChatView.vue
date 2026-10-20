@@ -186,7 +186,7 @@
                               :loading="
                                 confirmStateOf(pendingConfirmationOf(ts)!.confirmationId).loading
                               "
-                              @click="approveToolConfirm(pendingConfirmationOf(ts)!.confirmationId)"
+                              @click="approveAndContinue(entry.index, ts)"
                               >确认执行</el-button
                             >
                             <el-button
@@ -516,6 +516,8 @@ import {
   confirmStateOf,
   pendingConfirmationOf,
 } from '../../composables/useToolConfirmation';
+import { continueWithToolResult } from '../../composables/useChatEngine';
+import type { ReactTraceStep } from '../../types/react';
 
 // 选中智能体的引导问题（空列表时不渲染 chips，退回纯文案）
 const agentOpeningQuestions = computed(
@@ -526,6 +528,33 @@ const agentOpeningQuestions = computed(
 onMounted(() => {
   void loadAgents();
 });
+
+/** 回溯本条助手消息之前的用户原始问题（审批回流续答要用）。 */
+function originalQuestionBefore(index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const message = virtualMessages.value[i]?.item;
+    if (message?.role === 'user' && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+  return '';
+}
+
+/** 审批并执行；执行成功后把工具结果回流给模型续答（appendUser=false，不显示合成气泡）。 */
+function approveAndContinue(entryIndex: number, step: ReactTraceStep): void {
+  const pending = pendingConfirmationOf(step);
+  if (!pending) {
+    return;
+  }
+  const question = originalQuestionBefore(entryIndex);
+  void approveToolConfirm(pending.confirmationId, {
+    onExecuted: (resultJson) => {
+      if (question) {
+        void continueWithToolResult(question, pending.tool, resultJson);
+      }
+    },
+  });
+}
 </script>
 
 <style scoped>
