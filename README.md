@@ -11,9 +11,9 @@
 >
 > **Spring AI 基线：** 已运行在 `1.1.7` 稳定线（Maven Central）；从 `1.0.0-M6` 完成迁移的历史计划与 breaking changes 清单留档在 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
-Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
+Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring AI 构建。它整合了 **Agent 工作流引擎**、**混合检索（向量 + 关键词 + 图谱 + Web）**、**知识图谱**、**长短期记忆持久化**、**DeepResearch**、租户隔离的 RAG、**可视化平台工作台（智能体/工作流/工具/安全防护/模型服务编排）**、**知识库运行时绑定**、**代码沙箱工具与高危工具人工确认**、异步 PDF 入库、JWT/API Key/RBAC 安全体系、审计追踪，以及 Prometheus/Loki/Tempo 可观测性。能力状态与默认路径的局限见下文。
 
-> 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
+> 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、平台工作台（智能体/工作流/工具/安全防护编排）、知识库运行时绑定、代码沙箱工具与人工确认、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
 
 ![RAG Evaluation Studio report](docs/assets/evaluation-report-studio.png)
 
@@ -27,17 +27,19 @@ Enterprise Agent Platform 是一个面向生产的平台原型，基于 Spring A
 | 租户与权限边界 | API Key、JWT、Refresh Token 生命周期、RBAC 权限、租户请求头、审计日志 |
 | 运维基线 | Docker Compose、Flyway 迁移、结构化日志、Prometheus 指标、Loki 日志、Tempo 链路追踪、Alertmanager 规则 |
 | 质量证据 | RAG Evaluation Studio、单元测试、Testcontainers 集成测试、JaCoCo、回归评测、端到端 smoke 日志、Docker 镜像构建；另有框架无关的外部评测 [ragproof](https://github.com/however-yir/ragproof) |
-| 可扩展的 AI 工作流 | Spring AI 对话、ReAct trace 载荷、SSE token 流式输出、模型路由、工具执行挂钩 |
+| 可扩展的 AI 工作流 | Spring AI 对话、ReAct trace 载荷、SSE token 流式输出、模型路由、绑定模型服务、平台工具执行（表单 API / 只读 SQL / GraalJS 代码沙箱 + 高危工具人工确认） |
+| 可视化平台工作台 | 智能体工作台（编排/调试/发布）、工作流拖拽画布（导入导出/试运行/上下线）、三类工具配置与真实测试、安全防护/模型服务/数据库工作台、用户与角色管理 |
 
 ## 产品功能面
 
 | 功能面 | 检查内容 |
 |---|---|
-| 控制台工作区 | 会话分支、会话重命名、流式模式、模型档位、双引擎切换（ReAct / workflow）、用量统计、JWT/API Key 鉴权、租户上下文 |
-| 知识库管理 | 文档清单与删除、多格式上传（PDF / Word / Markdown）、入库任务轮询、试搜（三路本地召回，不调模型） |
+| 控制台工作区 | 智能体选择器（按 agentId 驱动会话）、会话分支、会话重命名、流式模式、模型档位、双引擎切换（ReAct / workflow）、工具确认卡片、用量统计、JWT/API Key 鉴权、租户上下文 |
+| 知识库管理 | 文档清单与删除（可按知识库过滤）、多格式上传（可选归属知识库）、入库任务轮询、试搜（三路本地召回，可圈定知识库范围）、用户侧知识库目录（附真实文档统计） |
+| 平台工作台（管理员） | 智能体编排/调试/发布、工作流拖拽画布（导入导出/试运行/上下线）、工具配置与测试（表单 API / SQL / 代码沙箱）、安全防护配置与测试、模型服务/数据库连接测试、用户与角色管理 |
 | Evaluation Studio | 评测数据集（可删，级联清理运行与结果）、基线与当前运行对比、检索/引用/忠实度指标、Markdown 报告导出 |
-| RAG 问答 | 引用标签、证据片段、空结果兜底策略 |
-| API 面 | Swagger UI、curl 示例、chat/RAG/ingestion/auth/audit 端点 |
+| RAG 问答 | 引用标签、证据片段（含知识库 ID 溯源）、空结果兜底策略 |
+| API 面 | Swagger UI、curl 示例、chat/RAG/ingestion/auth/audit/platform 端点 |
 | 运维面 | 健康检查、Prometheus 指标、端到端产物、回归报告、容器镜像 |
 
 ![RAG answer with citations](docs/assets/rag-answer-citations.png)
@@ -155,7 +157,7 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 | 可部署的完整技术栈 | Spring Boot API、Vue 控制台、MySQL、Redis/RabbitMQ、pgvector、Docker Compose | 通常只有 API 或 notebook 级别 | 通常只聚焦单个框架特性 |
 | 租户感知的安全 | API Key、JWT、Refresh Token、RBAC、由认证身份派生的租户范围、审计日志、限流 | 很少包含 | 为清晰起见通常省略 |
 | 异步入库 | Redis Stream 或 RabbitMQ 队列、重试、DLQ、幂等、任务状态 | 常为同步上传与解析 | 通常随示例而定 |
-| RAG 生产化路径 | 租户隔离检索、引用、切片、重排器扩展点（默认恒等实现）、pgvector 索引 | 基础向量查询 | 演示核心 API 用法 |
+| RAG 生产化路径 | 租户隔离检索、绑定知识库圈定召回、引用（含知识库溯源）、切片、重排器扩展点（默认恒等实现）、pgvector 索引 | 基础向量查询 | 演示核心 API 用法 |
 | 可观测性 | Prometheus、Loki、Tempo、Alertmanager、结构化日志、运维手册 | 通常缺失 | 极少或依赖外部 |
 | 质量门禁 | 全模块 JaCoCo 门禁、MySQL/Flyway 启动测试、评测器契约测试、真实 API 评测、k6 脚本 | 人工验证 | 因示例而异 |
 
@@ -165,6 +167,11 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 
 | 能力域 | 当前实现 |
 |---|---|
+| 智能体运行时闭环 | 会话按 `agentId` 装载配置：绑定模型服务优先路由（失败按策略回退档位）、提示词合并（平台基座不可覆盖）、`memoryTurns` 记忆裁剪、开场白/引导问题、会话前安全拦截、调用日志（`agent_invocation_log`）与调试接口（FR-R1） |
+| 平台资产工作台 | `platform_asset` 统一资产台账（agents/workflows/tools/knowledge-bases/safety-guards/model-services/databases CRUD + 掩码脱敏），模型服务与数据库支持 `scope=SYSTEM` 系统共享，绑定关系表运行时生效；用户/角色/权限树管理 |
+| 工作流可视化编排 | WorkflowStudio 拖拽画布（节点/连线/缩放/自动布局）、JSON 协议校验、导入导出、试运行（真实执行 + 节点 trace）、上线/下线、复制；智能体只能调用已上线工作流 |
+| 工具结构化配置与执行 | 三类工具同一执行入口：FORM_API（认证注入/超时/重试/响应映射/错误映射）、SQL（只读守卫/租户占位/行数收敛）、CODE_API（GraalJS 纯计算沙箱：无主机/IO/进程/环境变量访问，语句数 + 超时双限制）；参数 schema 校验；高危工具人工确认（挂起 → 审批 CAS → 重验绑定 → 执行） |
+| 知识库运行时绑定 | 上传可选归属知识库（校验存在/可见/ACTIVE）；召回按绑定知识库严格圈定（向量元数据后置过滤 / 关键词 SQL IN / 图谱 chat 反查，Web 路不受限）；知识库真实统计与用户侧目录；引用携带知识库 ID 溯源；删除知识库 = 解绑置空不删资料 |
 | 多Agent工作流 | AgentWorkflowEngine 状态机（CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE），agent_task/step/event 持久化与事件溯源 |
 | DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，异步受理（202 + taskId，后台池执行）并持久化 task/step/event，前端按 taskId 轮询；外部 Web 搜索默认关闭 |
 | 混合检索 | VectorRetriever（pgvector）+ KeywordRetriever（关键词）+ GraphRetriever（知识图谱）+ WebRetriever（外部搜索）= HybridRetrievalService 融合排序 |
@@ -177,7 +184,7 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 | 安全体系 | API Key + JWT + Refresh Token + RBAC + 认证身份派生租户 + 安全响应头 + CORS 白名单 + 单实例 Bucket4j 内存限流 |
 | 弹性与容错 | 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）；各场景化兜底（检索静默补位、MCP 错误转 observation、入库重试+DLQ）；Resilience4j 熔断/重试/流式超时已织入 LLM 调用链（`llm.ModelCallGuard`，按场景独立熔断器） |
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
-| Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token |
+| Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token；平台工具运行时（绑定校验/GraalJS 沙箱/高危工具挂起待审） |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
 | 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs、SBOM、Trivy、全模块 JaCoCo 30% 门禁、真实 API 评测与 evaluator contract 自测 |
@@ -199,6 +206,7 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 - Redis 7.x
 - RabbitMQ 3.x
 - pgvector / SimpleVectorStore
+- GraalVM Polyglot / GraalJS 24.1.2（CODE_API 工具纯计算沙箱）
 - Vue 3 + TypeScript + Element Plus
 - OpenTelemetry + Micrometer + Prometheus + Grafana
 - Checkstyle / PMD 7.x / SpotBugs / OWASP Dependency-Check / CycloneDX SBOM
@@ -214,22 +222,24 @@ Enterprise Agent Platform 是 however-yir AI 工程作品矩阵中的 **”多 A
 flowchart TD
     Client[Web / App / API Client] --> Gateway[REST API Layer]
 
-    Gateway --> Chat[Chat Service]
-    Gateway --> RAG[Knowledge Retrieval Service]
+    Gateway --> Chat[Agent Chat Runtime\nagentId 配置装载/安全拦截/绑定模型路由]
+    Gateway --> RAG[Knowledge Retrieval Service\n知识库圈定召回]
     Gateway --> Auth[Auth & Permission Service]
     Gateway --> Audit[Audit & Metrics Filters]
+    Gateway --> Studio[Platform Studio API\nagents/workflows/tools/safety/model-services]
 
     Chat --> LLM[LLM Provider\nOpenAI-Compatible / Ollama]
-    Chat --> Memory[(MySQL Conversation)]
+    Chat --> Memory[(MySQL Conversation\n+ 四层记忆)]
+    Chat --> Tools[Tool Layer\nFORM_API / 只读 SQL / GraalJS 沙箱\n高危工具人工确认]
 
-    RAG --> Ingestion[Ingestion Service]
+    RAG --> Ingestion[Ingestion Service\n可选归属知识库]
     Ingestion --> Queue[Redis Stream / RabbitMQ]
     Queue --> Worker[Ingestion Worker]
     Worker --> FileStore[(Local File Storage)]
     Worker --> Vector[(pgvector / Simple Vector Store)]
 
-    Chat --> Tools[Tool Calling Layer]
     Tools --> BizDB[(MySQL Business Tables)]
+    Tools --> Sandbox[GraalJS Sandbox\n纯计算/无网络/无文件]
 
     Audit --> Metrics[Prometheus Metrics]
     Audit --> Logs[Loki Logs]
@@ -242,32 +252,38 @@ flowchart TD
 
 ### 1) API 层（Controllers）
 
-- `ChatController`：通用问答入口（文本/附件）
+- `ChatController` / `AiReactController`：通用问答与 ReAct 智能体会话（支持 `agentId` 驱动、SSE 流式）
 - `CustomerServiceController`：流程型客服对话入口（绑定工具）
-- `PdfController`：上传、下载、检索问答
-- `IngestionController`：异步任务提交、状态查询、人工触发处理
+- `PdfController` / `IngestionController`：上传下载、检索问答、异步任务提交/状态/文档清单/试搜（可按知识库圈定）
+- `AgentCatalogController` / `KnowledgeBaseCatalogController`：用户侧智能体与知识库目录
+- `AgentToolConfirmationController`：平台工具高危调用的人工审批/取消
+- `WorkflowController` / `DeepResearchController`：工作流引擎与深度研究任务
+- `MemoryController` / `EvaluationController` / `CostGovernanceController`：记忆查询、评测、用量与预算
+- `PlatformAssetController`：平台资产工作台（智能体/工作流/工具/知识库/安全防护/模型服务/数据库 + 调试/发布/测试端点 + 用户/角色管理）
 - `AuthController`：API Key 生命周期 + JWT/Refresh Token
 - `AuditController`：审计日志查询
-- `ChatHistoryController`：历史会话分页与详情查询
 
 ### 2) 智能体与检索层
 
-- **AgentWorkflowEngine**：通用工作流引擎，状态机管理（CREATED→PLANNING→...→DONE），事件溯源
+- **智能体运行时**：`AgentChatRuntime` 按 `agentId` 装载配置——绑定模型服务优先路由（失败按策略回退档位）、提示词合并、`memoryTurns` 记忆裁剪、会话前安全拦截、调用日志；调试接口用已保存配置真跑一次
+- **AgentWorkflowEngine**：通用工作流引擎，状态机管理（CREATED→PLANNING→...→DONE），事件溯源；工作流编排（WorkflowStudio 画布 + 协议校验 + 试运行）
 - **DeepResearch**：ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent
-- **混合检索**：VectorRetriever + KeywordRetriever + GraphRetriever + WebRetriever → HybridRetrievalService 融合
-- **证据评分**：EvidenceJudgeService（相关性/权威性/时效性三维评分）+ CitationService（编号引用）
+- **混合检索**：VectorRetriever + KeywordRetriever + GraphRetriever + WebRetriever → HybridRetrievalService 融合；智能体绑定知识库后召回严格圈定在该范围内（`KnowledgeScope`：向量元数据后置过滤 / 关键词 SQL IN / 图谱 chat 反查）
+- **证据评分**：EvidenceJudgeService（相关性/权威性/时效性三维评分）+ CitationService（编号引用，含知识库 ID 溯源）
 - **知识图谱**：kg_entity/kg_relation/kg_fact 轻量图谱表 + GraphService（实体搜索、邻居查询、事实检索）
+- **平台工具运行时**：FORM_API（映射/重试/错误映射）/ SQL（只读执行器）/ CODE_API（GraalJS 沙箱），高危工具挂起待人工确认；配置态测试与运行时同一执行入口
 - 多 ChatClient 分场景配置（通用、客服、知识问答）
-- 模型路由（按 `modelProfile` 与端点策略动态选型）
+- 模型路由（按 `modelProfile` 与端点策略动态选型，绑定模型优先）
 - 会话隔离策略：`tenant_id + type::chatId` 组合，避免跨租户串会话
 - ReAct 流式接口采用真实模型 token 流输出（非后处理切片）
 
 ### 3) 异步入库层
 
-- 上传后创建 ingestion job
+- 上传后创建 ingestion job，可选归属知识库（服务端校验存在/可见/ACTIVE）
 - 支持 `X-Idempotency-Key` 去重
 - 队列消费失败重试 + DLQ
 - 任务状态可追踪（pending/running/failed/success）
+- 删除文档级联清理向量切片/关键词索引/图谱数据/事实记忆
 
 ### 4) 安全层
 
@@ -359,6 +375,7 @@ docker compose up --build -d
 - `enterprise-agent-platform-mysql`
 - `enterprise-agent-platform-redis`
 - `enterprise-agent-platform-rabbitmq`
+- `enterprise-agent-platform-pgvector`（向量检索）
 - `enterprise-agent-platform-tempo-lite`
 - `enterprise-agent-platform-web`（Vue3 + Element Plus + Nginx）
 
@@ -428,8 +445,13 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### ReAct 智能体问答
 
-- `POST /ai/react/chat`（JSON 返回 Thought/Action/Observation 轨迹）
+- `POST /ai/react/chat`（JSON 返回 Thought/Action/Observation 轨迹；`agentId` 可选，绑定智能体后其模型/提示词/记忆/知识库/工具/安全防护配置真实生效）
 - `POST /ai/react/chat/stream`（SSE 实时返回 `trace/token/done/error`，`token` 为模型原生流）
+
+### 用户侧目录
+
+- `GET /ai/agents`（当前租户可用的已发布智能体目录，仅展示字段）
+- `GET /ai/knowledge-bases`（ACTIVE 知识库目录，附真实文档统计）
 
 ### Agent 工作流（v2）
 
@@ -451,7 +473,7 @@ docker compose -f docker-compose.observability.yml up -d
 - `POST /ai/rag/search`（混合检索：vector + keyword + graph + web）
 - `GET /ai/graph/search`（知识图谱实体与关系搜索）
 
-> `MemoryService` 当前是内部持久化基础能力，尚未暴露公共 REST API，也未接入默认 Agent/RAG 主链路。
+> 记忆子系统已接入主链路：short/long/fact 在 ReAct 与混合 RAG 管线中召回注入（`memoryTurns` 裁剪、近重复抑制、语义精排），并提供 `GET /ai/memory/**`（MemoryController）查询与管理。
 
 ### 客服流程问答
 
@@ -464,10 +486,27 @@ docker compose -f docker-compose.observability.yml up -d
 - `GET /ai/pdf/file/{chatId}`
 - `GET /ai/pdf/chat`
   - 参数：`prompt`, `chatId`, `modelProfile(可选)`
-- `POST /ingestion/upload/{chatId}`
+- `POST /ingestion/upload/{chatId}?knowledgeBaseId=可选`（归属知识库，服务端校验）
 - `GET /ingestion/jobs/{jobId}`
 - `GET /ingestion/jobs?chatId=...`
+- `GET /ingestion/documents`（本租户文档清单，可按知识库过滤、分页搜索）
+- `GET /ingestion/search?q=...&knowledgeBaseIds=可选`（试搜：三路本地召回，可圈定知识库）
+- `DELETE /ingestion/documents/{chatId}`（级联清理向量/关键词/图谱/事实记忆）
 - `POST /ingestion/jobs/process`
+
+### 平台工作台（管理员，`/platform`）
+
+- `GET/POST/PUT/DELETE /platform/{assetType}`（agents/workflows/tools/knowledge-bases/safety-guards/model-services/databases 资产 CRUD）
+- `POST /platform/agents/{id}/publish`、`POST /platform/agents/{id}/debug`（用已保存配置真跑一次）、`POST /platform/agents/{id}/copy`
+- `POST /platform/workflows/{id}/test-run|online|offline|copy`、`GET /platform/workflows/{id}/export`、`POST /platform/workflows/import`
+- `POST /platform/tools/{id}/test`、`POST /platform/safety-guards/{id}/test`、`POST /platform/model-services/{id}/test`、`POST /platform/databases/{id}/test`
+- `GET /platform/knowledge-bases/{id}/stats`（文件数/解析中/失败/切片数/存储大小真实聚合）
+- `GET/PUT /platform/users`、`GET/POST/PUT/DELETE /platform/roles`（用户与角色管理）
+
+### 平台工具人工确认（R7.3）
+
+- `POST /ai/agent-tool-confirmations/{id}/approve`（审批即执行：CAS 抢占 + 重验绑定 + 真实调用）
+- `POST /ai/agent-tool-confirmations/{id}/cancel`（取消挂起任务）
 
 ### 历史与审计
 
@@ -661,6 +700,12 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] 证据评分与引用溯源（三维评分 + 编号引用）
 - [x] 知识图谱（kg_entity/kg_relation/kg_fact + GraphRetriever）
 - [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆，读写闭环接入生成链路 + `/ai/memory` REST）
+- [x] 智能体运行时闭环（agentId 驱动会话、绑定模型路由、记忆裁剪、安全拦截、调用日志与调试面板）
+- [x] 平台资产工作台（七类资产 CRUD + 系统共享 scope + 用户/角色管理）
+- [x] 工作流可视化编排（拖拽画布/协议校验/导入导出/试运行/上下线）
+- [x] 工具结构化配置与执行（FORM_API 映射重试 / SQL 只读 / CODE_API GraalJS 沙箱 + 高危工具人工确认）
+- [x] 知识库运行时绑定（上传归属知识库、召回按库圈定、真实统计与用户侧目录、引用溯源）
+- [x] 会话上下文窗口治理（窗口显式化 + Token 预算裁剪 + RAG 上下文瘦身）
 - [x] 安全响应头 + CORS 白名单
 - [x] 模型路由 fallback 链降级（档位不可用 → fallbackProfile → 默认模型）
 - [x] Resilience4j 熔断/重试/超时接入 LLM 调用链（`llm.ModelCallGuard` 编程式装饰，6 个调用点按场景独立熔断）
@@ -668,9 +713,13 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
 - [x] 前端工程化（ESLint / Prettier / vue-tsc）
 - [x] Grafana 预置仪表盘 + 增强告警规则
-- [ ] tianji-ai-agent Enterprise Agent PlatformClient 端到端联调
+- [ ] 敏感字段密文存储（当前模型 API Key/数据库密码/工具凭据明文入库，响应侧掩码）
+- [ ] 资源级授权（角色绑定具体智能体/知识库/工具，当前为前端占位）
+- [ ] 智能体版本化发布与回滚（发布记录/版本号）
+- [ ] 知识库分段治理（切片查看/编辑/拆分合并/重建向量）
+- [ ] 引用可点击跳转原文片段
 - [ ] 检索重排策略可插拔实现（LLM-as-reranker）
-- [ ] Memory REST API 与默认 Agent/RAG 主链路接入
+- [ ] tianji-ai-agent Enterprise Agent PlatformClient 端到端联调
 - [ ] Redis/其他共享后端的分布式限流
 - [ ] 评测数据集（路由准确率、检索命中率、证据质量）
 - [ ] 企业 SSO（OIDC/SAML）接入
