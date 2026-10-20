@@ -181,6 +181,121 @@
           </el-form-item>
         </el-form>
 
+        <!-- 分析看板（R2.2）：全部数字来自 agent_invocation_log 真实聚合 -->
+        <div v-else-if="activeSection === 'board'" class="config-form board-panel">
+          <div class="board-toolbar">
+            <el-select v-model="boardDays" size="small" class="board-days" @change="loadBoard">
+              <el-option label="近 7 天" :value="7" />
+              <el-option label="近 30 天" :value="30" />
+            </el-select>
+            <el-button size="small" @click="loadBoard">刷新</el-button>
+            <span v-if="boardEmpty" class="board-empty-note">窗口内暂无调用数据</span>
+          </div>
+
+          <div v-loading="boardLoading" class="board-content">
+            <div class="board-cards">
+              <div class="board-card">
+                <small>总调用</small>
+                <strong>{{ boardStats?.total ?? 0 }}</strong>
+              </div>
+              <div class="board-card">
+                <small>成功率</small>
+                <strong>{{ successRateText }}</strong>
+              </div>
+              <div class="board-card">
+                <small>平均耗时</small>
+                <strong>{{ boardStats?.avgLatencyMs ?? 0 }}ms</strong>
+              </div>
+              <div class="board-card">
+                <small>Token（入/出）</small>
+                <strong>{{ boardStats?.inputTokens ?? 0 }} / {{ boardStats?.outputTokens ?? 0 }}</strong>
+              </div>
+            </div>
+
+            <h4 class="board-sub">按天趋势</h4>
+            <div class="board-trend">
+              <div
+                v-for="point in boardTrend"
+                :key="point.date"
+                class="board-trend-col"
+                :title="`${point.date}：共 ${point.total} 次，成功 ${point.successCount}，拦截 ${point.blockedCount}，失败 ${point.errorCount}，平均 ${point.avgLatencyMs}ms`"
+              >
+                <div class="board-trend-bar-wrap">
+                  <div class="board-trend-bar" :style="{ height: trendBarHeight(point.total) }"></div>
+                </div>
+                <small>{{ point.date.slice(5) }}</small>
+              </div>
+            </div>
+
+            <h4 class="board-sub">常见错误 / 拦截 Top5</h4>
+            <p v-if="!boardStats?.topErrors.length" class="board-hint">窗口内无错误记录。</p>
+            <ul v-else class="board-errors">
+              <li v-for="item in boardStats.topErrors" :key="item.summary">
+                <span class="board-error-count">×{{ item.count }}</span
+                >{{ item.summary }}
+              </li>
+            </ul>
+
+            <h4 class="board-sub">调用日志</h4>
+            <div class="board-toolbar">
+              <el-select
+                v-model="boardStatus"
+                size="small"
+                class="board-days"
+                clearable
+                placeholder="全部状态"
+                @change="reloadBoardLogs"
+              >
+                <el-option label="全部状态" value="" />
+                <el-option label="成功" value="SUCCESS" />
+                <el-option label="已拦截" value="BLOCKED" />
+                <el-option label="失败" value="ERROR" />
+              </el-select>
+            </div>
+            <el-table :data="boardLogs" size="small" empty-text="暂无调用记录">
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="logStatusTag(row.status)">{{ row.status }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="渠道" width="80">
+                <template #default="{ row }">{{ row.channel }}</template>
+              </el-table-column>
+              <el-table-column label="模型" min-width="120" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.modelName || '—' }}
+                  <el-tag v-if="row.fallbackApplied" size="small" type="warning">回退</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="耗时" width="90">
+                <template #default="{ row }">{{ row.latencyMs != null ? row.latencyMs + 'ms' : '—' }}</template>
+              </el-table-column>
+              <el-table-column label="Token" width="110">
+                <template #default="{ row }">{{
+                  row.inputTokens != null ? `${row.inputTokens}/${row.outputTokens ?? 0}` : '—'
+                }}</template>
+              </el-table-column>
+              <el-table-column label="请求摘录" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.promptExcerpt || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="错误" min-width="140" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.errorSummary || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="时间" width="150">
+                <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+              </el-table-column>
+            </el-table>
+            <el-pagination
+              v-model:current-page="boardPage"
+              :page-size="boardPageSize"
+              :total="boardTotal"
+              layout="total, prev, pager, next"
+              small
+              @current-change="reloadBoardLogs"
+            />
+          </div>
+        </div>
+
         <div v-else class="config-form json-panel">
           <p>高级 JSON</p>
           <el-input
@@ -281,23 +396,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
+  getAgentLogs,
+  getAgentStats,
+  getAgentTrend,
   createPlatformAsset,
   debugPlatformAgent,
   listPlatformAssets,
   updatePlatformAsset,
 } from '../../api/platform';
-import type { AgentDebugResult, PlatformAsset } from '../../types/platform';
+import type {
+  AgentDebugResult,
+  AgentInvocationLogEntry,
+  AgentStatsSummary,
+  AgentTrendPoint,
+  PlatformAsset,
+} from '../../types/platform';
 import { authContext } from '../../composables/useAuthState';
 import { statusTag } from '../../composables/usePlatformAssets';
+import { formatTime } from '../../utils/format';
 
 const sections = [
   { key: 'basic', label: '基本信息', description: '名称、简介与开场引导' },
   { key: 'model', label: '模型与提示词', description: '模型、参数与系统提示词' },
   { key: 'resources', label: '资源编排', description: '工作流、工具、知识库、防护' },
   { key: 'execution', label: '执行与对话', description: '确认策略、描述与记忆轮数' },
+  { key: 'board', label: '分析看板', description: '调用量、成功率、耗时与错误' },
   { key: 'advanced', label: '高级 JSON', description: '兼容既有配置结构' },
 ] as const;
 
@@ -404,6 +530,81 @@ function debugStatusTag(status: AgentDebugResult['status']): 'success' | 'warnin
   if (status === 'BLOCKED') return 'warning';
   return 'danger';
 }
+
+// ---------- 分析看板（R2.2）：数字全部来自 agent_invocation_log 真实聚合 ----------
+
+const boardDays = ref(7);
+const boardLoading = ref(false);
+const boardStats = ref<AgentStatsSummary | null>(null);
+const boardTrend = ref<AgentTrendPoint[]>([]);
+const boardLogs = ref<AgentInvocationLogEntry[]>([]);
+const boardTotal = ref(0);
+const boardPage = ref(1);
+const boardPageSize = 10;
+const boardStatus = ref('');
+
+const boardEmpty = computed(
+  () => !boardLoading.value && (boardStats.value?.total ?? 0) === 0,
+);
+const successRateText = computed(
+  () => `${Math.round((boardStats.value?.successRate ?? 0) * 100)}%`,
+);
+
+function trendBarHeight(total: number): string {
+  const max = Math.max(...boardTrend.value.map((point) => point.total), 1);
+  return `${Math.max(4, Math.round((total / max) * 100))}%`;
+}
+
+function logStatusTag(status: string): 'success' | 'warning' | 'danger' {
+  if (status === 'SUCCESS') return 'success';
+  if (status === 'BLOCKED') return 'warning';
+  return 'danger';
+}
+
+async function loadBoard(): Promise<void> {
+  if (!editingId.value) {
+    return;
+  }
+  boardLoading.value = true;
+  try {
+    const [stats, trend] = await Promise.all([
+      getAgentStats(editingId.value, boardDays.value, authContext()),
+      getAgentTrend(editingId.value, boardDays.value, authContext()),
+    ]);
+    boardStats.value = stats;
+    boardTrend.value = trend;
+    boardPage.value = 1;
+    await reloadBoardLogs();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '看板数据加载失败');
+  } finally {
+    boardLoading.value = false;
+  }
+}
+
+async function reloadBoardLogs(): Promise<void> {
+  if (!editingId.value) {
+    return;
+  }
+  try {
+    const page = await getAgentLogs(editingId.value, authContext(), {
+      page: boardPage.value,
+      pageSize: boardPageSize,
+      status: boardStatus.value || undefined,
+    });
+    boardLogs.value = page.items;
+    boardTotal.value = page.total;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '调用日志加载失败');
+  }
+}
+
+// 进入看板分区或切换智能体时拉取（以选中/编辑中的智能体为准）
+watch([activeSection, selectedId], ([section]) => {
+  if (section === 'board' && editingId.value) {
+    void loadBoard();
+  }
+});
 
 async function runDebug(): Promise<void> {
   if (!editingId.value || !debugMessage.value.trim()) {
@@ -752,6 +953,130 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.5;
   color: var(--ui-muted);
+}
+
+/* ---------- 分析看板（R2.2） ---------- */
+
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.board-days {
+  width: 130px;
+}
+
+.board-empty-note {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.board-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.board-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.board-card small {
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+.board-card strong {
+  font-size: 18px;
+  color: var(--ui-text);
+}
+
+.board-sub {
+  margin: 12px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.board-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-height: 130px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.board-trend-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 28px;
+  flex: 1;
+}
+
+.board-trend-col small {
+  font-size: 10px;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
+.board-trend-bar-wrap {
+  height: 100px;
+  width: 100%;
+  max-width: 42px;
+  display: flex;
+  align-items: flex-end;
+  background: color-mix(in oklab, var(--ui-muted) 10%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.board-trend-bar {
+  width: 100%;
+  background: var(--el-color-primary);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.2s ease;
+}
+
+.board-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.board-errors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-errors li {
+  font-size: 12px;
+  color: var(--ui-text);
+  line-height: 1.5;
+}
+
+.board-error-count {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--el-color-danger) 14%, transparent);
+  color: var(--el-color-danger);
+  font-weight: 600;
 }
 .mono :deep(textarea) {
   font-family: ui-monospace, Consolas, monospace;

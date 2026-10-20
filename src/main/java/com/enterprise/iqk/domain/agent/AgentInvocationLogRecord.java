@@ -30,6 +30,9 @@ public class AgentInvocationLogRecord {
     private String modelName;
     private Boolean fallbackApplied;
     private Long latencyMs;
+    /** 本智能体 LLM 调用的估算 token（planner/成稿累计）；NULL = 未记录 */
+    private Long inputTokens;
+    private Long outputTokens;
     private String promptExcerpt;
     private String errorSummary;
     private LocalDateTime createdAt;

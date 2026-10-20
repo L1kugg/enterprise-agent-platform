@@ -119,6 +119,51 @@ export interface SafetyGuardTestResult {
   [key: string]: unknown;
 }
 
+// ---------- 智能体观测看板（R2.2） ----------
+
+export interface AgentStatsSummary {
+  days: number;
+  total: number;
+  successCount: number;
+  blockedCount: number;
+  errorCount: number;
+  /** 0-1 */
+  successRate: number;
+  avgLatencyMs: number;
+  maxLatencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  fallbackCount: number;
+  firstInvocationAt?: string | null;
+  lastInvocationAt?: string | null;
+  topErrors: { summary: string; count: number }[];
+}
+
+export interface AgentTrendPoint {
+  date: string;
+  total: number;
+  successCount: number;
+  blockedCount: number;
+  errorCount: number;
+  avgLatencyMs: number;
+}
+
+export interface AgentInvocationLogEntry {
+  id: number;
+  chatId: string;
+  /** platform=真实会话，debug=工作台调试 */
+  channel: string;
+  status: 'SUCCESS' | 'BLOCKED' | 'ERROR';
+  modelName?: string | null;
+  fallbackApplied: boolean;
+  latencyMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  promptExcerpt?: string | null;
+  errorSummary?: string | null;
+  createdAt: string;
+}
+
 // ---------- 智能体调试（R2.1） ----------
 
 /** 调试面板单步（后端刻意不含 thought/actionInput/observation 原文）。 */

@@ -35,14 +35,15 @@ public class AgentInvocationLogRecorder {
     private final AgentRuntimeProperties properties;
 
     public void recordSuccess(AgentInvocationContext ctx, String modelName,
-                              boolean fallbackApplied, long latencyMs) {
-        insert(ctx, "SUCCESS", modelName, fallbackApplied, latencyMs, null, null);
+                              boolean fallbackApplied, long latencyMs, Long inputTokens, Long outputTokens) {
+        insert(ctx, "SUCCESS", modelName, fallbackApplied, latencyMs, null, null, inputTokens, outputTokens);
     }
 
     /** 命中安全拦截：调用日志 BLOCKED + 独立审计行 + 计数器（模型调用从未发生）。 */
     public void recordBlocked(AgentInvocationContext ctx, SafetyMatchResult safety, long latencyMs) {
         insert(ctx, "BLOCKED", null, false, latencyMs,
-                safety == null ? null : "guard=" + safety.hitGuardId() + " level=" + safety.hitLevel(), null);
+                safety == null ? null : "guard=" + safety.hitGuardId() + " level=" + safety.hitLevel(), null,
+                null, null);
         recordBlockAudit(ctx, safety);
         Counter.builder("agent.runtime.safety.blocked")
                 .description("Agent chat inputs blocked by bound safety guards")
@@ -52,12 +53,13 @@ public class AgentInvocationLogRecorder {
     }
 
     public void recordError(AgentInvocationContext ctx, String errorSummary,
-                            String modelName, long latencyMs) {
-        insert(ctx, "ERROR", modelName, false, latencyMs, null, errorSummary);
+                            String modelName, long latencyMs, Long inputTokens, Long outputTokens) {
+        insert(ctx, "ERROR", modelName, false, latencyMs, null, errorSummary, inputTokens, outputTokens);
     }
 
     private void insert(AgentInvocationContext ctx, String status, String modelName,
-                        boolean fallbackApplied, long latencyMs, String blockDetail, String errorSummary) {
+                        boolean fallbackApplied, long latencyMs, String blockDetail, String errorSummary,
+                        Long inputTokens, Long outputTokens) {
         try {
             LocalDateTime now = LocalDateTime.now();
             invocationLogMapper.insert(AgentInvocationLogRecord.builder()
@@ -70,6 +72,8 @@ public class AgentInvocationLogRecorder {
                     .modelName(modelName)
                     .fallbackApplied(fallbackApplied)
                     .latencyMs(latencyMs)
+                    .inputTokens(inputTokens)
+                    .outputTokens(outputTokens)
                     .promptExcerpt(truncate(ctx.prompt(), properties.getInvocationPromptExcerptChars()))
                     .errorSummary(truncate(blockDetail != null ? blockDetail : errorSummary, 512))
                     .createdAt(now)

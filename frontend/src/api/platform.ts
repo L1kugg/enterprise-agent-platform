@@ -1,6 +1,9 @@
 import type { AuthContext } from '../types/react';
 import type {
   AgentDebugResult,
+  AgentInvocationLogEntry,
+  AgentStatsSummary,
+  AgentTrendPoint,
   PlatformAsset,
   PlatformAssetPage,
   PlatformAssetType,
@@ -163,6 +166,49 @@ export function debugPlatformAgent(
     body: JSON.stringify({ message, chatId }),
     action: '智能体调试',
   });
+}
+
+// ---------- 智能体观测看板（R2.2）：全部来自 agent_invocation_log 真实聚合 ----------
+
+/** 汇总统计 + 常见错误 Top5。 */
+export function getAgentStats(id: number, days: number, auth: AuthContext | undefined) {
+  return requestPlatform<AgentStatsSummary>(
+    withQuery(`/platform/agents/${id}/stats`, { days }),
+    auth,
+    { action: '智能体统计加载' },
+  );
+}
+
+/** 按天趋势（缺天补零）。 */
+export function getAgentTrend(id: number, days: number, auth: AuthContext | undefined) {
+  return requestPlatform<AgentTrendPoint[]>(
+    withQuery(`/platform/agents/${id}/trend`, { days }),
+    auth,
+    { action: '智能体趋势加载' },
+  );
+}
+
+/** 调用日志分页（status/channel 可选过滤）。 */
+export function getAgentLogs(
+  id: number,
+  auth: AuthContext | undefined,
+  params?: { page?: number; pageSize?: number; status?: string; channel?: string },
+) {
+  return requestPlatform<{
+    items: AgentInvocationLogEntry[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>(
+    withQuery(`/platform/agents/${id}/logs`, {
+      page: params?.page ?? 1,
+      pageSize: params?.pageSize ?? 10,
+      status: params?.status ?? '',
+      channel: params?.channel ?? '',
+    }),
+    auth,
+    { action: '智能体调用日志加载' },
+  );
 }
 
 // ---------- 工作流扩展（R6）：导入导出 / 试运行 / 上下线 / 复制 ----------

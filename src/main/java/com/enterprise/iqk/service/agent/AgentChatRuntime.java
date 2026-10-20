@@ -53,6 +53,9 @@ public class AgentChatRuntime {
         private volatile boolean modelFallback;
         private volatile String usedModelName;
         private volatile String modelSource = "router";
+        /** 本会话内 LLM 调用 token 累计（planner/成稿/流式收尾累加），随调用日志落库供 R2.2 看板。 */
+        private volatile long inputTokens;
+        private volatile long outputTokens;
 
         RunState(AgentRuntimeConfig config) {
             this.config = config;
@@ -136,7 +139,8 @@ public class AgentChatRuntime {
                     ? response.getRouteReason() + "；" + notes : notes);
         }
         invocationLogRecorder.recordSuccess(invocationContext(request, tenantId),
-                state.usedModelName, state.modelFallback, latencyMs);
+                state.usedModelName, state.modelFallback, latencyMs,
+                state.inputTokens, state.outputTokens);
         return response;
     }
 
@@ -147,7 +151,7 @@ public class AgentChatRuntime {
             return;
         }
         invocationLogRecorder.recordError(invocationContext(request, tenantId), errorSummary,
-                state.usedModelName, latencyMs);
+                state.usedModelName, latencyMs, state.inputTokens, state.outputTokens);
     }
 
     private AgentInvocationLogRecorder.AgentInvocationContext invocationContext(ReactChatRequestVO request,
@@ -206,8 +210,11 @@ public class AgentChatRuntime {
                         .content());
                 state.modelSource = "bound";
                 state.usedModelName = state.boundModel.modelName();
+                long outputTokens = tenantCostService.estimateTokens(output);
+                state.inputTokens += inputTokens;
+                state.outputTokens += outputTokens;
                 tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
-                        tenantCostService.estimateTokens(output), endpointTag);
+                        outputTokens, endpointTag);
                 return output;
             } catch (RuntimeException ex) {
                 if (!agentRuntimeProperties.isModelFallbackEnabled()) {
@@ -228,6 +235,9 @@ public class AgentChatRuntime {
         if (state != null) {
             state.modelSource = "router";
             state.usedModelName = routeDecision.model();
+            long outputTokens = tenantCostService.estimateTokens(output);
+            state.inputTokens += inputTokens;
+            state.outputTokens += outputTokens;
         }
         tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
                 tenantCostService.estimateTokens(output), endpointTag);
@@ -263,8 +273,13 @@ public class AgentChatRuntime {
                     })
                     .doFinally(signalType -> {
                         if (boundUsageRecorded.compareAndSet(false, true)) {
+                            long outputTokens = tenantCostService.estimateTokens(boundCollector.toString());
+                            if (state != null) {
+                                state.inputTokens += inputTokens;
+                                state.outputTokens += outputTokens;
+                            }
                             tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
-                                    tenantCostService.estimateTokens(boundCollector.toString()), endpointTag);
+                                    outputTokens, endpointTag);
                         }
                     })
                     .onErrorResume(ex -> {
@@ -316,6 +331,10 @@ public class AgentChatRuntime {
                         return;
                     }
                     long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
+                    if (state != null) {
+                        state.inputTokens += inputTokens;
+                        state.outputTokens += outputTokens;
+                    }
                     tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
                 });
     }
