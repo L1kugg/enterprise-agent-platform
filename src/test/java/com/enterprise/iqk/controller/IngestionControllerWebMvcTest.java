@@ -65,6 +65,8 @@ class IngestionControllerWebMvcTest {
     private IngestionProperties ingestionProperties;
     @MockBean
     private RetrievalPreviewService retrievalPreviewService;
+    @MockBean
+    private com.enterprise.iqk.ingestion.DocumentSegmentService documentSegmentService;
 
     @Test
     void shouldAcceptUploadJob() throws Exception {

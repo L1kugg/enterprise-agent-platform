@@ -351,6 +351,23 @@ export interface KnowledgeBaseCatalogItem {
   chunkCount?: number;
 }
 
+/** 文档分段（R8 分段治理）：document_segment 真实数据面。 */
+export interface DocumentSegment {
+  id: number;
+  chatId: string;
+  jobId: string;
+  segIndex: number;
+  content: string;
+  vectorSynced: boolean;
+  updatedAt: string;
+}
+
+/** 文档名 → chatId 定位（聊天引用点击跳转用）。 */
+export interface DocumentLookupResult {
+  chatId: string;
+  sourceName: string;
+}
+
 /** 知识库「试搜」单条命中（对应后端 RetrievalPreviewItem）。 */
 export interface RetrievalPreviewItem {
   source: string;

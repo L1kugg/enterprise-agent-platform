@@ -41,12 +41,16 @@
     <SettingsDialog />
 
     <BranchDrawer />
+
+    <!-- 全局挂载：聊天引用点击跳转也走同一抽屉（状态在 useKnowledge 单例） -->
+    <DocumentViewerDrawer />
   </div>
 </template>
 
 <script setup lang="ts">
 import AuthGate from './components/AuthGate.vue';
 import BranchDrawer from './components/BranchDrawer.vue';
+import DocumentViewerDrawer from './components/knowledge/DocumentViewerDrawer.vue';
 import ChatView from './components/chat/ChatView.vue';
 import AppSidebar from './components/AppSidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';

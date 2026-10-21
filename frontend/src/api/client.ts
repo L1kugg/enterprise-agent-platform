@@ -17,6 +17,8 @@ import type {
   EvalRun,
   EvalRunRequest,
   FeedbackRequest,
+  DocumentLookupResult,
+  DocumentSegment,
   IngestionDocumentSummary,
   IngestionJob,
   IngestionSubmitResponse,
@@ -865,6 +867,147 @@ export async function downloadIngestionOriginalFile(
     throw formatHttpError(response.status, '原文件下载失败');
   }
   return response.blob();
+}
+
+// ---------- 分段治理（R8，FR-R8-02/03/04） ----------
+
+/** 分段分页列表（document_segment 真实数据面）。 */
+export async function listDocumentSegments(
+  chatId: string,
+  auth?: AuthContext,
+  params?: { page?: number; pageSize?: number },
+): Promise<PagedResult<DocumentSegment>> {
+  const response = await fetch(
+    resolveApi(
+      withQuery(`/ingestion/documents/${encodeURIComponent(chatId)}/segments`, {
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 50,
+      }),
+    ),
+    { credentials: 'include', method: 'GET', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<PagedResult<DocumentSegment>>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '分段列表加载失败');
+  }
+  return payload;
+}
+
+/** 编辑分段内容：更新后自动重嵌入。 */
+export async function updateDocumentSegment(
+  id: number,
+  content: string,
+  auth?: AuthContext,
+): Promise<DocumentSegment> {
+  const response = await fetch(resolveApi(`/ingestion/segments/${id}`), {
+    credentials: 'include',
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(auth) },
+    body: JSON.stringify({ content }),
+  });
+  const payload = await parseJsonSafely<DocumentSegment>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '分段更新失败');
+  }
+  return payload;
+}
+
+/** 删除分段（向量 + 关键词行 + 分段行一起删）。 */
+export async function deleteDocumentSegment(id: number, auth?: AuthContext): Promise<void> {
+  const response = await fetch(resolveApi(`/ingestion/segments/${id}`), {
+    credentials: 'include',
+    method: 'DELETE',
+    headers: buildAuthHeaders(auth),
+  });
+  if (!response.ok) {
+    throw formatHttpError(response.status, '分段删除失败');
+  }
+}
+
+/** 合并相邻分段（id 与 targetId 段序相邻）。 */
+export async function mergeDocumentSegments(
+  id: number,
+  targetId: number,
+  auth?: AuthContext,
+): Promise<DocumentSegment> {
+  const response = await fetch(resolveApi(`/ingestion/segments/${id}/merge`), {
+    credentials: 'include',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(auth) },
+    body: JSON.stringify({ targetId }),
+  });
+  const payload = await parseJsonSafely<DocumentSegment>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '分段合并失败');
+  }
+  return payload;
+}
+
+/** 拆分分段：separator 与 length 二选一。 */
+export async function splitDocumentSegment(
+  id: number,
+  params: { separator?: string; length?: number },
+  auth?: AuthContext,
+): Promise<DocumentSegment[]> {
+  const response = await fetch(resolveApi(`/ingestion/segments/${id}/split`), {
+    credentials: 'include',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(auth) },
+    body: JSON.stringify(params),
+  });
+  const payload = await parseJsonSafely<DocumentSegment[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '分段拆分失败');
+  }
+  return payload;
+}
+
+/** 整篇重建向量（上限 200 段）。 */
+export async function rebuildDocumentVectors(
+  chatId: string,
+  auth?: AuthContext,
+): Promise<{ chatId: string; segments: number; status: string }> {
+  const response = await fetch(
+    resolveApi(`/ingestion/documents/${encodeURIComponent(chatId)}/rebuild`),
+    { credentials: 'include', method: 'POST', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<{ chatId: string; segments: number; status: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '向量重建失败');
+  }
+  return payload;
+}
+
+/** 失败文档重试：FAILED 任务重置 PENDING 并重新入队，返回重置数。 */
+export async function retryIngestionDocument(
+  chatId: string,
+  auth?: AuthContext,
+): Promise<{ ok: number; retried: number; msg: string }> {
+  const response = await fetch(
+    resolveApi(`/ingestion/documents/${encodeURIComponent(chatId)}/retry`),
+    { credentials: 'include', method: 'POST', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<{ ok: number; retried: number; msg: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '重试失败');
+  }
+  return payload;
+}
+
+/** 按文档名定位最新文档（聊天引用点击跳转用）。 */
+export async function lookupIngestionDocument(
+  name: string,
+  auth?: AuthContext,
+): Promise<DocumentLookupResult> {
+  const response = await fetch(
+    resolveApi(withQuery('/ingestion/documents/lookup', { name })),
+    { credentials: 'include', method: 'GET', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<DocumentLookupResult>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '未找到同名文档');
+  }
+  return payload;
 }
 
 /** 管理员跨租户文档总览：分页 + 搜索（租户/批次/文件名）。 */

@@ -94,6 +94,7 @@ public class PlatformAssetService {
         String type = normalizeType(assetType);
         validateName(name);
         validateJson(configJson);
+        validateSplitConfig(type, configJson);
         boolean system = PlatformAsset.SCOPE_SYSTEM.equalsIgnoreCase(scope == null ? "" : scope.trim());
         if (system && !SYSTEM_SCOPED_TYPES.contains(type)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -130,6 +131,7 @@ public class PlatformAssetService {
         PlatformAsset existing = getOwned(assetType, id);
         if (StringUtils.hasText(name)) validateName(name);
         validateJson(configJson);
+        validateSplitConfig(normalizeType(assetType), configJson);
         if (parentId != null && mapper.findByIdAndType(parentId, TenantContext.currentTenantId(), "knowledge-bases") == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "parentId does not exist");
         }
@@ -336,6 +338,32 @@ public class PlatformAssetService {
 
     private void validateJson(String json) {
         if (StringUtils.hasText(json)) normalizeJson(json);
+    }
+
+    /**
+     * 知识库切分配置校验（FR-R8-03）：配置了 split 节时数值必须合法——
+     * 保存即拦截，防止脏配置在入库时被静默回退全局默认（用户以为生效了实际没有）。
+     */
+    private void validateSplitConfig(String type, String configJson) {
+        if (!"knowledge-bases".equals(type) || !StringUtils.hasText(configJson)) {
+            return;
+        }
+        try {
+            JsonNode split = objectMapper.readTree(configJson).path("split");
+            if (!split.isObject()) {
+                return;
+            }
+            int chunkSize = split.path("chunkSize").asInt(0);
+            int minChunkSize = split.path("minChunkSize").asInt(0);
+            int maxNumChunks = split.path("maxNumChunks").asInt(0);
+            if (chunkSize <= 0 || minChunkSize <= 0 || minChunkSize >= chunkSize
+                    || maxNumChunks <= 0 || maxNumChunks > 2000) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "切分配置非法：需满足 0 < minChunkSize < chunkSize，0 < maxNumChunks ≤ 2000");
+            }
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config must be valid JSON", ex);
+        }
     }
 
     private static String keyword(String search) {

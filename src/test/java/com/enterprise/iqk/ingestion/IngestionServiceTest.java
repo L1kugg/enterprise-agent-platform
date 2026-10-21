@@ -37,6 +37,17 @@ class IngestionServiceTest {
                                           VectorStoreProperties vectorStoreProperties,
                                           IngestionQueue queue,
                                           FileSafetyScanner scanner) {
+        return buildService(mapper, vectorStore, ingestionProperties, vectorStoreProperties,
+                queue, scanner, mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class));
+    }
+
+    private IngestionService buildService(IngestionJobMapper mapper,
+                                          org.springframework.ai.vectorstore.VectorStore vectorStore,
+                                          IngestionProperties ingestionProperties,
+                                          VectorStoreProperties vectorStoreProperties,
+                                          IngestionQueue queue,
+                                          FileSafetyScanner scanner,
+                                          com.enterprise.iqk.ingestion.DocumentSegmentService segmentService) {
         return new IngestionService(
                 mapper,
                 vectorStore,
@@ -50,7 +61,8 @@ class IngestionServiceTest {
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(vectorStoreProperties),
                 mock(com.enterprise.iqk.memory.MemoryService.class),
-                mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class)
+                mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class),
+                segmentService
         );
     }
 
@@ -149,11 +161,15 @@ class IngestionServiceTest {
 
     @Test
     void chunkMetadataCarriesScopeKeysAndIngestTimestamp() {
+        com.enterprise.iqk.ingestion.DocumentSegmentService segmentService =
+                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class);
+        org.mockito.Mockito.when(segmentService.resolveSplit(any()))
+                .thenReturn(new RagProperties().getSplit());
         IngestionService service = buildService(
                 mock(IngestionJobMapper.class),
                 mock(org.springframework.ai.vectorstore.VectorStore.class),
                 new IngestionProperties(), new VectorStoreProperties(),
-                mock(IngestionQueue.class), mock(FileSafetyScanner.class));
+                mock(IngestionQueue.class), mock(FileSafetyScanner.class), segmentService);
         IngestionJob job = IngestionJob.builder()
                 .jobId("job-1").tenantId("public").chatId("chat-1")
                 .sourceName("a.pdf").sourceType("pdf").build();
@@ -180,11 +196,15 @@ class IngestionServiceTest {
 
     @Test
     void chunkMetadataCarriesKnowledgeBaseBindingOnlyWhenPresent() {
+        com.enterprise.iqk.ingestion.DocumentSegmentService segmentService =
+                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class);
+        org.mockito.Mockito.when(segmentService.resolveSplit(any()))
+                .thenReturn(new RagProperties().getSplit());
         IngestionService service = buildService(
                 mock(IngestionJobMapper.class),
                 mock(org.springframework.ai.vectorstore.VectorStore.class),
                 new IngestionProperties(), new VectorStoreProperties(),
-                mock(IngestionQueue.class), mock(FileSafetyScanner.class));
+                mock(IngestionQueue.class), mock(FileSafetyScanner.class), segmentService);
         String pageText = "企业级检索增强生成系统的设计与实践。".repeat(30);
 
         // 归属知识库的文档：切片元数据带 knowledge_base_id（FR-R5-01 检索圈定依据）
@@ -232,7 +252,8 @@ class IngestionServiceTest {
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties()),
                 mock(com.enterprise.iqk.memory.MemoryService.class),
-                catalog
+                catalog,
+                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class)
         );
 
         IngestionJob job = service.submitDocument("public", "chat-kb",

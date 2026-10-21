@@ -19,7 +19,7 @@ class KnowledgeBaseCatalogServiceTest {
     private final PlatformAssetMapper assetMapper = mock(PlatformAssetMapper.class);
     private final IngestionJobMapper ingestionJobMapper = mock(IngestionJobMapper.class);
     private final KnowledgeBaseCatalogService service =
-            new KnowledgeBaseCatalogService(assetMapper, ingestionJobMapper);
+            new KnowledgeBaseCatalogService(assetMapper, ingestionJobMapper, new com.fasterxml.jackson.databind.ObjectMapper());
 
     @Test
     void nullOrNonPositiveTargetMeansUnboundUpload() {

@@ -143,8 +143,19 @@
                   formatJobTime(row.finishedAt ?? row.createdAt)
                 }}</template>
               </el-table-column>
-              <el-table-column label="操作" width="80">
+              <el-table-column label="操作" width="170" fixed="right">
                 <template #default="{ row }">
+                  <el-button size="small" link type="primary" @click="openSegmentManager(row.chatId, row.sourceName)"
+                    >分段</el-button
+                  >
+                  <el-button
+                    v-if="row.status === 'FAILED'"
+                    size="small"
+                    link
+                    type="warning"
+                    @click="retryKnowledgeDocument(row)"
+                    >重试</el-button
+                  >
                   <el-button size="small" type="danger" link @click="removeKnowledgeDocument(row)"
                     >删除</el-button
                   >
@@ -267,6 +278,7 @@
       </el-tabs>
     </section>
     <DocumentViewerDrawer />
+    <SegmentManagerDrawer />
   </section>
 </template>
 
@@ -277,6 +289,7 @@
 // useViewActivation / App.vue onMounted 触发。
 import { ElMessage } from 'element-plus';
 import DocumentViewerDrawer from './DocumentViewerDrawer.vue';
+import SegmentManagerDrawer from './SegmentManagerDrawer.vue';
 import {
   docsKnowledgeBaseId,
   filterKnowledgeDocumentsByKb,
@@ -297,6 +310,7 @@ import {
   loadKnowledgeDocuments,
   loadKnowledgeJobs,
   openKnowledgeDocument,
+  openSegmentManager,
   previewKnowledgeBaseId,
   previewLoading,
   previewQuery,
@@ -309,6 +323,21 @@ import {
   submitKnowledgeUpload,
   uploadKnowledgeBaseId,
 } from '../../composables/useKnowledge';
+import type { IngestionDocumentSummary } from '../../types/react';
+import { retryIngestionDocument } from '../../api/client';
+import { authContext } from '../../composables/useAuthState';
+
+/** 失败文档重试（FR-R8-02）：FAILED 任务重置 PENDING 重新入队后刷新清单。 */
+async function retryKnowledgeDocument(row: IngestionDocumentSummary): Promise<void> {
+  try {
+    const result = await retryIngestionDocument(row.chatId, authContext());
+    ElMessage.success(result.msg || `已重新入队 ${result.retried} 个任务`);
+    await loadKnowledgeDocuments(true);
+    await loadKnowledgeJobs(true);
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '重试失败');
+  }
+}
 import { isAdmin } from '../../composables/useAuthState';
 import { formatFileSize, formatJobTime, statusTagType } from '../../utils/format';
 </script>

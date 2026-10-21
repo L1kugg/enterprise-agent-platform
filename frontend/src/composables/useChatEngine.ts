@@ -43,6 +43,7 @@ import {
 import { runResearchInChat } from './useResearch';
 import { scrollToBottom } from './useChatViewport';
 import { authContext, canUseRemoteSync } from './useAuthState';
+import { openDocumentByCitation } from './useKnowledge';
 
 export function startEditMessage(message: ChatMessage): void {
   if (message.role !== 'user') {
@@ -130,15 +131,14 @@ function parseCitation(citation: string): { source: string; chunk: string } | nu
   };
 }
 
-export function openCitation(citation: string): void {
-  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
+/** 聊天引用点击跳转（R5 剩余）：按文档名定位原文并高亮被引用的内容块。 */
+export async function openCitation(citation: string): Promise<void> {
   const target = parseCitation(citation);
-  const url = `${base}/ai/pdf/file/${encodeURIComponent(chatId.value)}${
-    target
-      ? `?source=${encodeURIComponent(target.source)}&chunk=${encodeURIComponent(target.chunk)}`
-      : ''
-  }`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  if (!target) {
+    ElMessage.warning('无法解析该引用的来源');
+    return;
+  }
+  await openDocumentByCitation(target.source, target.chunk);
 }
 
 function findPreviousUserQuestion(index: number): string {

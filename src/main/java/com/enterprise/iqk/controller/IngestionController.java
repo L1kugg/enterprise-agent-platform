@@ -27,6 +27,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -57,6 +59,7 @@ public class IngestionController {
     private final ObjectProvider<Tracer> tracerProvider;
     private final IngestionProperties ingestionProperties;
     private final RetrievalPreviewService retrievalPreviewService;
+    private final com.enterprise.iqk.ingestion.DocumentSegmentService documentSegmentService;
 
     @PostMapping("/upload/{chatId}")
     /** 上传文档（PDF/DOC/DOCX/MD）创建入库任务（支持幂等键去重），同时登记 pdf 会话历史。
@@ -186,6 +189,77 @@ public class IngestionController {
         body.put("facts", result.factCount());
         body.put("skipped", result.skipReason());
         return body;
+    }
+
+    // ---------- 分段治理（R8，FR-R8-02/03/04） ----------
+
+    /** 分段列表：document_segment 真实数据面，按段序分页。 */
+    @GetMapping("/documents/{chatId}/segments")
+    public Map<String, Object> listSegments(@PathVariable String chatId,
+                                            @RequestParam(value = "page", defaultValue = "1") int page,
+                                            @RequestParam(value = "pageSize", defaultValue = "50") int pageSize) {
+        return documentSegmentService.page(currentTenantId(), chatId, page, pageSize);
+    }
+
+    /** 编辑分段内容：更新 DB 后删除旧向量并重嵌入（关键词索引同步 upsert）。 */
+    @PutMapping("/segments/{id}")
+    public com.enterprise.iqk.domain.DocumentSegmentRecord updateSegment(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        return documentSegmentService.updateContent(currentTenantId(), id,
+                body == null ? null : body.get("content"));
+    }
+
+    /** 删除分段：向量 + 关键词行 + 分段行一起删。 */
+    @DeleteMapping("/segments/{id}")
+    public Map<String, Object> deleteSegment(@PathVariable Long id) {
+        documentSegmentService.delete(currentTenantId(), id);
+        return Map.of("ok", 1, "msg", "已删除");
+    }
+
+    /** 合并相邻分段：两段内容拼接后重嵌入，后一段删除。 */
+    @PostMapping("/segments/{id}/merge")
+    public com.enterprise.iqk.domain.DocumentSegmentRecord mergeSegment(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body) {
+        Long targetId = body == null ? null : body.get("targetId");
+        return documentSegmentService.merge(currentTenantId(), id, targetId);
+    }
+
+    /** 拆分分段：按分隔符或固定长度拆为 2~20 段（原段保留首段，其余追加到文档末尾）。 */
+    @PostMapping("/segments/{id}/split")
+    public List<com.enterprise.iqk.domain.DocumentSegmentRecord> splitSegment(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        String separator = body == null || body.get("separator") == null
+                ? null : String.valueOf(body.get("separator"));
+        Integer length = body == null || body.get("length") == null
+                ? null : Integer.valueOf(String.valueOf(body.get("length")));
+        return documentSegmentService.split(currentTenantId(), id, separator, length);
+    }
+
+    /** 整篇重建向量：按分段快照删除全部旧向量后重嵌（上限 200 段）。 */
+    @PostMapping("/documents/{chatId}/rebuild")
+    public Map<String, Object> rebuildDocument(@PathVariable String chatId) {
+        return documentSegmentService.rebuildDocument(currentTenantId(), chatId);
+    }
+
+    /** 失败文档重试（FR-R8-02）：文档内 FAILED 任务重置 PENDING 并重新入队。 */
+    @PostMapping("/documents/{chatId}/retry")
+    public Map<String, Object> retryDocument(@PathVariable String chatId) {
+        int retried = documentSegmentService.retryFailedByChat(currentTenantId(), chatId);
+        return Map.of("ok", 1, "retried", retried,
+                "msg", retried > 0 ? "已重新入队 " + retried + " 个任务" : "没有可重试的失败任务");
+    }
+
+    /** 按文档名定位最新文档（聊天引用点击跳转用），返回 chatId 供内容预览。 */
+    @GetMapping("/documents/lookup")
+    public Map<String, Object> lookupDocument(@RequestParam("name") String name) {
+        IngestionJob job = documentSegmentService.lookupBySourceName(currentTenantId(), name);
+        if (job == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到同名文档");
+        }
+        return Map.of("chatId", job.getChatId(), "sourceName", job.getSourceName());
     }
 
     @PostMapping("/jobs/process")

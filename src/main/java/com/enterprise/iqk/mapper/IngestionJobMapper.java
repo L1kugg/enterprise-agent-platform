@@ -88,6 +88,47 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                                           @Param("chatId") String chatId,
                                           @Param("limit") int limit);
 
+    /** 按文档名找最新一份文档（每 chat 取最新任务），供聊天引用点击跳转定位 chatId。 */
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND source_name = #{sourceName}
+              AND id IN (
+                  SELECT MAX(id) FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                    AND source_name = #{sourceName}
+                  GROUP BY chat_id
+              )
+            ORDER BY id DESC
+            LIMIT 1
+            """)
+    IngestionJob findLatestBySourceName(@Param("tenantId") String tenantId,
+                                        @Param("sourceName") String sourceName);
+
+    /** 分段治理（FR-R8-02）：文档内 FAILED 任务清单（重试入口用）。 */
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND chat_id = #{chatId}
+              AND status = 'FAILED'
+            ORDER BY id
+            """)
+    List<IngestionJob> findFailedByChat(@Param("tenantId") String tenantId,
+                                        @Param("chatId") String chatId);
+
+    /** FAILED → PENDING（重试语义：attempt 保留，到期时间清空）。 */
+    @Update("""
+            UPDATE ingestion_job
+            SET status = 'PENDING',
+                updated_at = #{updatedAt},
+                next_retry_at = NULL,
+                error_message = NULL
+            WHERE job_id = #{jobId}
+              AND status = 'FAILED'
+            """)
+    int retryFailedJob(@Param("jobId") String jobId,
+                       @Param("updatedAt") LocalDateTime updatedAt);
+
     @Select("""
             SELECT * FROM ingestion_job
             WHERE tenant_id = #{tenantId}

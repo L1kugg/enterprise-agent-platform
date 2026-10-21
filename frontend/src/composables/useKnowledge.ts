@@ -14,6 +14,7 @@ import {
   listIngestionDocuments,
   listKnowledgeBaseCatalog,
   listRecentIngestionJobs,
+  lookupIngestionDocument,
   searchIngestionPreview,
   uploadIngestionDocument,
 } from '../api/client';
@@ -55,6 +56,18 @@ export const previewResult = ref<RetrievalPreviewResult | null>(null);
 export const docViewerVisible = ref(false);
 export const docViewerLoading = ref(false);
 export const docViewerDoc = ref<DocumentContent | null>(null);
+/** 引用跳转定位的内容块序号（null = 不定位）；抽屉打开后滚动并高亮该块 */
+export const docViewerFocusChunk = ref<number | null>(null);
+// 分段治理抽屉（R8）：文档清单「分段」按钮打开
+export const segmentManagerVisible = ref(false);
+export const segmentManagerChatId = ref('');
+export const segmentManagerSourceName = ref('');
+
+export function openSegmentManager(chatId: string, sourceName: string): void {
+  segmentManagerChatId.value = chatId;
+  segmentManagerSourceName.value = sourceName;
+  segmentManagerVisible.value = true;
+}
 
 export async function loadKnowledgeJobs(silent = false): Promise<void> {
   if (!token.value && !apiKeyInput.value) {
@@ -175,6 +188,32 @@ export async function removeKnowledgeDocument(row: IngestionDocumentSummary): Pr
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除失败';
     ElMessage.error(message);
+  }
+}
+
+/**
+ * 聊天引用点击跳转（R5 剩余）：按引用的文档名定位 chatId，加载内容并在抽屉里
+ * 定位到被引用的内容块（高亮 + 滚动）。同文档名多份时取最新一份。
+ */
+export async function openDocumentByCitation(sourceName: string, chunkId: string): Promise<void> {
+  if (!token.value && !apiKeyInput.value) {
+    knowledgeNeedsAuth.value = true;
+    return;
+  }
+  docViewerLoading.value = true;
+  docViewerDoc.value = null;
+  const chunkIndex = Number.parseInt(chunkId.replace('chunk-', ''), 10);
+  docViewerFocusChunk.value = Number.isFinite(chunkIndex) ? chunkIndex : null;
+  docViewerVisible.value = true;
+  try {
+    const located = await lookupIngestionDocument(sourceName, authContext());
+    docViewerDoc.value = await getIngestionDocumentContent(located.chatId, authContext());
+  } catch (error) {
+    docViewerVisible.value = false;
+    const message = error instanceof Error ? error.message : '引用原文定位失败';
+    ElMessage.error(message);
+  } finally {
+    docViewerLoading.value = false;
   }
 }
 

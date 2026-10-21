@@ -54,10 +54,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 /**
- * 文档入库服务：接收上传（PDF/DOC/DOCX/MD）→ 落盘 + 建任务 → 异步解析/分块/向量化。
- * 幂等键（客户端提供或按内容哈希自动生成）保证同一文件重复提交返回既有任务；
- * 失败按 attemptCount 与 baseDelaySeconds 递增延迟重试，超限转 FAILED 并投递 DLQ；
- * 任务与向量元数据全部携带 tenant_id/chat_id，检索侧按租户隔离。
+ * 文档入库服务：上传（PDF/DOC/DOCX/MD）→ 落盘建任务 → 异步解析/分块/向量化。
+ * 幂等键去重；失败递增延迟重试超限转 FAILED 投 DLQ；元数据携带 tenant_id/chat_id 供租户隔离检索。
+ * 分段快照/切分配置/失败重试在 DocumentSegmentService（R8 治理域），本类委托调用。
  */
 public class IngestionService {
 
@@ -75,9 +74,10 @@ public class IngestionService {
     private final MemoryService memoryService;
     /** 上传目标知识库校验与归属（FR-R5-01），校验逻辑在目录服务内闭环 */
     private final com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService knowledgeBaseCatalogService;
+    /** 分段治理服务：入库落分段快照 + 切分配置解析（R8） */
+    private final DocumentSegmentService documentSegmentService;
 
-    /** 提交文档入库任务（PDF/DOC/DOCX/MD）：安全扫描 → 幂等去重 → 落盘建任务 → 发布队列；重复提交直接返回既有任务。
-     *  knowledgeBaseId 非空时校验知识库资产（本租户可见且 ACTIVE），文档归属该库，检索按库圈定范围（FR-R5-01）。 */
+    /** 提交文档入库任务（PDF/DOC/DOCX/MD）；knowledgeBaseId 非空时校验归属（FR-R5-01）。 */
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         return submitDocument(tenantId, chatId, file, idempotencyKey, traceId, null);
     }
@@ -250,12 +250,8 @@ public class IngestionService {
                     .errorMessage("jobId missing")
                     .build();
         }
-        // 两条调用路径都必须带租户作用域：
-        //  - HTTP 控制器经由基于 MDC 的 TenantContext 过滤器进入这里；
-        //  - 后台 worker（Redis / RabbitMQ / db_polling）运行的线程没有 MDC，
-        //    必须显式传入任务所属的 tenantId。
-        // 回退到 MDC 是为了让既有调用点继续可用，而 SQL 现在会拒绝
-        // 认领属于其他租户的任务。
+        // 两条调用路径都必须带租户作用域：HTTP 控制器经 MDC 过滤器进入；
+        // 后台 worker 线程无 MDC，必须显式传任务所属的 tenantId（SQL 会拒绝跨租户认领）。
         String claimTenantId = StringUtils.hasText(tenantId)
                 ? TenantContext.normalize(tenantId)
                 : TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
@@ -386,11 +382,12 @@ public class IngestionService {
         return count;
     }
 
-    /** 解析文档 → token 分块 → 写入向量库 → 视后端情况落快照；返回切片供图谱抽取复用。 */
+    /** 解析文档 → token 分块 → 写入向量库 → 分段快照落库 → 视后端情况落快照；返回切片供图谱抽取复用。 */
     private List<Document> processPdfJob(IngestionJob job) {
         List<Document> chunks = parseAndSplit(job);
         vectorStore.add(chunks);
         keywordIndexStore.indexAll(TenantContext.normalize(job.getTenantId()), chunks);
+        documentSegmentService.persistSegments(job, chunks);
         snapshotPersister.persistIfNeeded(vectorStore);
         return chunks;
     }
@@ -431,14 +428,17 @@ public class IngestionService {
      * 按配置的 chunk 参数切块，并为每个 chunk 覆写 tenant_id/chat_id/job_id 等元数据。
      * created_at 写入库时刻的 epoch 毫秒——激活 EvidenceJudge 的时效度维度
      * （此前从不写时间戳，timeliness 恒中性 0.70，新文档的"新鲜度"信息全部丢失）。
+     * 知识库级切分配置（FR-R8-03）：文档归属知识库且配置了 split 时覆盖全局默认
+     * （仅对当次入库生效；已有文档可在治理界面整篇重建）。
      * 包私有以便直接对元数据契约做单元测试（不依赖真实 PDF 解析）。
      */
     List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
+        RagProperties.Split effective = documentSegmentService.resolveSplit(job);
         TokenTextSplitter splitter = TokenTextSplitter.builder()
-                .withChunkSize(ragProperties.getSplit().getChunkSize())
-                .withMinChunkSizeChars(ragProperties.getSplit().getMinChunkSize())
+                .withChunkSize(effective.getChunkSize())
+                .withMinChunkSizeChars(effective.getMinChunkSize())
                 .withMinChunkLengthToEmbed(5)
-                .withMaxNumChunks(ragProperties.getSplit().getMaxNumChunks())
+                .withMaxNumChunks(effective.getMaxNumChunks())
                 .withKeepSeparator(true)
                 .build();
         List<Document> chunks = splitter.apply(pages);

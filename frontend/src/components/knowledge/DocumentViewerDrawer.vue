@@ -28,11 +28,20 @@
         description="正文超过单次预览上限已截断，需要完整内容请点「下载原文件」。"
       />
       <template v-if="docViewerDoc">
-        <div v-for="block in docViewerDoc.blocks" :key="block.index" class="kb-doc-block">
+        <div
+          v-for="block in docViewerDoc.blocks"
+          :key="block.index"
+          :ref="(el) => setBlockRef(block.index, el)"
+          class="kb-doc-block"
+          :class="{ 'kb-doc-block-focus': block.index === docViewerFocusChunk }"
+        >
           <p class="kb-doc-block-meta">
             <span>#{{ block.index + 1 }}</span>
             <el-tag v-if="block.page != null" size="small" effect="plain"
               >第 {{ block.page }} 页</el-tag
+            >
+            <el-tag v-if="block.index === docViewerFocusChunk" size="small" type="warning"
+              >引用来源</el-tag
             >
           </p>
           <p class="kb-doc-block-text">{{ block.text }}</p>
@@ -45,12 +54,38 @@
 
 <script setup lang="ts">
 // 注意：el-drawer 会把内容传送到 body，但 scoped 属性长在元素上，样式照样命中（同 BranchDrawer）。
+// 引用跳转（R5 剩余）：docViewerFocusChunk 非空时滚动定位并高亮被引用的内容块。
+import { nextTick, watch } from 'vue';
 import {
   docViewerDoc,
+  docViewerFocusChunk,
   docViewerLoading,
   docViewerVisible,
   downloadKnowledgeOriginal,
 } from '../../composables/useKnowledge';
+
+const blockRefs = new Map<number, HTMLElement>();
+
+function setBlockRef(index: number, el: unknown): void {
+  if (el instanceof HTMLElement) {
+    blockRefs.set(index, el);
+  } else {
+    blockRefs.delete(index);
+  }
+}
+
+watch(
+  () => [docViewerVisible.value, docViewerDoc.value, docViewerFocusChunk.value] as const,
+  ([visible]) => {
+    if (!visible || docViewerFocusChunk.value == null) {
+      return;
+    }
+    void nextTick(() => {
+      const target = blockRefs.get(docViewerFocusChunk.value ?? -1);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  },
+);
 </script>
 
 <style scoped>
@@ -92,6 +127,11 @@ import {
   border-radius: 10px;
   padding: 10px 12px;
   background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+}
+
+.kb-doc-block-focus {
+  border-color: var(--el-color-warning);
+  background: color-mix(in oklab, var(--el-color-warning) 10%, transparent);
 }
 
 .kb-doc-block-meta {

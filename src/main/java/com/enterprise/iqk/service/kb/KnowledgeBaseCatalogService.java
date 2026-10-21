@@ -35,6 +35,7 @@ public class KnowledgeBaseCatalogService {
 
     private final PlatformAssetMapper assetMapper;
     private final IngestionJobMapper ingestionJobMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     /** 用户侧知识库目录：本租户 ACTIVE 知识库，附真实文档统计；坏数据跳过不中断目录。 */
     public List<KnowledgeBaseCatalogItemVO> listUsable(String tenantId) {
@@ -169,6 +170,45 @@ public class KnowledgeBaseCatalogService {
     /** ingestion_job 聚合的原始统计（file/parsing/failed/chunk 计数 + 最近完成时间）。 */
     private record JobStats(long fileCount, long parsingCount, long failedCount,
                             long chunkCount, LocalDateTime lastFinishedAt) {
+    }
+
+    /**
+     * 知识库级切分配置（FR-R8-03）：从知识库资产 configJson 的 split 节解析
+     * {chunkSize, minChunkSize, maxNumChunks}，入库时覆盖全局切分默认值。
+     * 未配置/解析失败/数值非法返回 empty（回退全局默认）；数值合法性在保存侧校验。
+     */
+    public java.util.Optional<SplitConfig> findSplitConfig(String tenantId, Long knowledgeBaseId) {
+        if (knowledgeBaseId == null || knowledgeBaseId <= 0) {
+            return java.util.Optional.empty();
+        }
+        try {
+            PlatformAsset kb = assetMapper.findByIdAndTypeVisible(knowledgeBaseId,
+                    TenantContext.normalize(tenantId), "knowledge-bases");
+            if (kb == null || !StringUtils.hasText(kb.getConfigJson())) {
+                return java.util.Optional.empty();
+            }
+            com.fasterxml.jackson.databind.JsonNode split = objectMapper.readTree(kb.getConfigJson())
+                    .path("split");
+            if (!split.isObject()) {
+                return java.util.Optional.empty();
+            }
+            int chunkSize = split.path("chunkSize").asInt(0);
+            int minChunkSize = split.path("minChunkSize").asInt(0);
+            int maxNumChunks = split.path("maxNumChunks").asInt(0);
+            if (chunkSize <= 0 || minChunkSize <= 0 || minChunkSize >= chunkSize
+                    || maxNumChunks <= 0 || maxNumChunks > 2000) {
+                log.warn("知识库切分配置非法，回退全局默认: kbId={}, split={}", knowledgeBaseId, split);
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(new SplitConfig(chunkSize, minChunkSize, maxNumChunks));
+        } catch (Exception ex) {
+            log.warn("知识库切分配置解析失败，回退全局默认: kbId={}, reason={}", knowledgeBaseId, ex.toString());
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** 知识库级切分参数（覆盖 TokenTextSplitter 的三个可用旋钮）。 */
+    public record SplitConfig(int chunkSize, int minChunkSize, int maxNumChunks) {
     }
 
     /** 管理侧统计视图。 */

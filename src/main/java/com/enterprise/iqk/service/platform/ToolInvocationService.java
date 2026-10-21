@@ -109,6 +109,7 @@ public class ToolInvocationService {
 
         StringBuilder query = new StringBuilder(url.getQuery() == null ? "" : url.getQuery());
         Map<String, Object> bodyValues = new LinkedHashMap<>();
+        Map<String, String> headerValues = new LinkedHashMap<>();
         JsonNode definitions = config.path("params");
         if (definitions.isArray()) {
             for (JsonNode definition : definitions) {
@@ -119,7 +120,7 @@ public class ToolInvocationService {
                 switch (location) {
                     case "QUERY" -> appendQuery(query, name + "=" + encoded);
                     case "PATH" -> { }
-                    case "HEADER" -> { }
+                    case "HEADER" -> headerValues.put(name, String.valueOf(params.get(name)));
                     case "BODY" -> bodyValues.put(name, params.get(name));
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "参数位置不合法：" + location);
@@ -142,9 +143,13 @@ public class ToolInvocationService {
                 connection.setRequestMethod(method);
                 connection.setInstanceFollowRedirects(false);
                 applyAuthorization(connection, config);
+                // 用户定义的 HEADER 参数最后应用：可覆盖默认 Content-Type，不覆盖认证头
+                headerValues.forEach(connection::setRequestProperty);
                 if (!bodyValues.isEmpty()) {
                     connection.setDoOutput(true);
-                    connection.setRequestProperty("Content-Type", "application/json");
+                    if (headerValues.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("Content-Type"))) {
+                        connection.setRequestProperty("Content-Type", "application/json");
+                    }
                     try (OutputStream output = connection.getOutputStream()) {
                         output.write(objectMapper.writeValueAsString(bodyValues).getBytes(StandardCharsets.UTF_8));
                     }

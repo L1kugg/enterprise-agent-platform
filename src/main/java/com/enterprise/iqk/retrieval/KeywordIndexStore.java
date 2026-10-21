@@ -192,6 +192,22 @@ public class KeywordIndexStore {
         }
     }
 
+    /** 删除单个切片的关键词行（chunk_key = tenant:job:chunkIndex，R8 分段治理用）。 */
+    public int deleteByJobChunkIndex(String tenantId, String jobId, int chunkIndex) {
+        try {
+            int rows = jdbcTemplate.update(
+                    "DELETE FROM retrieval_keyword_chunk WHERE chunk_key = ?",
+                    tenantId + ":" + jobId + ":" + chunkIndex);
+            counter("delete_success").increment(rows);
+            return rows;
+        } catch (RuntimeException ex) {
+            counter("delete_error").increment();
+            log.warn("keyword index delete degraded: tenant={}, job={}, index={}, reason={}",
+                    tenantId, jobId, chunkIndex, ex.toString());
+            return 0;
+        }
+    }
+
     private Counter counter(String outcome) {
         return Counter.builder("retrieval.keyword.index")
                 .tag("outcome", outcome)

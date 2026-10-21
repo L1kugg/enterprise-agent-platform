@@ -81,7 +81,7 @@ public class AgentToolCatalog {
         try {
             return objectMapper.readTree(tool.getConfigJson() == null
                     || tool.getConfigJson().isBlank() ? "{}" : tool.getConfigJson());
-        } catch (Exception ex) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             return objectMapper.createObjectNode();
         }
     }
