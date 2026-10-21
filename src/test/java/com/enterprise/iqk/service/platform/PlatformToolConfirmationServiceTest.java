@@ -36,7 +36,8 @@ class PlatformToolConfirmationServiceTest {
 
     private PlatformToolConfirmationService service(PlatformToolInvoker invoker) {
         ToolInvocationService invocation = new ToolInvocationService(null,
-                new CodeToolSandboxService(new ObjectMapper()), new ObjectMapper());
+                new CodeToolSandboxService(new ObjectMapper()), new ObjectMapper(),
+                new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         return new PlatformToolConfirmationService(confirmationMapper, invoker, invocation, new ObjectMapper());
     }
 
@@ -88,7 +89,8 @@ class PlatformToolConfirmationServiceTest {
                 .thenReturn(java.util.List.of());
         PlatformAssetMapper assetMapper = org.mockito.Mockito.mock(PlatformAssetMapper.class);
         ToolInvocationService invocation = new ToolInvocationService(null,
-                new CodeToolSandboxService(new ObjectMapper()), new ObjectMapper());
+                new CodeToolSandboxService(new ObjectMapper()), new ObjectMapper(),
+                new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         PlatformToolInvoker invoker = new PlatformToolInvoker(assetMapper, bindingMapper, invocation);
         PlatformToolConfirmationService service = service(invoker);
 

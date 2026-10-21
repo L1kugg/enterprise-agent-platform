@@ -39,20 +39,23 @@ public class PlatformSqlTestService {
 
     private final PlatformAssetMapper assetMapper;
     private final ObjectMapper objectMapper;
+    /** 凭据解密（FR-R12-01）：数据库密码字段在执行/测试前解密 */
+    private final com.enterprise.iqk.security.SecretCipher secretCipher;
 
     public Map<String, Object> testDatabase(Long id) {
         PlatformAsset database = ownedDatabase(id);
-        JsonNode config = parse(database.getConfigJson());
+        JsonNode encrypted = parseRaw(database.getConfigJson());
+        JsonNode config = secretCipher.transformFields(encrypted, false);
         long started = System.nanoTime();
         try (Connection ignored = open(config)) {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "AVAILABLE");
             result.put("latencyMs", elapsedMs(started));
-            persistDatabaseStatus(database, config, "AVAILABLE", elapsedMs(started));
+            persistDatabaseStatus(database, encrypted, "AVAILABLE", elapsedMs(started));
             return result;
         } catch (Exception ex) {
             long elapsed = elapsedMs(started);
-            persistDatabaseStatus(database, config, "UNAVAILABLE", elapsed);
+            persistDatabaseStatus(database, encrypted, "UNAVAILABLE", elapsed);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "UNAVAILABLE");
             result.put("latencyMs", elapsed);
@@ -154,6 +157,10 @@ public class PlatformSqlTestService {
     }
 
     private JsonNode parse(String json) {
+        return secretCipher.transformFields(parseRaw(json), false);
+    }
+
+    private JsonNode parseRaw(String json) {
         try {
             JsonNode node = objectMapper.readTree(json == null || json.isBlank() ? "{}" : json);
             if (!node.isObject()) throw new IllegalArgumentException("database config must be object");

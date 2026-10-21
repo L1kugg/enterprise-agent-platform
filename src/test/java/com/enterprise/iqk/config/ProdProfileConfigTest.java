@@ -8,6 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ProdProfileConfigTest {
 
+    /** 启用安全时必须带 app.secret-key（FR-R12-01 凭据加密主密钥），测试属性统一携带。 */
+    private static final String SECRET_KEY_PROPERTY = "app.secret-key="
+            + java.util.Base64.getEncoder().encodeToString(new byte[32]);
+
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(
                     CorsConfiguration.class,
@@ -25,6 +29,7 @@ class ProdProfileConfigTest {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=*",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=a-real-prod-secret-key"
         ).run(context -> {
             assertThat(context).hasFailed();
@@ -39,6 +44,7 @@ class ProdProfileConfigTest {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=https://example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret="
         ).run(context -> {
             assertThat(context).hasFailed();
@@ -53,6 +59,7 @@ class ProdProfileConfigTest {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=https://example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=dev-jwt-secret-change-this-in-prod-123456"
         ).run(context -> {
             assertThat(context).hasFailed();
@@ -67,6 +74,7 @@ class ProdProfileConfigTest {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=https://example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=replace-me-with-real-secret"
         ).run(context -> {
             assertThat(context).hasFailed();
@@ -96,6 +104,7 @@ class ProdProfileConfigTest {
                 "spring.profiles.active=prod",
                 "app.cors.allowed-origins=https://example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=a-real-prod-secret-key",
                 "spring.rabbitmq.username=guest",
                 "spring.rabbitmq.password=guest"
@@ -112,6 +121,7 @@ class ProdProfileConfigTest {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=https://example.com,https://app.example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=a-real-prod-secret-key"
         ).run(context -> assertThat(context).hasNotFailed());
     }
@@ -122,6 +132,7 @@ class ProdProfileConfigTest {
                 "spring.profiles.active=prod",
                 "app.cors.allowed-origins=https://example.com,https://app.example.com",
                 "app.security.enabled=true",
+                SECRET_KEY_PROPERTY,
                 "app.security.jwt-secret=a-real-prod-secret-key",
                 "spring.rabbitmq.username=enterprise-agent-platform",
                 "spring.rabbitmq.password=not-guest"

@@ -33,7 +33,8 @@ class ToolInvocationServiceTest {
     private final ToolInvocationService service = new ToolInvocationService(
             null,
             new CodeToolSandboxService(MAPPER),
-            MAPPER);
+            MAPPER,
+            new com.enterprise.iqk.security.SecretCipher("", MAPPER));
 
     @BeforeAll
     static void startServer() throws Exception {

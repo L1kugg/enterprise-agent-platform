@@ -48,7 +48,8 @@ class PlatformToolRuntimeTest {
             org.mockito.Mockito.spy(new com.enterprise.iqk.service.platform.ToolInvocationService(
                     mock(com.enterprise.iqk.service.platform.PlatformSqlTestService.class),
                     mock(com.enterprise.iqk.service.platform.CodeToolSandboxService.class),
-                    new ObjectMapper()));
+                    new ObjectMapper(),
+                    new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper())));
 
     private PlatformToolRuntime runtime() {
         PlatformToolInvoker invoker = new PlatformToolInvoker(assetMapper, bindingMapper, invocation);

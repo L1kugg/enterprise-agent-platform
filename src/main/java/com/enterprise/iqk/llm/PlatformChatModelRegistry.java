@@ -39,6 +39,8 @@ public class PlatformChatModelRegistry {
     private final PlatformAssetMapper assetMapper;
     private final ObjectMapper objectMapper;
     private final AgentRuntimeProperties properties;
+    /** 凭据解密（FR-R12-01）：加载模型配置后解密 apiKey 供客户端构建 */
+    private final com.enterprise.iqk.security.SecretCipher secretCipher;
     private final ConcurrentHashMap<Long, CacheEntry> cache = new ConcurrentHashMap<>();
     /** 构建串行化的专用锁：ConcurrentHashMap 实例本身禁止作监视器（JLS 监视器语义不保证） */
     private final Object buildLock = new Object();
@@ -46,10 +48,12 @@ public class PlatformChatModelRegistry {
 
     public PlatformChatModelRegistry(PlatformAssetMapper assetMapper,
                                      ObjectMapper objectMapper,
-                                     AgentRuntimeProperties properties) {
+                                     AgentRuntimeProperties properties,
+                                     com.enterprise.iqk.security.SecretCipher secretCipher) {
         this.assetMapper = assetMapper;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.secretCipher = secretCipher;
     }
 
     /** 解析绑定模型服务为可用 ChatClient；配置缺失/不完整抛 400，调用失败由上层回退策略承接。
@@ -62,7 +66,7 @@ public class PlatformChatModelRegistry {
         if (asset == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "智能体绑定的模型服务不存在");
         }
-        JsonNode config = parse(asset.getConfigJson());
+        JsonNode config = secretCipher.transformFields(parse(asset.getConfigJson()), false);
         String apiUrl = config.path("apiUrl").asText(config.path("api_url").asText("")).trim();
         String apiKey = config.path("apiKey").asText(config.path("api_key").asText("")).trim();
         String modelName = config.path("modelName").asText(

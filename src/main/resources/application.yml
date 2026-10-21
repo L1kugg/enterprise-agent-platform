@@ -81,6 +81,8 @@ management:
         enabled: true
 
 app:
+  # 资产凭据字段级加密主密钥（FR-R12-01）：32 字节 base64；security.enabled 时必填（缺省明文透传+告警）
+  secret-key: ${APP_SECRET_KEY:}
   chat:
     memory:
       # 会话记忆窗口治理（§18.2）：条数窗口 + Token 预算双重裁剪，只裁"进模型的部分"，

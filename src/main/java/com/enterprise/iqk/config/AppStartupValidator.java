@@ -37,6 +37,9 @@ public class AppStartupValidator {
     @Value("${app.security.jwt-secret:}")
     private String jwtSecret;
 
+    @Value("${app.secret-key:}")
+    private String secretKey;
+
     @Value("${spring.rabbitmq.username:}")
     private String rabbitUsername;
 
@@ -51,6 +54,11 @@ public class AppStartupValidator {
         }
         if (!securityEnabled) {
             return;
+        }
+        if (secretKey == null || secretKey.isBlank()) {
+            throw new IllegalStateException(
+                    "app.secret-key (APP_SECRET_KEY) must be set when security is enabled: "
+                            + "used to encrypt asset credentials at rest (FR-R12-01)");
         }
         if (jwtSecret == null || jwtSecret.isBlank()) {
             throw new IllegalStateException(

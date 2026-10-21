@@ -57,6 +57,8 @@ public class PlatformAssetService {
     private final com.enterprise.iqk.mapper.IngestionJobMapper ingestionJobMapper;
     /** 知识库删除时解绑关键词索引切片（FR-R5-01 删除策略） */
     private final com.enterprise.iqk.retrieval.KeywordIndexStore keywordIndexStore;
+    /** 凭据字段级加密（FR-R12-01）：create/update 落库前加密敏感字段 */
+    private final com.enterprise.iqk.security.SecretCipher secretCipher;
 
     public long count(String assetType, String search) {
         String type = normalizeType(assetType);
@@ -113,7 +115,8 @@ public class PlatformAssetService {
             PlatformAsset asset = PlatformAsset.builder()
                     .tenantId(effectiveTenant).assetType(type).scope(effectiveScope).parentId(parentId)
                     .name(name.trim()).description(StringUtils.hasText(description) ? description.trim() : null)
-                    .status(TYPE_STATUS.get(type)).configJson(normalizeJson(configJson))
+                    .status(TYPE_STATUS.get(type))
+                    .configJson(secretCipher.transformFields(normalizeJson(configJson), true))
                     .createdBy(creator).createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now())
                     .build();
             mapper.insert(asset);
@@ -139,7 +142,9 @@ public class PlatformAssetService {
             existing.setName(StringUtils.hasText(name) ? name.trim() : existing.getName());
             existing.setDescription(description == null ? existing.getDescription() :
                     (StringUtils.hasText(description) ? description.trim() : null));
-            existing.setConfigJson(configJson == null ? existing.getConfigJson() : preserveSecrets(existing.getConfigJson(), configJson));
+            existing.setConfigJson(configJson == null ? existing.getConfigJson()
+                    : secretCipher.transformFields(
+                            preserveSecrets(existing.getConfigJson(), configJson), true));
             existing.setStatus(StringUtils.hasText(status) ? status.trim().toUpperCase(Locale.ROOT) : existing.getStatus());
             existing.setParentId(parentId == null ? existing.getParentId() : parentId);
             existing.setUpdatedAt(LocalDateTime.now());

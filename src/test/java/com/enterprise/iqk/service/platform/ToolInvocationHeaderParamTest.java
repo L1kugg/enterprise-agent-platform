@@ -29,7 +29,8 @@ class ToolInvocationHeaderParamTest {
     private static volatile String seenContentType = "";
 
     private final ToolInvocationService service = new ToolInvocationService(
-            null, new CodeToolSandboxService(MAPPER), MAPPER);
+            null, new CodeToolSandboxService(MAPPER), MAPPER,
+            new com.enterprise.iqk.security.SecretCipher("", MAPPER));
 
     @BeforeAll
     static void startServer() throws Exception {

@@ -1,6 +1,7 @@
 package com.enterprise.iqk.service.platform;
 
 import com.enterprise.iqk.domain.platform.PlatformAsset;
+import com.enterprise.iqk.security.SecretCipher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,8 @@ public class ToolInvocationService {
     private final PlatformSqlTestService sqlTestService;
     private final CodeToolSandboxService codeToolSandboxService;
     private final ObjectMapper objectMapper;
+    /** 凭据解密（FR-R12-01）：parseToolConfig 是工具执行唯一配置入口，此处解密覆盖测试/运行时/审批三链路 */
+    private final SecretCipher secretCipher;
 
     /** 按工具 config 执行一次调用：先过参数 schema 校验再按 type 分发。 */
     public Map<String, Object> invoke(JsonNode config, Map<String, Object> params) throws Exception {
@@ -230,13 +233,13 @@ public class ToolInvocationService {
                 ? mapped.asText() + "（" + reason + "）" : "工具上游不可达：" + reason;
     }
 
-    /** 解析工具资产 config_json（非法配置统一 400，供运行时给出可修文案）。 */
+    /** 解析工具资产 config_json 并解密凭据字段（非法配置统一 400，供运行时给出可修文案）。 */
     public JsonNode parseToolConfig(PlatformAsset tool) {
         try {
             JsonNode node = objectMapper.readTree(tool.getConfigJson() == null || tool.getConfigJson().isBlank()
                     ? "{}" : tool.getConfigJson());
             if (!node.isObject()) throw new IllegalArgumentException("tool config must be object");
-            return node;
+            return secretCipher.transformFields(node, false);
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "工具配置 JSON 不合法", ex);
         }
