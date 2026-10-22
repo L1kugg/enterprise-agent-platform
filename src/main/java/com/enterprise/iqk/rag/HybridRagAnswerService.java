@@ -12,6 +12,7 @@ import com.enterprise.iqk.retrieval.CitationService;
 import com.enterprise.iqk.retrieval.EvidenceItem;
 import com.enterprise.iqk.retrieval.EvidenceJudgeService;
 import com.enterprise.iqk.retrieval.HybridRetrievalService;
+import com.enterprise.iqk.retrieval.Reranker;
 import com.enterprise.iqk.retrieval.HybridWeights;
 import com.enterprise.iqk.retrieval.KnowledgeScope;
 import com.enterprise.iqk.retrieval.ScoredDocument;
@@ -70,6 +71,10 @@ public class HybridRagAnswerService {
     private final RagFactMemoryRecorder ragFactMemoryRecorder;
     private final MemoryService memoryService;
     private final ModelCallGuard modelCallGuard;
+    /** 多轮查询改写（FR-检索质量）：追问改写为独立检索查询，失败/首轮回退原查询 */
+    private final QueryRewriteService queryRewriteService;
+    /** 真重排器（rag.reranker=llm 默认 / identity）：判分前对候选做相关性重排 */
+    private final Reranker reranker;
 
     /** 执行完整混合 RAG 管线：检索为空返回固定话术；每轮生成 traceId 供日志关联，全链路埋点。 */
     public HybridRagResult answer(String prompt, String tenantId, String chatId,
@@ -90,10 +95,12 @@ public class HybridRagAnswerService {
 
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
+            // 第 0.5 步：多轮查询改写——追问按会话历史改写为独立检索查询（首轮零成本短路）
+            String searchQuery = queryRewriteService.rewriteForRetrieval(prompt, conversationId, normalizedTenantId);
 
             // 第 1 步：混合检索（向量 + 关键词 + 图谱 + 网络）
             HybridRetrievalService.HybridRetrievalResult retrievalResult =
-                    hybridRetrievalService.retrieve(prompt, normalizedTenantId, chatId,
+                    hybridRetrievalService.retrieve(searchQuery, normalizedTenantId, chatId,
                             ragProperties.getRetrieveTopK(), scope);
 
             List<ScoredDocument> retrievedDocs = retrievalResult.documents();
@@ -116,12 +123,16 @@ public class HybridRagAnswerService {
             // 整批低于线时走向量放宽重试，仍无过线文档则不调模型直接返回固定话术
             List<ScoredDocument> usableDocs = filterUsable(retrievedDocs);
             if (usableDocs.isEmpty()) {
-                usableDocs = relaxedVectorRetry(prompt, normalizedTenantId, chatId, retrievalResult.weights(), scope);
+                usableDocs = relaxedVectorRetry(searchQuery, normalizedTenantId, chatId, retrievalResult.weights(), scope);
             }
+            // 第 2 步前置：真重排器（rag.reranker）——对过线候选按 LLM 相关性分重排,
+            // 只重排序与 finalScore,retrievalScore 不动（无关线语义不变）;失败内部已回退原序
+            usableDocs = reranker.rerank(normalizedTenantId, chatId, searchQuery,
+                    usableDocs, ragProperties.getRerankTopK());
             if (usableDocs.isEmpty()) {
                 pipelineOutcome = "empty";
                 log.warn("混合检索全部命中低于无关线（floor={}），不调模型直接返回空话术: chatId={}, query={}",
-                        ragProperties.getFallbackScoreFloor(), chatId, prompt);
+                        ragProperties.getFallbackScoreFloor(), chatId, searchQuery);
                 return HybridRagResult.builder()
                         .answer(EMPTY_ANSWER)
                         .citations(List.of())

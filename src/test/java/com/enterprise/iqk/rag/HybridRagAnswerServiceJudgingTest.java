@@ -43,6 +43,8 @@ class HybridRagAnswerServiceJudgingTest {
 
     private HybridRagAnswerService service;
     private ChatClient.ChatClientRequestSpec requestSpec;
+    private com.enterprise.iqk.rag.QueryRewriteService queryRewriteService;
+    private com.enterprise.iqk.retrieval.Reranker reranker;
 
     private void setUp(List<EvidenceItem> judgedEvidence) {
         HybridRetrievalService retrievalService = mock(HybridRetrievalService.class);
@@ -51,6 +53,12 @@ class HybridRagAnswerServiceJudgingTest {
         ModelRouter modelRouter = mock(ModelRouter.class);
         TenantCostService tenantCostService = mock(TenantCostService.class);
         RagProperties ragProperties = mock(RagProperties.class);
+        queryRewriteService = mock(com.enterprise.iqk.rag.QueryRewriteService.class);
+        when(queryRewriteService.rewriteForRetrieval(anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        reranker = mock(com.enterprise.iqk.retrieval.Reranker.class);
+        when(reranker.rerank(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(3));
 
         // 检索序：甲在前乙在后——判分若不被消费，上下文 [1] 永远是甲
         ScoredDocument docA = ScoredDocument.builder()
@@ -84,10 +92,21 @@ class HybridRagAnswerServiceJudgingTest {
         when(requestSpec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn("答案");
 
+        // 查询改写回退原查询;重排器恒等返回候选——本测试聚焦判分,不卷这两个环节
+        com.enterprise.iqk.rag.QueryRewriteService queryRewriteService =
+                mock(com.enterprise.iqk.rag.QueryRewriteService.class);
+        when(queryRewriteService.rewriteForRetrieval(anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        com.enterprise.iqk.retrieval.Reranker reranker =
+                mock(com.enterprise.iqk.retrieval.Reranker.class);
+        when(reranker.rerank(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(3));
+
         service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real());
+                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real(),
+                queryRewriteService, reranker);
     }
 
     private EvidenceItem evidence(String chunkId, String title, double score) {
@@ -195,10 +214,21 @@ class HybridRagAnswerServiceJudgingTest {
         when(spec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn("答案");
 
+        // 本用例独立构造:改写回退原查询,重排器恒等返回候选
+        com.enterprise.iqk.rag.QueryRewriteService localRewrite =
+                mock(com.enterprise.iqk.rag.QueryRewriteService.class);
+        when(localRewrite.rewriteForRetrieval(anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        com.enterprise.iqk.retrieval.Reranker localReranker =
+                mock(com.enterprise.iqk.retrieval.Reranker.class);
+        when(localReranker.rerank(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(3));
+
         HybridRagAnswerService multiDocService = new HybridRagAnswerService(retrievalService,
                 mock(VectorRetriever.class), evidenceJudgeService, citationService, chatClient,
                 modelRouter, ragProperties, new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real());
+                mock(RagFactMemoryRecorder.class), mock(MemoryService.class), TestGuards.real(),
+                localRewrite, localReranker);
 
         multiDocService.answer("两份报告各测得多少", "tenant-1", "chat-1", "conv-1", null);
 

@@ -291,6 +291,11 @@ rag:
   rerank-top-k: ${RAG_RERANK_TOP_K:6}
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.45}
   temperature: ${RAG_TEMPERATURE:0.2}
+  # 重排器策略(rag.reranker): llm = LLM 相关性重排(失败自动回退原序); identity = 原序截断
+  reranker: ${RAG_RERANKER:llm}
+  # 多轮查询改写:按会话历史把追问改写为独立检索查询(首轮/无历史零成本跳过)
+  query-rewrite-enabled: ${RAG_QUERY_REWRITE_ENABLED:true}
+  rewrite-history-messages: ${RAG_REWRITE_HISTORY_MESSAGES:8}
   split:
     chunk-size: ${RAG_CHUNK_SIZE:800}
     min-chunk-size: ${RAG_MIN_CHUNK_SIZE:120}

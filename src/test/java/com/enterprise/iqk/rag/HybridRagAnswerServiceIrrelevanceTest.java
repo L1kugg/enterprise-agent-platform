@@ -87,10 +87,21 @@ class HybridRagAnswerServiceIrrelevanceTest {
         when(requestSpec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn("答案");
 
+        // 查询改写:首轮(历史不足)回退原查询——本测试关注无关线,不卷改写
+        com.enterprise.iqk.rag.QueryRewriteService queryRewriteService =
+                mock(com.enterprise.iqk.rag.QueryRewriteService.class);
+        when(queryRewriteService.rewriteForRetrieval(anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        // 重排器:原样返回候选(恒等),不卷重排
+        com.enterprise.iqk.retrieval.Reranker reranker =
+                mock(com.enterprise.iqk.retrieval.Reranker.class);
+        when(reranker.rerank(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(3));
+
         service = new HybridRagAnswerService(retrievalService, vectorRetriever,
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 meterRegistry, mock(TenantCostService.class), factRecorder, mock(MemoryService.class),
-                TestGuards.real());
+                TestGuards.real(), queryRewriteService, reranker);
     }
 
     private void strictRetrievalReturns(ScoredDocument... docs) {

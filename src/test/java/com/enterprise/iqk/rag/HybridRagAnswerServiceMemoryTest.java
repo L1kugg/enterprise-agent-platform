@@ -82,10 +82,21 @@ class HybridRagAnswerServiceMemoryTest {
         when(requestSpec.call()).thenReturn(callSpec);
         when(callSpec.content()).thenReturn(llmContent);
 
+        // 查询改写回退原查询;重排器恒等返回候选——本测试聚焦记忆注入,不卷这两个环节
+        com.enterprise.iqk.rag.QueryRewriteService queryRewriteService =
+                mock(com.enterprise.iqk.rag.QueryRewriteService.class);
+        when(queryRewriteService.rewriteForRetrieval(anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        com.enterprise.iqk.retrieval.Reranker reranker =
+                mock(com.enterprise.iqk.retrieval.Reranker.class);
+        when(reranker.rerank(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(inv -> inv.getArgument(3));
+
         service = new HybridRagAnswerService(retrievalService, mock(VectorRetriever.class),
                 evidenceJudgeService, citationService, chatClient, modelRouter, ragProperties,
                 new SimpleMeterRegistry(), tenantCostService,
-                mock(RagFactMemoryRecorder.class), memoryService, TestGuards.real());
+                mock(RagFactMemoryRecorder.class), memoryService, TestGuards.real(),
+                queryRewriteService, reranker);
     }
 
     @Test

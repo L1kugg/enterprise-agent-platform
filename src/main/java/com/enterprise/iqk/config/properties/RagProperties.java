@@ -12,6 +12,12 @@ public class RagProperties {
     /** 兜底捞回（放宽阈值重试）结果的绝对最低相似度：低于此值视为完全无关，整批作废；须低于 similarityThreshold */
     private double fallbackScoreFloor = 0.30;
     private double temperature = 0.2;
+    /** 重排器策略：llm = LLM 相关性重排（失败自动回退恒等序）；identity = 原序截断 */
+    private String reranker = "llm";
+    /** 多轮查询改写：按会话历史把追问改写为独立检索查询（首轮/无历史零成本跳过） */
+    private boolean queryRewriteEnabled = true;
+    /** 查询改写拉取的会话历史条数 */
+    private int rewriteHistoryMessages = 8;
     private Split split = new Split();
 
     @Data

@@ -20,7 +20,7 @@ class IdentityRerankerTest {
                 ScoredDocument.builder().docId("d3").retrievalScore(0.7).build()
         );
 
-        List<ScoredDocument> result = reranker.rerank("query", docs, 2);
+        List<ScoredDocument> result = reranker.rerank("t-1", "chat-1", "query", docs, 2);
 
         assertEquals(2, result.size());
         assertEquals("d1", result.get(0).getDocId());
@@ -29,7 +29,7 @@ class IdentityRerankerTest {
 
     @Test
     void shouldReturnEmptyForEmptyInput() {
-        List<ScoredDocument> result = reranker.rerank("query", List.of(), 5);
+        List<ScoredDocument> result = reranker.rerank("t-1", "chat-1", "query", List.of(), 5);
 
         assertTrue(result.isEmpty());
     }
@@ -40,7 +40,7 @@ class IdentityRerankerTest {
                 ScoredDocument.builder().docId("d1").retrievalScore(0.9).build()
         );
 
-        List<ScoredDocument> result = reranker.rerank("query", docs, 0);
+        List<ScoredDocument> result = reranker.rerank("t-1", "chat-1", "query", docs, 0);
 
         assertTrue(result.isEmpty());
     }
@@ -52,7 +52,7 @@ class IdentityRerankerTest {
                 ScoredDocument.builder().docId("d2").retrievalScore(0.8).build()
         );
 
-        List<ScoredDocument> result = reranker.rerank("query", docs, 10);
+        List<ScoredDocument> result = reranker.rerank("t-1", "chat-1", "query", docs, 10);
 
         assertEquals(2, result.size());
         assertEquals("d1", result.get(0).getDocId());
