@@ -389,6 +389,35 @@
                 :value="agent.id"
               />
             </el-select>
+            <el-tooltip
+              content="选择本次对话使用的模型服务；选中智能体且其已绑定模型时以智能体绑定为准，未选择时走自动路由"
+              placement="top"
+            >
+              <el-select
+                :model-value="selectedModelServiceId ?? undefined"
+                class="agent-select model-select"
+                placeholder="自动路由"
+                clearable
+                :loading="chatModelsLoading"
+                :disabled="sending"
+                @change="
+                  (value: number | undefined) =>
+                    selectModelService(typeof value === 'number' ? value : null)
+                "
+                @clear="selectModelService(null)"
+              >
+                <el-option
+                  v-for="model in chatModels"
+                  :key="model.id"
+                  :label="model.name + (model.modelName ? `（${model.modelName}）` : '')"
+                  :value="model.id"
+                >
+                  <span class="model-option-label">{{ model.name }}</span>
+                  <span v-if="model.modelName" class="model-option-name">{{ model.modelName }}</span>
+                  <el-tag v-if="model.scope === 'SYSTEM'" size="small" effect="plain">系统</el-tag>
+                </el-option>
+              </el-select>
+            </el-tooltip>
             <button
               type="button"
               class="composer-tool"
@@ -511,6 +540,13 @@ import {
   selectedAgentId,
 } from '../../composables/useAgentCatalog';
 import {
+  chatModels,
+  chatModelsLoading,
+  loadChatModels,
+  selectModelService,
+  selectedModelServiceId,
+} from '../../composables/useModelCatalog';
+import {
   approveToolConfirm,
   cancelToolConfirm,
   confirmStateOf,
@@ -527,6 +563,7 @@ const agentOpeningQuestions = computed(
 // 智能体目录在进入聊天页时拉一次（失败静默降级为默认助手）
 onMounted(() => {
   void loadAgents();
+  void loadChatModels();
 });
 
 /** 回溯本条助手消息之前的用户原始问题（审批回流续答要用）。 */
@@ -1246,6 +1283,21 @@ function approveAndContinue(entryIndex: number, step: ReactTraceStep): void {
 /* 智能体选择器：宽度收敛、与工具按钮同高度语言 */
 .composer-tools .agent-select {
   width: 148px;
+}
+
+/* 模型选择器：选项行 = 名称 + 模型名 + 系统徽标 */
+.composer-tools .model-select {
+  width: 168px;
+}
+
+.model-option-label {
+  margin-right: 8px;
+}
+
+.model-option-name {
+  margin-right: 8px;
+  color: var(--ui-text-secondary, #909399);
+  font-size: 12px;
 }
 
 /* 工具按钮：与平台 Studio 的操作按钮同一套小圆角卡片语言，高度与发送按钮（32px）对齐 */

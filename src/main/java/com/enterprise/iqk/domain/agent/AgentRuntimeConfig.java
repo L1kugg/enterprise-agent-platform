@@ -31,4 +31,14 @@ public record AgentRuntimeConfig(
     public boolean hasModel() {
         return modelServiceId != null;
     }
+
+    /**
+     * 无智能体路径的占位配置：用户在对话栏手选模型时构造 RunState 用——
+     * 无角色设定/绑定/温度覆写，memoryTurns=4 与原无智能体路径的 short 层默认条数一致，
+     * 各链路对该配置的行为与"无智能体"完全相同。
+     */
+    public static AgentRuntimeConfig automatic() {
+        return new AgentRuntimeConfig(null, null, null, null, null, 4, null,
+                List.of(), false, null, null, List.of(), List.of(), List.of(), List.of(), List.of());
+    }
 }

@@ -339,7 +339,7 @@ public class ReactAgentService {
                 request.getModelProfile(),
                 "",
                 "",
-                runState == null ? 0L : runState.config().agentId(),
+                runState == null || runState.config().agentId() == null ? 0L : runState.config().agentId(),
                 false,
                 runState == null ? List.of() : runState.config().knowledgeBaseIds()
         )).toMap();

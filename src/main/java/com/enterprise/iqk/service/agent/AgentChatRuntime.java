@@ -77,12 +77,19 @@ public class AgentChatRuntime {
     }
 
     /**
-     * 装载运行态：未带 agentId 返回 null（原路径）；拦截命中返回 blocked()=true 的占位态（调用方短路）；
-     * 配置错误（404/403/400）直接抛出。绑定模型在此预解析，坏配置快速失败。
+     * 装载运行态：未带 agentId 且未手选模型返回 null（原路径）；拦截命中返回 blocked()=true 的占位态
+     * （调用方短路）；配置错误（404/403/400）直接抛出。绑定/手选模型在此预解析，坏配置快速失败。
+     * 模型优先级：智能体绑定 > 用户手选 > 档位路由。
      */
     public RunState prepare(ReactChatRequestVO request, String tenantId) {
         if (request.getAgentId() == null) {
-            return null;
+            if (request.getModelServiceId() == null) {
+                return null;
+            }
+            // 无智能体但用户手选了模型：占位配置只承载模型覆盖，其余行为与原无智能体路径一致
+            RunState state = new RunState(AgentRuntimeConfig.automatic());
+            state.boundModel = chatModelRegistry.resolve(request.getModelServiceId(), tenantId);
+            return state;
         }
         AgentRuntimeConfig config = agentRuntimeConfigService.loadForChat(tenantId, request.getAgentId(), false);
         SafetyMatchResult safety = agentSafetyService.interceptInput(tenantId, config, request.getPrompt());
@@ -95,6 +102,8 @@ public class AgentChatRuntime {
         RunState state = new RunState(config);
         if (config.hasModel()) {
             state.boundModel = chatModelRegistry.resolve(config.modelServiceId(), tenantId);
+        } else if (request.getModelServiceId() != null) {
+            state.boundModel = chatModelRegistry.resolve(request.getModelServiceId(), tenantId);
         }
         return state;
     }
@@ -122,14 +131,18 @@ public class AgentChatRuntime {
         invocationLogRecorder.recordBlocked(invocationContext(request, tenantId), state.safetyResult, latencyMs);
     }
 
-    /** 回填 agentId/模型来源/回退标记与轨迹备注，并记 SUCCESS 调用日志；未绑定智能体时原响应原样返回。 */
+    /** 回填 agentId/模型来源/回退标记与轨迹备注，并记 SUCCESS 调用日志；未绑定智能体时原响应原样返回。
+     *  手选模型的非智能体会话（占位配置）只回填模型三字段，不写智能体调用日志。 */
     public ReactChatResponseVO enrichAndRecord(ReactChatRequestVO request, String tenantId,
                                                RunState state, ReactChatResponseVO response, long latencyMs) {
         if (state == null) {
             return response;
         }
-        response.setAgentId(request.getAgentId());
-        response.setSafetyBlocked(false);
+        boolean agentScoped = state.config.agentId() != null;
+        if (agentScoped) {
+            response.setAgentId(request.getAgentId());
+            response.setSafetyBlocked(false);
+        }
         response.setModelName(state.usedModelName);
         response.setModelSource(state.modelSource);
         response.setModelFallback(state.modelFallback);
@@ -138,16 +151,18 @@ public class AgentChatRuntime {
             response.setRouteReason(StringUtils.hasText(response.getRouteReason())
                     ? response.getRouteReason() + "；" + notes : notes);
         }
-        invocationLogRecorder.recordSuccess(invocationContext(request, tenantId),
-                state.usedModelName, state.modelFallback, latencyMs,
-                state.inputTokens, state.outputTokens);
+        if (agentScoped) {
+            invocationLogRecorder.recordSuccess(invocationContext(request, tenantId),
+                    state.usedModelName, state.modelFallback, latencyMs,
+                    state.inputTokens, state.outputTokens);
+        }
         return response;
     }
 
-    /** 错误路径调用日志（尽力而为）；未绑定智能体时不记。 */
+    /** 错误路径调用日志（尽力而为）；未绑定智能体或手选模型的非智能体会话不记。 */
     public void recordError(ReactChatRequestVO request, String tenantId, RunState state,
                             String errorSummary, long latencyMs) {
-        if (state == null) {
+        if (state == null || state.config.agentId() == null) {
             return;
         }
         invocationLogRecorder.recordError(invocationContext(request, tenantId), errorSummary,

@@ -8,6 +8,7 @@ import type {
   BranchCompareResult,
   BranchMergeRequest,
   BranchMergeResult,
+  ChatModelOption,
   DeepResearchResult,
   DocumentContent,
   EvalComparison,
@@ -393,6 +394,20 @@ export async function listUsableAgents(auth?: AuthContext): Promise<AgentSummary
   const payload = await parseJsonSafely<AgentSummary[]>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, '智能体目录加载失败');
+  }
+  return payload;
+}
+
+/** 模型选择目录（GET /ai/models）：本租户私有 ∪ 系统共享的 LLM 模型服务，仅展示字段。 */
+export async function listChatModels(auth?: AuthContext): Promise<ChatModelOption[]> {
+  const response = await fetch(resolveApi('/ai/models'), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<ChatModelOption[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '模型目录加载失败');
   }
   return payload;
 }

@@ -69,6 +69,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/ai/agent-tool-confirmations/**").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 智能体目录：普通用户挑选可用智能体，权限与聊天写侧一致（只出展示字段）
                     .requestMatchers(HttpMethod.GET, "/ai/agents").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 模型选择目录：对话栏挑选对话用模型服务，权限与智能体目录一致（只出 id/名称/模型名）
+                    .requestMatchers(HttpMethod.GET, "/ai/models").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 知识库目录：上传/试搜选择器数据源（FR-R5-01），读侧口径与知识库文档清单一致
                     .requestMatchers(HttpMethod.GET, "/ai/knowledge-bases").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")

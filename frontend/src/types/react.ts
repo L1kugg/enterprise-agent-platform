@@ -16,6 +16,17 @@ export interface ReactChatRequest {
   modelProfile?: string;
   /** 绑定平台智能体（platform_asset agents id）；不传走默认助手路径。 */
   agentId?: number;
+  /** 对话栏手选的模型服务 id；不传走默认档位路由，智能体已绑定模型时以绑定为准。 */
+  modelServiceId?: number;
+}
+
+/** 对话栏模型选择目录项（GET /ai/models）。 */
+export interface ChatModelOption {
+  id: number;
+  name: string;
+  modelName: string;
+  /** TENANT = 本租户私有，SYSTEM = 系统共享。 */
+  scope?: string;
 }
 
 export interface ReactTraceStep {

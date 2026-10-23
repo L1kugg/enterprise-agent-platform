@@ -52,7 +52,7 @@ class UserAuthServiceTest {
     }
 
     @Test
-    void shouldRegisterWithPrivateTenantAndUserRole() {
+    void shouldRegisterIntoCompanyTenantWithUserRole() {
         when(userAccountMapper.findByUsername("alice")).thenReturn(null);
         when(passwordEncoder.encode("password123")).thenReturn("bcrypt-hash");
         when(userAccountMapper.findRoleIdByName("USER")).thenReturn(2L);
@@ -60,7 +60,8 @@ class UserAuthServiceTest {
         UserAccount user = userAuthService.register("Alice", "password123");
 
         assertEquals("alice", user.getUsername());
-        assertEquals("u-alice", user.getTenantId());
+        // 公司单租户模型：注册用户一律加入公司租户 public（与管理员同租户）
+        assertEquals("public", user.getTenantId());
         assertEquals("bcrypt-hash", user.getPasswordHash());
         assertEquals(1, user.getEnabled());
         verify(userAccountMapper).insert(user);

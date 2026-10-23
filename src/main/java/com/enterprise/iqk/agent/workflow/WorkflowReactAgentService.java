@@ -348,7 +348,8 @@ public class WorkflowReactAgentService {
                                               String taskId, String stepId) {
         return agentHarnessService.execute(new AgentAction(action, actionInput, request.getPrompt(),
                 tenantId, request.getChatId(), request.getModelProfile(), taskId, stepId,
-                runState == null ? 0L : runState.config().agentId(), false)).toMap();
+                runState == null || runState.config().agentId() == null
+                        ? 0L : runState.config().agentId(), false)).toMap();
     }
 
     /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败给兜底文案。 */

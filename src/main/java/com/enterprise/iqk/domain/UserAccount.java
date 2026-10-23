@@ -12,8 +12,8 @@ import java.time.LocalDateTime;
 
 /**
  * 控制台注册用户（users 表，V1 建表 / V18 加租户列）。
- * 每个自注册用户独占一个租户（tenant_id = "u-" + 小写用户名），
- * 向量 / 会话 / 花费等既有隔离逻辑按租户生效，无需额外适配。
+ * 公司内部部署形态（V33 起）：全部注册用户加入公司租户 public（与管理员同租户）；
+ * tenant_id 行级隔离机制原样保留，未来多公司 SaaS 化引入组织租户属增量演进。
  */
 @TableName("users")
 @Data

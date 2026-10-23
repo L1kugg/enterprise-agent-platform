@@ -19,8 +19,10 @@ import java.util.regex.Pattern;
 /**
  * 注册用户账号服务：用户名/密码校验、BCrypt 哈希落库、密码登录校验。
  *
- * <p>隔离模型：每个自注册用户独占租户 {@code u-<小写用户名>}，
- * 向量 / 会话 / 花费等既有隔离按租户生效；管理员 bootstrap key 仍在 'public'。</p>
+ * <p>隔离模型（公司内部部署形态）：全公司共用单一公司租户 {@code public}——
+ * 注册用户一律加入公司租户，管理员（bootstrap key 同租户）天然可见可管全部公司资产；
+ * 用户间的数据边界靠 user 键（记忆/会话）与角色权限（管理面）维护。
+ * tenant_id 行级隔离机制原样保留：未来多公司 SaaS 化只需引入组织租户，属增量演进。</p>
  *
  * <p>防枚举约定：{@link #verify} 对"用户不存在 / 密码错误 / 已停用"
  * 一律返回 null，不向调用方区分原因。</p>
@@ -31,8 +33,8 @@ import java.util.regex.Pattern;
 public class UserAuthService {
 
     public static final String DEFAULT_ROLE = "USER";
-    /** 租户前缀：'u-' + 用户名（≤32）最长 34，safe for VARCHAR(64)。 */
-    private static final String USER_TENANT_PREFIX = "u-";
+    /** 公司租户：全公司唯一租户（管理员 bootstrap key 同租户）。 */
+    public static final String COMPANY_TENANT = TenantContext.DEFAULT_TENANT;
     /** 用户名规则：3-32 位小写字母/数字/-/_；注册时统一转小写。 */
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9_-]{3,32}$");
     private static final int PASSWORD_MIN_LENGTH = 8;
@@ -61,7 +63,7 @@ public class UserAuthService {
         return username;
     }
 
-    /** 注册：BCrypt 存哈希、私有租户 u-&lt;username&gt;、绑定 USER 角色；重名（含并发插入）抛 IllegalArgumentException。 */
+    /** 注册：BCrypt 存哈希、加入公司租户、绑定 USER 角色；重名（含并发插入）抛 IllegalArgumentException。 */
     @Transactional
     public UserAccount register(String rawUsername, String rawPassword) {
         String username = normalizeUsername(rawUsername);
@@ -73,7 +75,7 @@ public class UserAuthService {
         UserAccount user = UserAccount.builder()
                 .username(username)
                 .passwordHash(passwordEncoder.encode(rawPassword))
-                .tenantId(USER_TENANT_PREFIX + username)
+                .tenantId(COMPANY_TENANT)
                 .enabled(1)
                 .createdAt(now)
                 .updatedAt(now)
