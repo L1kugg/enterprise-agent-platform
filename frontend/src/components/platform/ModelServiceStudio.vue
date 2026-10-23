@@ -50,9 +50,7 @@
           <h3>{{ form.name || '未命名模型服务' }}</h3>
         </div>
         <div class="editor-actions">
-          <el-button size="small" :loading="testing" :disabled="!selected?.id" @click="runTest"
-            >连接测试</el-button
-          >
+          <el-button size="small" :loading="testing" @click="runTest">连接测试</el-button>
           <el-button size="small" type="danger" :disabled="!selected?.id" @click="removeItem"
             >删除</el-button
           >
@@ -187,6 +185,7 @@ import {
   deletePlatformAsset,
   listPlatformAssets,
   testPlatformModel,
+  testPlatformModelDraft,
   updatePlatformAsset,
 } from '../../api/platform';
 import type { PlatformAsset, PlatformAssetUpsert } from '../../types/platform';
@@ -344,12 +343,19 @@ async function save(): Promise<void> {
 }
 
 async function runTest(): Promise<void> {
-  if (!selected.value?.id) return;
+  // 草稿（未保存）直接探测表单里的 API 地址；已保存的按资产 id 走后端配置
+  const draftApiUrl = form.value.apiUrl.trim();
+  if (!selected.value?.id && !draftApiUrl) {
+    ElMessage.warning('请先填写 API 地址再连接测试');
+    return;
+  }
   testing.value = true;
   try {
-    const result = await testPlatformModel(selected.value.id, authContext());
+    const result = selected.value?.id
+      ? await testPlatformModel(selected.value.id, authContext())
+      : await testPlatformModelDraft(draftApiUrl, authContext());
     const status = result.status ?? 'UNKNOWN';
-    lastTest.value = { status, testedAt: new Date().toISOString().replace('T', ' ').slice(0, 19) };
+    lastTest.value = { status, latencyMs: result.latencyMs, testedAt: localNow() };
     if (status === 'AVAILABLE') ElMessage.success('模型连接可用');
     else ElMessage.warning('模型连接不可用（' + status + '）');
     await load();
@@ -360,6 +366,25 @@ async function runTest(): Promise<void> {
   } finally {
     testing.value = false;
   }
+}
+
+/** 本地时间字符串（YYYY-MM-DD HH:mm:ss）：toISOString 是 UTC，直连显示会差时区。 */
+function localNow(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return (
+    now.getFullYear() +
+    '-' +
+    pad(now.getMonth() + 1) +
+    '-' +
+    pad(now.getDate()) +
+    ' ' +
+    pad(now.getHours()) +
+    ':' +
+    pad(now.getMinutes()) +
+    ':' +
+    pad(now.getSeconds())
+  );
 }
 
 async function removeItem(): Promise<void> {

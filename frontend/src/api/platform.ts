@@ -4,6 +4,7 @@ import type {
   AgentInvocationLogEntry,
   AgentStatsSummary,
   AgentTrendPoint,
+  ModelTestResult,
   PlatformAsset,
   PlatformAssetPage,
   PlatformAssetType,
@@ -148,8 +149,17 @@ export function publishPlatformAgent(
 }
 
 export function testPlatformModel(id: number, auth: AuthContext | undefined) {
-  return requestPlatform<PlatformAsset>(`/platform/model-services/${id}/test`, auth, {
+  return requestPlatform<ModelTestResult>(`/platform/model-services/${id}/test`, auth, {
     method: 'POST',
+    action: '模型连接测试',
+  });
+}
+
+/** 连接测试（未保存草稿）：直接探测表单里的 API 地址，不落库。 */
+export function testPlatformModelDraft(apiUrl: string, auth: AuthContext | undefined) {
+  return requestPlatform<ModelTestResult>(`/platform/model-services/test`, auth, {
+    method: 'POST',
+    body: JSON.stringify({ apiUrl }),
     action: '模型连接测试',
   });
 }

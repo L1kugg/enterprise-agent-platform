@@ -9,10 +9,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -51,18 +57,22 @@ public class SecretCipher {
 
     public SecretCipher(@Value("${app.secret-key:}") String rawKey, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.key = parseKey(rawKey);
+    }
+
+    /** 解析主密钥：未配置返回 null（透传模式）；格式非法 fail-fast 抛 IllegalStateException。 */
+    private static SecretKeySpec parseKey(String rawKey) {
         if (!StringUtils.hasText(rawKey)) {
-            this.key = null;
             log.warn("APP_SECRET_KEY 未配置：凭据将以明文存储且已加密数据无法解密，"
                     + "启用加密请设置 32 字节 base64 主密钥");
-            return;
+            return null;
         }
         try {
             byte[] keyBytes = Base64.getDecoder().decode(rawKey.trim());
             if (keyBytes.length != 32) {
                 throw new IllegalArgumentException("主密钥须为 32 字节 base64（当前 " + keyBytes.length + " 字节）");
             }
-            this.key = new SecretKeySpec(keyBytes, "AES");
+            return new SecretKeySpec(keyBytes, "AES");
         } catch (IllegalArgumentException ex) {
             throw new IllegalStateException(
                     "APP_SECRET_KEY 格式非法（须为 32 字节 AES-256 base64）：" + ex.getMessage(), ex);
@@ -133,7 +143,8 @@ public class SecretCipher {
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
             byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             return PREFIX + B64_ENCODER.encodeToString(iv) + ":" + B64_ENCODER.encodeToString(cipherText);
-        } catch (Exception ex) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                | InvalidAlgorithmParameterException | IllegalBlockSizeException | BadPaddingException ex) {
             throw new IllegalStateException("凭据加密失败：" + ex.getMessage(), ex);
         }
     }
@@ -157,7 +168,9 @@ public class SecretCipher {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
             return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
-        } catch (Exception ex) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                | InvalidAlgorithmParameterException | IllegalBlockSizeException | BadPaddingException
+                | IllegalArgumentException ex) {
             log.error("加密凭据解密失败（主密钥不匹配或数据被篡改）");
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "加密凭据解密失败：主密钥不匹配或数据已损坏");

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
+import com.enterprise.iqk.domain.vo.ModelTestResult;
 import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
 import com.enterprise.iqk.security.TenantContext;
@@ -219,37 +220,70 @@ public class PlatformAssetService {
         }
     }
 
-    public PlatformAsset testModel(Long id) {
+    /**
+     * 连接测试（已保存资产）：探测后把状态写回资产（列表状态标签随之刷新），返回状态 + 延迟。
+     */
+    public ModelTestResult testModel(Long id) {
         PlatformAsset model = getOwned("model-services", id);
-        String result = probeModel(model.getConfigJson());
+        ModelTestResult result = probeEndpoint(extractEndpoint(model.getConfigJson()));
         try {
             JsonNode root = readTree(model.getConfigJson());
             ObjectNode config = root instanceof ObjectNode objectNode ? objectNode : objectMapper.createObjectNode();
-            config.set("lastTestStatus", new TextNode(result));
+            config.set("lastTestStatus", new TextNode(result.status()));
             update("model-services", id, null, null, objectMapper.writeValueAsString(config),
-                    "AVAILABLE".equals(result) ? result : "UNAVAILABLE", null);
-            return get("model-services", id);
+                    "AVAILABLE".equals(result.status()) ? result.status() : "UNAVAILABLE", null);
+            return result;
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "invalid model config", ex);
         }
     }
 
-    private String probeModel(String configJson) {
+    /**
+     * 连接测试（未保存草稿）：直接探测表单里的 API 地址，不落库——
+     * 让用户在保存前就能确认地址可达；语义与已保存测试一致（GET、3 秒超时、2xx-4xx 视为可达）。
+     */
+    public ModelTestResult testModelDraft(String apiUrl) {
+        if (apiUrl == null || apiUrl.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "API 地址不能为空");
+        }
+        return probeEndpoint(apiUrl.trim());
+    }
+
+    /** 从配置 JSON 里取 API 地址（兼容 apiUrl / api_url 两种键）。 */
+    private String extractEndpoint(String configJson) {
         try {
             JsonNode root = readTree(configJson);
-            String endpoint = root.path("apiUrl").asText(root.path("api_url").asText());
+            return root.path("apiUrl").asText(root.path("api_url").asText(""));
+        } catch (IOException ex) {
+            return "";
+        }
+    }
+
+    /**
+     * 探测 API 地址可达性并计时：GET 请求、连接/读取各 3 秒超时，
+     * 2xx-4xx 均视为可达（多数开放平台对 GET 根路径返回 404/405，不代表服务不可用）。
+     * 任何失败（非法地址/超时/连接拒绝）返回 UNAVAILABLE，延迟为到失败为止的耗时。
+     */
+    private ModelTestResult probeEndpoint(String endpoint) {
+        long started = System.nanoTime();
+        if (endpoint == null || endpoint.isBlank()) {
+            return new ModelTestResult("UNAVAILABLE", 0);
+        }
+        try {
             URL url = URI.create(endpoint).toURL();
             if (!("http".equalsIgnoreCase(url.getProtocol()) || "https".equalsIgnoreCase(url.getProtocol()))) {
-                return "UNAVAILABLE";
+                return new ModelTestResult("UNAVAILABLE", 0);
             }
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(3000);
             connection.setReadTimeout(3000);
             connection.setRequestMethod("GET");
             int status = connection.getResponseCode();
-            return status >= 200 && status < 500 ? "AVAILABLE" : "UNAVAILABLE";
+            long latencyMs = (System.nanoTime() - started) / 1_000_000;
+            boolean available = status >= 200 && status < 500;
+            return new ModelTestResult(available ? "AVAILABLE" : "UNAVAILABLE", latencyMs);
         } catch (IOException | IllegalArgumentException ex) {
-            return "UNAVAILABLE";
+            return new ModelTestResult("UNAVAILABLE", (System.nanoTime() - started) / 1_000_000);
         }
     }
 

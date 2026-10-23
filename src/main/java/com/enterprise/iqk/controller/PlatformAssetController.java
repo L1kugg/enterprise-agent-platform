@@ -4,6 +4,7 @@ import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.domain.platform.PlatformRoleRecord;
 import com.enterprise.iqk.domain.platform.PlatformUserRecord;
 import com.enterprise.iqk.domain.vo.AgentDebugResponseVO;
+import com.enterprise.iqk.domain.vo.ModelTestResult;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.security.UserContext;
 import com.enterprise.iqk.service.agent.AgentDebugService;
@@ -228,10 +229,25 @@ public class PlatformAssetController {
     public void deleteRole(@PathVariable Long id) {
         adminService.deleteRole(id);
     }
+    /** 连接测试（已保存资产）：探测后状态写回资产，返回状态与延迟。 */
     @PostMapping("/model-services/{id}/test")
     @PreAuthorize("hasRole('ADMIN')")
-    public PlatformAsset testModel(@PathVariable Long id) {
+    public ModelTestResult testModel(@PathVariable Long id) {
         return service.testModel(id);
+    }
+
+    /**
+     * 连接测试（未保存草稿）：直接探测请求体里的 API 地址，不落库——
+     * 创建模型服务前即可确认地址可达。仅限 ADMIN（与资产写面一致，apiUrl 为管理员自备配置）。
+     */
+    @PostMapping("/model-services/test")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ModelTestResult testModelDraft(@RequestBody ModelDraftTestRequest request) {
+        return service.testModelDraft(request == null ? null : request.apiUrl());
+    }
+
+    /** 草稿连接测试请求体。 */
+    public record ModelDraftTestRequest(String apiUrl) {
     }
 
     /** 知识库真实统计（FR-R5-02）：文件数/解析中/失败/切片数/存储大小/最近完成时间，全部来自 ingestion_job 聚合。 */

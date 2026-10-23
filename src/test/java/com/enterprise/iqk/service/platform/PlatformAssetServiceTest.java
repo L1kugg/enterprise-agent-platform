@@ -188,4 +188,55 @@ class PlatformAssetServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(404));
     }
+
+    @Test
+    void testModelDraftRejectsBlankApiUrl() {
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
+                mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
+
+        assertThatThrownBy(() -> service.testModelDraft("   "))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode().value()).isEqualTo(400));
+    }
+
+    @Test
+    void testModelDraftProbesReachableEndpointWithLatency() throws Exception {
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
+                mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0), 0);
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+
+            com.enterprise.iqk.domain.vo.ModelTestResult result =
+                    service.testModelDraft("http://127.0.0.1:" + port + "/");
+
+            assertThat(result.status()).isEqualTo("AVAILABLE");
+            assertThat(result.latencyMs()).isGreaterThanOrEqualTo(0);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testModelDraftReportsUnavailableWhenConnectionRefused() {
+        PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
+                mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
+                mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
+
+        // 端口 1（tcpmux）通常无人监听：连接立即被拒，探测返回不可用且不抛异常
+        com.enterprise.iqk.domain.vo.ModelTestResult result =
+                service.testModelDraft("http://127.0.0.1:1/");
+
+        assertThat(result.status()).isEqualTo("UNAVAILABLE");
+    }
 }

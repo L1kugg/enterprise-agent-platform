@@ -109,6 +109,14 @@ export interface ToolTestResult {
   [key: string]: unknown;
 }
 
+// ---------- 模型服务连接测试 ----------
+
+export interface ModelTestResult {
+  status?: string;
+  latencyMs?: number;
+  [key: string]: unknown;
+}
+
 // ---------- 安全防护（R4） ----------
 
 export interface SafetyGuardTestResult {

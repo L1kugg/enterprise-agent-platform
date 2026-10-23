@@ -37,4 +37,10 @@
         <Class name="com.enterprise.iqk.service.agent.SafetyMatchResult"/>
         <Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
     </Match>
+    <!-- SecretCipher 构造器对非法 APP_SECRET_KEY 故意 fail-fast（坏密钥拒绝启动），
+         构造期抛异常是刻意的启动校验；finalizer 攻击面不适用（无 finalize，Java 18+ 已弃用 finalization） -->
+    <Match>
+        <Class name="com.enterprise.iqk.security.SecretCipher"/>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
 </FindBugsFilter>
