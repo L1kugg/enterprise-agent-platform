@@ -191,6 +191,18 @@ export interface TenantCostTrendPoint {
   costUsd: number;
 }
 
+/** 按用户聚合的用量（GET /cost/users，管理员/运营视角）。 */
+export interface TenantUserUsage {
+  /** 认证主体 user 键（JWT 用户名 / API Key 主体） */
+  userId: string;
+  /** 用户显示名（未匹配为 null） */
+  displayName?: string | null;
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 export interface RetrievalResultItem {
   sourceType: string;
   title: string;

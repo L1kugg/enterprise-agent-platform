@@ -88,6 +88,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/ai/pdf/upload/**", "/ingestion/upload/**").hasAnyAuthority("PERM_INGESTION_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/cost/summary").hasAnyAuthority("PERM_COST_READ", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/cost/trend").hasAnyAuthority("PERM_COST_READ", "ROLE_ADMIN", "ROLE_OPS")
+                    // 按用户用量统计是管理员/运营视角（含公司成员的用量明细），不放开给普通用户
+                    .requestMatchers(HttpMethod.GET, "/cost/users").hasAnyAuthority("ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/cost/budget").hasAnyAuthority("PERM_COST_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ingestion/jobs/**", "/ingestion/jobs").hasAnyAuthority("PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     // 知识库文档清单 / 内容预览 / 试搜 / 分段查看 / 引用定位：读侧，比下面的 /ingestion/** 写侧兜底更宽（OPS 与只读权限可见）

@@ -3,11 +3,15 @@ package com.enterprise.iqk.service;
 import com.enterprise.iqk.config.properties.CostGovernanceProperties;
 import com.enterprise.iqk.domain.TenantBudget;
 import com.enterprise.iqk.domain.TenantUsageDaily;
+import com.enterprise.iqk.domain.TenantUserUsageDaily;
 import com.enterprise.iqk.domain.vo.TenantBudgetUpdateVO;
 import com.enterprise.iqk.domain.vo.TenantCostSummaryVO;
 import com.enterprise.iqk.domain.vo.TenantCostTrendVO;
+import com.enterprise.iqk.domain.vo.TenantUserUsageVO;
 import com.enterprise.iqk.mapper.TenantBudgetMapper;
 import com.enterprise.iqk.mapper.TenantUsageDailyMapper;
+import com.enterprise.iqk.mapper.TenantUserUsageDailyMapper;
+import com.enterprise.iqk.mapper.UserAccountMapper;
 import com.enterprise.iqk.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +39,8 @@ import java.util.stream.Collectors;
 public class TenantCostService {
     private final TenantBudgetMapper tenantBudgetMapper;
     private final TenantUsageDailyMapper tenantUsageDailyMapper;
+    private final TenantUserUsageDailyMapper tenantUserUsageDailyMapper;
+    private final UserAccountMapper userAccountMapper;
     private final CostGovernanceProperties costGovernanceProperties;
 
     /** 请求前预算闸门：本月已花费 + 预估费用超过月度预算且租户开启硬限制时，直接拒绝请求。 */
@@ -54,8 +60,11 @@ public class TenantCostService {
         }
     }
 
-    /** 请求后落账：按档位单价折算费用，把请求数/token 数/费用累加进当日用量行。 */
+    /** 请求后落账：按档位单价折算费用，把请求数/token 数/费用累加进当日用量行；
+     *  userKey 非空时同步累加"租户 × 用户 × 日"行（按用户统计用），空则只记租户行
+     *  （后台无身份线程：深度研究/图谱抽取）。 */
     public void recordUsage(String tenantId,
+                            String userKey,
                             String costTier,
                             long inputTokens,
                             long outputTokens,
@@ -67,14 +76,61 @@ public class TenantCostService {
         long safeInput = Math.max(0, inputTokens);
         long safeOutput = Math.max(0, outputTokens);
         BigDecimal cost = calculateCost(costTier, safeInput + safeOutput);
+        LocalDate today = LocalDate.now();
         tenantUsageDailyMapper.addUsage(
                 tenant,
-                LocalDate.now(),
+                today,
                 1,
                 safeInput,
                 safeOutput,
                 cost
         );
+        if (StringUtils.hasText(userKey)) {
+            tenantUserUsageDailyMapper.addUsage(
+                    tenant,
+                    userKey.trim(),
+                    today,
+                    1,
+                    safeInput,
+                    safeOutput,
+                    cost
+            );
+        }
+    }
+
+    /**
+     * 时间窗内按用户聚合用量（费用降序），管理员"按用户统计"用。
+     * display_name 尽力补齐（user 键与 users.username 匹配时），未匹配保留原始键。
+     */
+    public List<TenantUserUsageVO> userUsage(String tenantId, int days) {
+        String tenant = TenantContext.normalize(tenantId);
+        int safeDays = Math.min(90, Math.max(1, days));
+        LocalDate today = LocalDate.now();
+        LocalDate from = today.minusDays(safeDays - 1L);
+        List<TenantUserUsageDaily> rows = tenantUserUsageDailyMapper.sumByUser(tenant, from, today);
+        return rows.stream()
+                .map(row -> TenantUserUsageVO.builder()
+                        .userId(row.getUserId())
+                        .displayName(resolveDisplayName(row.getUserId()))
+                        .requestCount(row.getRequestCount() == null ? 0L : row.getRequestCount())
+                        .inputTokens(row.getInputTokens() == null ? 0L : row.getInputTokens())
+                        .outputTokens(row.getOutputTokens() == null ? 0L : row.getOutputTokens())
+                        .costUsd(scale(row.getTotalCostUsd()))
+                        .build())
+                .toList();
+    }
+
+    /** user 键 → 显示名的尽力匹配（键即用户名时命中；API Key 主体等未匹配保留原键）。 */
+    private String resolveDisplayName(String userKey) {
+        if (!StringUtils.hasText(userKey)) {
+            return null;
+        }
+        try {
+            var user = userAccountMapper.findByUsername(userKey);
+            return user == null ? null : user.getDisplayName();
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /** 汇总租户本月/今日的请求量、token 与费用，并给出预算余量与是否超限。 */

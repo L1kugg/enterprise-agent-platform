@@ -46,7 +46,7 @@ public class ResearchPlannerAgent {
                 .content());
 
         long outputTokens = tenantCostService.estimateTokens(raw);
-        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "research_planner");
+        tenantCostService.recordUsage(tenantId, null, decision.costTier(), inputTokens, outputTokens, "research_planner");
 
         try {
             String json = extractJson(raw);

@@ -212,6 +212,9 @@ public class AgentChatRuntime {
                        String endpointTag,
                        String routerScenario,
                        RunState state) {
+        // 用户键在调用入口捕获（同步调用在请求线程，SecurityContext 可用；
+        // 流式 doFinally 在异步线程拿不到，靠下方局部变量延续）
+        final String userKey = UserContext.currentUserId(null);
         long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
         tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
         String output;
@@ -228,7 +231,7 @@ public class AgentChatRuntime {
                 long outputTokens = tenantCostService.estimateTokens(output);
                 state.inputTokens += inputTokens;
                 state.outputTokens += outputTokens;
-                tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
+                tenantCostService.recordUsage(tenantId, userKey, routeDecision.costTier(), inputTokens,
                         outputTokens, endpointTag);
                 return output;
             } catch (RuntimeException ex) {
@@ -254,7 +257,7 @@ public class AgentChatRuntime {
             state.inputTokens += inputTokens;
             state.outputTokens += outputTokens;
         }
-        tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
+        tenantCostService.recordUsage(tenantId, userKey, routeDecision.costTier(), inputTokens,
                 tenantCostService.estimateTokens(output), endpointTag);
         return output;
     }
@@ -268,6 +271,9 @@ public class AgentChatRuntime {
                                    String endpointTag,
                                    String routerScenario,
                                    RunState state) {
+        // 用户键在调用入口捕获（与调用方同线程，SecurityContext 可用），
+        // doFinally 的记账在异步线程执行，靠下方局部变量延续
+        final String userKey = UserContext.currentUserId(null);
         long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
         tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
 
@@ -293,7 +299,7 @@ public class AgentChatRuntime {
                                 state.inputTokens += inputTokens;
                                 state.outputTokens += outputTokens;
                             }
-                            tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens,
+                            tenantCostService.recordUsage(tenantId, userKey, routeDecision.costTier(), inputTokens,
                                     outputTokens, endpointTag);
                         }
                     })
@@ -311,11 +317,11 @@ public class AgentChatRuntime {
                         log.warn("智能体绑定模型流式调用失败，回退路由模型: agentId={}, reason={}",
                                 state.config.agentId(), ex.toString());
                         return routerStream(systemPrompt, userPrompt, routeDecision, tenantId,
-                                endpointTag, routerScenario, inputTokens, state);
+                                endpointTag, routerScenario, inputTokens, userKey, state);
                     });
         }
         return routerStream(systemPrompt, userPrompt, routeDecision, tenantId, endpointTag, routerScenario,
-                inputTokens, state);
+                inputTokens, userKey, state);
     }
 
     /** 档位路由流式路径；预算已由调用方断言，流结束一次性记账。 */
@@ -326,6 +332,7 @@ public class AgentChatRuntime {
                                       String endpointTag,
                                       String routerScenario,
                                       long inputTokens,
+                                      String userKey,
                                       RunState state) {
         StringBuilder outputCollector = new StringBuilder();
         AtomicBoolean usageRecorded = new AtomicBoolean(false);
@@ -350,7 +357,8 @@ public class AgentChatRuntime {
                         state.inputTokens += inputTokens;
                         state.outputTokens += outputTokens;
                     }
-                    tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
+                    tenantCostService.recordUsage(tenantId, userKey, routeDecision.costTier(), inputTokens,
+                            outputTokens, endpointTag);
                 });
     }
 

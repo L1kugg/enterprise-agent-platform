@@ -54,7 +54,7 @@ public class CustomerServiceController {
                 .call()
                 .content();
         long outputTokens = tenantCostService.estimateTokens(answer);
-        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "service");
+        tenantCostService.recordUsage(tenantId, UserContext.currentUserId(null), decision.costTier(), inputTokens, outputTokens, "service");
         return answer;
     }
 }

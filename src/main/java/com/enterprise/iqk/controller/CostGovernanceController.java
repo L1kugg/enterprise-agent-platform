@@ -3,6 +3,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.domain.vo.TenantBudgetUpdateVO;
 import com.enterprise.iqk.domain.vo.TenantCostSummaryVO;
 import com.enterprise.iqk.domain.vo.TenantCostTrendVO;
+import com.enterprise.iqk.domain.vo.TenantUserUsageVO;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,12 @@ public class CostGovernanceController {
     @GetMapping("/trend")
     public List<TenantCostTrendVO> trend(@RequestParam(name = "days", defaultValue = "30") int days) {
         return tenantCostService.trend(TenantContext.currentTenantId(), days);
+    }
+
+    /** 按用户聚合用量（近 N 天，费用降序；仅管理员/运营可见，普通用户的 /cost 口径不变）。 */
+    @GetMapping("/users")
+    public List<TenantUserUsageVO> userUsage(@RequestParam(name = "days", defaultValue = "30") int days) {
+        return tenantCostService.userUsage(TenantContext.currentTenantId(), days);
     }
 
     @PostMapping("/budget")

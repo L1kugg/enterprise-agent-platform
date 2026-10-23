@@ -160,7 +160,7 @@ public class ChatController {
                 .doFinally(signal -> {
                     if (recorded.compareAndSet(false, true)) {
                         long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
-                        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
+                        tenantCostService.recordUsage(tenantId, memoryUserKey, decision.costTier(), inputTokens, outputTokens, endpointTag);
                     }
                     // 本轮结束后用用户原始问题写入 short 记忆并异步提交画像提取
                     // （命中才升级 long），记忆按 userKey 存、chatId 记入 source 溯源。

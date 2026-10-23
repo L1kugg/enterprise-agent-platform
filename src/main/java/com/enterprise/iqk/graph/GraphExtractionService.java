@@ -146,7 +146,7 @@ public class GraphExtractionService {
                     .call()
                     .content();
 
-            tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens,
+            tenantCostService.recordUsage(tenantId, null, decision.costTier(), inputTokens,
                     tenantCostService.estimateTokens(raw), EXTRACTION_ENDPOINT);
 
             ExtractionPayload payload = parsePayload(raw);

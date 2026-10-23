@@ -31,6 +31,7 @@ import type {
   SessionState,
   TenantCostSummary,
   TenantCostTrendPoint,
+  TenantUserUsage,
   WorkflowTask,
 } from '../types/react';
 
@@ -550,6 +551,23 @@ export async function getTenantCostTrend(
   const payload = await parseJsonSafely<TenantCostTrendPoint[]>(response);
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, '用量趋势加载失败');
+  }
+  return payload;
+}
+
+/** 按用户聚合用量（近 N 天，费用降序；仅 ADMIN/OPS 可调，403 由调用方静默降级）。 */
+export async function getTenantUserUsage(
+  days: number,
+  auth?: AuthContext,
+): Promise<TenantUserUsage[]> {
+  const response = await fetch(resolveApi(withQuery('/cost/users', { days })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<TenantUserUsage[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, '用户用量加载失败');
   }
   return payload;
 }

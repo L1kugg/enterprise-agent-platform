@@ -39,7 +39,7 @@ public class ReportWriterAgent {
                 .content());
 
         long outputTokens = tenantCostService.estimateTokens(report);
-        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "research_writer");
+        tenantCostService.recordUsage(tenantId, null, decision.costTier(), inputTokens, outputTokens, "research_writer");
         return report;
     }
 }

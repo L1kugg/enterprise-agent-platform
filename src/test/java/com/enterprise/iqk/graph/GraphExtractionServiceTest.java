@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -134,8 +135,8 @@ class GraphExtractionServiceTest {
         assertThat(second.getCreatedAt()).isNotNull();
         assertThat(second.getUpdatedAt()).isNotNull();
 
-        // 抽取调用计入租户成本（kg_extraction 标签）
-        verify(tenantCostService).recordUsage(eq("tenant-1"), eq("economy"), anyLong(), anyLong(),
+        // 抽取调用计入租户成本（kg_extraction 标签；后台线程无身份，user 键为 null）
+        verify(tenantCostService).recordUsage(eq("tenant-1"), isNull(), eq("economy"), anyLong(), anyLong(),
                 eq("kg_extraction"));
     }
 

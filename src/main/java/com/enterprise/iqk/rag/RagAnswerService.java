@@ -125,7 +125,7 @@ public class RagAnswerService {
                         .build();
             }
             long outputTokens = tenantCostService.estimateTokens(answer);
-            tenantCostService.recordUsage(normalizedTenantId, decision.costTier(), inputTokens, outputTokens, "rag");
+            tenantCostService.recordUsage(normalizedTenantId, UserContext.currentUserId(null), decision.costTier(), inputTokens, outputTokens, "rag");
 
             List<String> citations = selected.stream()
                     .map(this::citationText)

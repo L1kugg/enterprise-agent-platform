@@ -164,18 +164,59 @@
           <template #default="{ row }">${{ row.costUsd.toFixed(4) }}</template>
         </el-table-column>
       </el-table>
+
+      <!-- 按用户统计（仅管理员加载；普通用户不渲染该区块） -->
+      <div v-if="isAdmin" class="usage-chart-block">
+        <div class="usage-chart-head">
+          <p class="usage-chart-title">按用户统计</p>
+          <span class="usage-chart-range">近 {{ usageRange }} 天 · 按费用降序</span>
+        </div>
+        <el-alert
+          v-if="userUsageError"
+          type="error"
+          show-icon
+          :closable="false"
+          :title="'用户用量加载失败：' + userUsageError"
+        />
+        <el-table
+          v-loading="userUsageLoading"
+          :data="userUsageRows"
+          max-height="320"
+          empty-text="暂无用户用量数据（按用户记账自 V34 起生效，历史用量无用户维度）"
+        >
+          <el-table-column label="用户" min-width="140">
+            <template #default="{ row }">
+              {{ row.displayName || row.userId }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="userId" label="认证主体" min-width="140" show-overflow-tooltip />
+          <el-table-column label="请求数" width="100">
+            <template #default="{ row }">{{ row.requestCount.toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column label="输入 tokens" min-width="110">
+            <template #default="{ row }">{{ row.inputTokens.toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column label="输出 tokens" min-width="110">
+            <template #default="{ row }">{{ row.outputTokens.toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column label="费用" width="110">
+            <template #default="{ row }">${{ row.costUsd.toFixed(4) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
     </section>
   </section>
 </template>
 
 <script setup lang="ts">
 // 用量统计页：模板与样式从 App.vue 原文搬入，行为零变化。
-import { computed } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 // 范围切换/悬浮/图表几何全部在 useUsage 单例（registerUsageEffects 监听
 // usageRange 变化，仍由 App.vue setup 只调一次）。数据加载只在
 // useViewActivation / App.vue onMounted 触发，本组件纯展示。
 import {
   loadUsageTrend,
+  loadUserUsage,
   usageHoverDay,
   usageHoverIndex,
   usageLoading,
@@ -184,13 +225,29 @@ import {
   usagePoints,
   usageRange,
   usageTrendChart,
+  userUsageError,
+  userUsageLoading,
+  userUsageRows,
 } from '../../composables/useUsage';
+import { isAdmin } from '../../composables/useAuthState';
 
 // 表格只列有实际用量的日子：全零行对用户是噪音，趋势图仍保留完整时间轴；
 // 日期倒序，今天（最新用量）永远在第一行
 const usageTableRows = computed(() =>
   usagePoints.value.filter((d) => d.requestCount > 0).sort((a, b) => b.date.localeCompare(a.date)),
 );
+
+// 按用户统计随页面进入与范围切换刷新（仅管理员发起请求）
+onMounted(() => {
+  if (isAdmin.value) {
+    void loadUserUsage();
+  }
+});
+watch(usageRange, () => {
+  if (isAdmin.value) {
+    void loadUserUsage();
+  }
+});
 </script>
 
 <style scoped>

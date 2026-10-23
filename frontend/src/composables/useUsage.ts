@@ -5,11 +5,11 @@ import { computed, ref, watch } from 'vue';
 
 import { ElMessage } from 'element-plus';
 
-import { getTenantCostSummary, getTenantCostTrend } from '../api/client';
-import type { TenantCostSummary, TenantCostTrendPoint } from '../types/react';
+import { getTenantCostSummary, getTenantCostTrend, getTenantUserUsage } from '../api/client';
+import type { TenantCostSummary, TenantCostTrendPoint, TenantUserUsage } from '../types/react';
 import { USAGE_CHART_H, USAGE_CHART_W } from '../utils/constants';
 import { isAuthError } from '../utils/format';
-import { apiKeyInput, authContext, canUseRemoteSync, token } from './useAuthState';
+import { apiKeyInput, authContext, canUseRemoteSync, isAdmin, token } from './useAuthState';
 
 export const costSummary = ref<TenantCostSummary | null>(null);
 
@@ -17,6 +17,11 @@ const usageRange = ref<7 | 14 | 30>(14);
 const usagePoints = ref<TenantCostTrendPoint[]>([]);
 const usageLoading = ref(false);
 const usageNeedsAuth = ref(false);
+
+/** 按用户聚合用量（管理员视角；非管理员/未登录保持空数组不请求）。 */
+export const userUsageRows = ref<TenantUserUsage[]>([]);
+export const userUsageLoading = ref(false);
+export const userUsageError = ref('');
 
 // 指标卡直接复用右上角同一份 costSummary 数据，不重复请求
 const usageMetricCards = computed(() => {
@@ -222,10 +227,31 @@ export async function refreshCostSummary(): Promise<void> {
   }
 }
 
-/** 用量副作用（切换统计范围即重新拉趋势），只允许被调用一次。 */
+/** 按用户聚合用量（仅管理员加载；403/失败静默降级为空表）。 */
+export async function loadUserUsage(): Promise<void> {
+  if (!isAdmin.value || !canUseRemoteSync.value) {
+    userUsageRows.value = [];
+    return;
+  }
+  userUsageLoading.value = true;
+  userUsageError.value = '';
+  try {
+    userUsageRows.value = await getTenantUserUsage(usageRange.value, authContext());
+  } catch (error) {
+    userUsageRows.value = [];
+    if (!isAuthError(error)) {
+      userUsageError.value = error instanceof Error ? error.message : '用户用量加载失败';
+    }
+  } finally {
+    userUsageLoading.value = false;
+  }
+}
+
+/** 用量副作用（切换统计范围即重新拉趋势与按用户统计），只允许被调用一次。 */
 export function registerUsageEffects(): void {
   watch(usageRange, () => {
     void loadUsageTrend();
+    void loadUserUsage();
   });
 }
 

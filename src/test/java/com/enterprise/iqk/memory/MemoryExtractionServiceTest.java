@@ -73,8 +73,8 @@ class MemoryExtractionServiceTest {
         assertThat(content.getValue())
                 .startsWith("画像: ")
                 .contains("Java 后端开发者");
-        // 提取调用计入租户成本（economy 档）
-        verify(tenantCostService).recordUsage(eq("tenant-1"), eq("economy"), anyLong(), anyLong(),
+        // 提取调用计入租户成本（economy 档；user 键=认证主体）
+        verify(tenantCostService).recordUsage(eq("tenant-1"), eq("user-1"), eq("economy"), anyLong(), anyLong(),
                 eq("memory_extraction"));
     }
 

@@ -212,8 +212,9 @@ public class HybridRagAnswerService {
             }
 
             long outputTokens = tenantCostService.estimateTokens(answer);
-            tenantCostService.recordUsage(normalizedTenantId, decision.costTier(),
-                    inputTokens, outputTokens, "rag_hybrid");
+            tenantCostService.recordUsage(normalizedTenantId,
+                    com.enterprise.iqk.security.UserContext.currentUserId(null),
+                    decision.costTier(), inputTokens, outputTokens, "rag_hybrid");
 
             // 第 6 步：追加引用来源脚注
             String answerWithCitations = answer + citationService.formatCitationFooter(citations);

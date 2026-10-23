@@ -121,7 +121,7 @@ public class MemoryExtractionService {
                     .call()
                     .content();
 
-            tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens,
+            tenantCostService.recordUsage(tenantId, userKey, decision.costTier(), inputTokens,
                     tenantCostService.estimateTokens(raw), EXTRACTION_ENDPOINT);
 
             ExtractionVerdict verdict = parseVerdict(raw);
