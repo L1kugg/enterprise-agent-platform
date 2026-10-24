@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.SignalType;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -188,7 +189,12 @@ public class WorkflowReactAgentService {
                             firstTokenMs, outcomeRef, startedNs, new AtomicReference<>(WorkflowState.PLANNING),
                             reactSupport.memoryBlock(memorySnapshot), memorySnapshot,
                             new AtomicReference<>(false), runState);
-                    return stepFlux(state, 1).concatWith(finalAnswerFlux(state));
+                    // 步骤链（阻塞的规划/工具执行）调度到 boundedElastic：订阅立即返回、
+                    // SSE emitter 随之初始化，trace 帧随每步完成实时落线（否则帧会在订阅期间
+                    // 同步跑完被桥接层聚合到一起），且不再占用 Tomcat 请求线程跑长任务。
+                    // defer 内的 prepare/startTask 仍在本请求线程执行（依赖 MDC/SecurityContext）。
+                    return stepFlux(state, 1).concatWith(finalAnswerFlux(state))
+                            .subscribeOn(Schedulers.boundedElastic());
                 })
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage())
