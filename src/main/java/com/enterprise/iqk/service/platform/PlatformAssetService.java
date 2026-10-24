@@ -99,6 +99,7 @@ public class PlatformAssetService {
         validateName(name);
         validateJson(configJson);
         validateSplitConfig(type, configJson);
+        validateToolHeaders(type, configJson);
         boolean system = PlatformAsset.SCOPE_SYSTEM.equalsIgnoreCase(scope == null ? "" : scope.trim());
         if (system && !SYSTEM_SCOPED_TYPES.contains(type)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -137,6 +138,7 @@ public class PlatformAssetService {
         if (StringUtils.hasText(name)) validateName(name);
         validateJson(configJson);
         validateSplitConfig(normalizeType(assetType), configJson);
+        validateToolHeaders(normalizeType(assetType), configJson);
         if (parentId != null && mapper.findByIdAndType(parentId, TenantContext.currentTenantId(), "knowledge-bases") == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "parentId does not exist");
         }
@@ -290,23 +292,44 @@ public class PlatformAssetService {
         }
     }
 
-    /** 编辑表单不回显密钥，因此“缺省/******”都不能覆盖库中原值。 */
+    /** 编辑表单不回显密钥，因此“缺省/******”都不能覆盖库中原值；递归遍历覆盖嵌套结构（如 headers 内的密钥）。 */
     private String preserveSecrets(String existingJson, String incomingJson) {
         try {
             JsonNode existing = readTree(existingJson);
             ObjectNode incoming = (ObjectNode) objectMapper.readTree(incomingJson);
             if (existing == null || !existing.isObject()) return normalizeJson(incomingJson);
-            existing.fieldNames().forEachRemaining(field -> {
-                JsonNode oldValue = existing.get(field);
-                JsonNode newValue = incoming.get(field);
-                if (isSecret(field) && oldValue != null && !oldValue.isNull()
-                        && (newValue == null || newValue.isNull() || "******".equals(newValue.asText()))) {
-                    incoming.set(field, oldValue);
-                }
-            });
+            preserveSecretsRecursive(existing, incoming);
             return objectMapper.writeValueAsString(incoming);
         } catch (IOException | ClassCastException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config must be valid JSON", ex);
+        }
+    }
+
+    /** 并行走两棵树：敏感字段命中掩码占位即回填旧值；非敏感容器继续下钻。 */
+    private void preserveSecretsRecursive(JsonNode existing, JsonNode incoming) {
+        if (existing == null || incoming == null) {
+            return;
+        }
+        if (existing.isObject() && incoming.isObject()) {
+            ObjectNode target = (ObjectNode) incoming;
+            existing.fieldNames().forEachRemaining(field -> {
+                JsonNode oldValue = existing.get(field);
+                JsonNode newValue = incoming.get(field);
+                if (isSecret(field) && oldValue != null && !oldValue.isNull() && oldValue.isTextual()) {
+                    if (newValue == null || newValue.isNull() || "******".equals(newValue.asText())) {
+                        target.set(field, oldValue);
+                    }
+                    return;
+                }
+                if (oldValue != null && newValue != null && newValue.isContainerNode()
+                        && oldValue.isContainerNode()) {
+                    preserveSecretsRecursive(oldValue, newValue);
+                }
+            });
+        } else if (existing.isArray() && incoming.isArray()) {
+            for (int i = 0; i < existing.size() && i < incoming.size(); i++) {
+                preserveSecretsRecursive(existing.get(i), incoming.get(i));
+            }
         }
     }
     /**
@@ -410,6 +433,39 @@ public class PlatformAssetService {
 
     private static String keyword(String search) {
         return SqlLikeUtils.escapeForLike(StringUtils.hasText(search) ? search.trim() : "");
+    }
+
+    /**
+     * FORM_API 静态请求头保存期校验（连接器模板）：headers 必须是 string→string 对象，
+     * ≤16 条、键 ≤128、值 ≤2048——防脏配置在执行层静默失效。
+     */
+    private void validateToolHeaders(String type, String configJson) {
+        if (!"tools".equals(type) || !StringUtils.hasText(configJson)) {
+            return;
+        }
+        try {
+            JsonNode headers = objectMapper.readTree(configJson).path("headers");
+            if (headers.isMissingNode() || headers.isNull()) {
+                return;
+            }
+            if (!headers.isObject()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "headers 必须是对象（{\"头名\": \"值\"}）");
+            }
+            if (headers.size() > 16) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "headers 最多 16 条");
+            }
+            headers.fields().forEachRemaining(field -> {
+                if (field.getKey().length() > 128) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "headers 键过长（≤128）: " + field.getKey());
+                }
+                JsonNode value = field.getValue();
+                if (!value.isTextual() || value.asText().length() > 2048) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "headers 值必须是文本且 ≤2048 字符");
+                }
+            });
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "config must be valid JSON", ex);
+        }
     }
 
     private static ResponseStatusException duplicate(String type, String name) {

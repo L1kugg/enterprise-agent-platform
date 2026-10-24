@@ -6,6 +6,7 @@ import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.memory.ChatTurnMemoryRecorder;
 import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.ingestion.ChatAttachmentService;
 import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
 import com.enterprise.iqk.service.agent.AgentChatRuntime;
 import com.enterprise.iqk.service.agent.AgentPromptMerger;
@@ -46,8 +47,15 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 @RequiredArgsConstructor
 public class ReactAgentService {
-    /** ReAct 循环步数上限，超出后强制汇总收尾 */
-    private static final int MAX_STEPS = 4;
+    /** ReAct 循环步数默认上限，超出后强制汇总收尾；智能体 config.maxSteps 可按体覆盖 [1,10] */
+    private static final int DEFAULT_MAX_STEPS = 4;
+
+    /** 智能体配置优先的步数上限：config.maxSteps 有值用之，否则走链路默认。 */
+    private static int maxSteps(AgentChatRuntime.RunState runState) {
+        Integer configured = runState == null || runState.config() == null
+                ? null : runState.config().maxSteps();
+        return configured != null ? Math.max(1, configured) : DEFAULT_MAX_STEPS;
+    }
 
     private final ModelRouter modelRouter;
     private final ReactDecisionParser decisionParser;
@@ -62,6 +70,8 @@ public class ReactAgentService {
     private final ReActPlannerPrompts plannerPrompts;
     /** 两条 ReAct 链路共用的执行支撑（记忆/动作/轨迹/指标）。 */
     private final ReActSupport reactSupport;
+    /** 聊天内临时附件：解析产物注入规划与成稿（attachmentId 无效/过期时零变化）。 */
+    private final ChatAttachmentService chatAttachmentService;
 
     /** 同步对话：跑完 ReAct 循环后一次性返回完整响应（含轨迹、引用与路由信息）。 */
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
@@ -90,18 +100,19 @@ public class ReactAgentService {
             MemoryService.MemoryContextSnapshot memorySnapshot = reactSupport.recallMemory(
                     tenantId, memoryUserKey, request.getPrompt(), runState);
             String knownMemory = reactSupport.memoryBlock(memorySnapshot);
+            String attachmentBlock = chatAttachmentService.attachmentBlock(tenantId, request.getAttachmentId());
 
-            for (int step = 1; step <= MAX_STEPS; step++) {
+            for (int step = 1; step <= maxSteps(runState); step++) {
                 long stepStartNs = System.nanoTime(); // 每步掐表，轨迹记录真实耗时
                 ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId,
-                        knownMemory, runState);
+                        knownMemory, runState, attachmentBlock);
                 usedFallback = usedFallback || decision.fallback();
 
                 if ("finish".equals(decision.action())) {
                     AnswerResult answer = StringUtils.hasText(decision.answer())
                             ? new AnswerResult(decision.answer(), false)
                             : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId,
-                                    knownMemory, runState);
+                                    knownMemory, runState, null, attachmentBlock);
                     usedFallback = usedFallback || answer.fallback();
                     Map<String, Object> observation = new LinkedHashMap<>();
                     observation.put("status", "completed");
@@ -129,7 +140,7 @@ public class ReactAgentService {
             }
 
             AnswerResult answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId,
-                    knownMemory, runState);
+                    knownMemory, runState, ReActPlannerPrompts.STEPS_EXHAUSTED_NOTE.formatted(), attachmentBlock);
             ReactChatResponseVO response = finalizeResponse(request, answer.answer(), trace, routeDecision,
                     usedFallback || answer.fallback(), memorySnapshot, tenantId, memoryUserKey);
             return agentRuntime.enrichAndRecord(request, tenantId, runState, response,
@@ -174,11 +185,12 @@ public class ReactAgentService {
                     String memoryUserKey = reactSupport.memoryUserKey(request.getChatId());
                     MemoryService.MemoryContextSnapshot memorySnapshot = reactSupport.recallMemory(
                             tenantId, memoryUserKey, request.getPrompt(), runState);
+                    String attachmentBlock = chatAttachmentService.attachmentBlock(tenantId, request.getAttachmentId());
 
                     StreamState state = new StreamState(request, routeDecision, tenantId, memoryUserKey,
                             memorySnapshot, runState, startedNs, firstTokenLatencyMsRef, outcomeRef,
                             new ArrayList<>(), new AtomicReference<>(""), new AtomicReference<>(""),
-                            new AtomicReference<>(false));
+                            new AtomicReference<>(false), new AtomicReference<>(false), attachmentBlock);
                     // 步骤链（阻塞的规划/工具执行）调度到 boundedElastic：订阅立即返回、
                     // SSE emitter 随之初始化，trace 帧随每步完成实时落线（否则帧会在订阅期间
                     // 同步跑完被桥接层聚合到一起），且不再占用 Tomcat 请求线程跑长任务。
@@ -211,19 +223,22 @@ public class ReactAgentService {
                                List<ReactTraceStepVO> trace,
                                AtomicReference<String> rollingContext,
                                AtomicReference<String> directAnswer,
-                               AtomicReference<Boolean> usedFallback) {
+                               AtomicReference<Boolean> usedFallback,
+                               AtomicReference<Boolean> stepsExhausted,
+                               String attachmentBlock) {
     }
 
     /** 递归单步流：reason→（finish 则记直答，否则执行动作并滚动上下文）→ 立即发 trace 帧 → 续下一步。 */
     private Flux<String> stepFlux(StreamState state, int stepNum) {
         return Flux.defer(() -> {
-            if (stepNum > MAX_STEPS) {
+            if (stepNum > maxSteps(state.runState())) {
+                state.stepsExhausted().set(true);
                 return Flux.<String>empty(); // 轮次用尽，交由 finalAnswerFlux 强制总结成稿
             }
             long stepStartNs = System.nanoTime();
             ReasonDecision decision = reason(state.request(), state.rollingContext().get(), state.trace(),
                     state.routeDecision(), state.tenantId(),
-                    reactSupport.memoryBlock(state.memorySnapshot()), state.runState());
+                    reactSupport.memoryBlock(state.memorySnapshot()), state.runState(), state.attachmentBlock());
             if (decision.fallback()) {
                 state.usedFallback().set(true);
             }
@@ -265,12 +280,15 @@ public class ReactAgentService {
                     String direct = state.directAnswer().get();
                     String finalSystem = promptMerger.finalSystem(ReActPlannerPrompts.FINAL_BASE_SYSTEM,
                             state.runState() == null ? null : state.runState().config());
+                    String exhaustedNote = state.stepsExhausted().get()
+                            ? ReActPlannerPrompts.STEPS_EXHAUSTED_NOTE.formatted() : "";
                     return StringUtils.hasText(direct)
                             ? AnswerStreamSupport.chunked(direct)
                             : agentRuntime.callStream(finalSystem,
                                     plannerPrompts.finalPrompt(state.request(), state.trace(),
                                             state.rollingContext().get(),
-                                            reactSupport.memoryBlock(state.memorySnapshot())),
+                                            reactSupport.memoryBlock(state.memorySnapshot()),
+                                            state.attachmentBlock()) + exhaustedNote,
                                     state.routeDecision(), state.tenantId(), "react_final", "react",
                                     state.runState());
                 })
@@ -308,9 +326,10 @@ public class ReactAgentService {
                                   ModelRouter.ModelRouteDecision routeDecision,
                                   String tenantId,
                                   String knownMemory,
-                                  AgentChatRuntime.RunState runState) {
+                                  AgentChatRuntime.RunState runState,
+                                  String attachmentBlock) {
         String planningPrompt = plannerPrompts.planningPrompt(request, rollingContext, trace,
-                knownMemory, tenantId, runState);
+                knownMemory, tenantId, runState, attachmentBlock);
         try {
             String raw = agentRuntime.call(
                     promptMerger.plannerSystem(ReActPlannerPrompts.PLANNER_BASE_SYSTEM,
@@ -328,17 +347,21 @@ public class ReactAgentService {
         }
     }
 
-    /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败或空答案给兜底文案并标记 fallback。 */
+    /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败或空答案给兜底文案并标记 fallback。
+     *  appendNote 追加在提示词尾（步数用尽说明）；attachmentBlock 附件段随每次成稿注入。 */
     private AnswerResult summarizeAnswer(ReactChatRequestVO request,
                                          List<ReactTraceStepVO> trace,
                                          String rollingContext,
                                          ModelRouter.ModelRouteDecision routeDecision,
                                          String tenantId,
                                          String knownMemory,
-                                         AgentChatRuntime.RunState runState) {
+                                         AgentChatRuntime.RunState runState,
+                                         String appendNote,
+                                         String attachmentBlock) {
         String finalSystem = promptMerger.finalSystem(ReActPlannerPrompts.FINAL_BASE_SYSTEM,
                 runState == null ? null : runState.config());
-        String finalPrompt = plannerPrompts.finalPrompt(request, trace, rollingContext, knownMemory);
+        String finalPrompt = plannerPrompts.finalPrompt(request, trace, rollingContext, knownMemory, attachmentBlock)
+                + (appendNote == null ? "" : appendNote);
         try {
             String answer = agentRuntime.call(finalSystem, finalPrompt, routeDecision, tenantId,
                     "react_final", "react", runState);

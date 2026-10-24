@@ -131,7 +131,7 @@ class AgentChatRuntimeTest {
     }
 
     private AgentRuntimeConfig config(Long modelServiceId) {
-        return new AgentRuntimeConfig(5L, "助手", "PUBLISHED", "你是助手", null, 10,
+        return new AgentRuntimeConfig(5L, "助手", "PUBLISHED", "你是助手", null, 10, null,
                 null, List.of(), false, modelServiceId, modelServiceId == null ? null : "qwen-plus",
                 List.of(), List.of(), List.of(), List.of(), List.of());
     }

@@ -98,7 +98,10 @@ class ReactAgentServiceStreamTest {
                 new AgentPromptMerger(),
                 agentRuntime,
                 new ReActPlannerPrompts(catalog, toolCatalog, formatter),
-                new ReActSupport(harness, mock(MemoryService.class), new SimpleMeterRegistry()));
+                new ReActSupport(harness, mock(MemoryService.class), new SimpleMeterRegistry()),
+                new com.enterprise.iqk.ingestion.ChatAttachmentService(
+                        mock(com.enterprise.iqk.security.FileSafetyScanner.class),
+                        new com.enterprise.iqk.ingestion.ChatAttachmentStore()));
     }
 
     private ReactChatRequestVO request() {

@@ -79,7 +79,7 @@ class DefaultFileSafetyScannerTest {
 
     @Test
     void shouldRejectDisallowedExtension() {
-        MockMultipartFile file = new MockMultipartFile("file", "script.txt", "text/plain", "hello".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "script.exe", "text/plain", "hello".getBytes());
 
         assertThrows(IllegalArgumentException.class, () -> scanner.scan(file));
     }

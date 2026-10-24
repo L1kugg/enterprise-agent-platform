@@ -145,12 +145,16 @@ public class ToolInvocationService {
                 connection.setReadTimeout(timeout);
                 connection.setRequestMethod(method);
                 connection.setInstanceFollowRedirects(false);
-                applyAuthorization(connection, config);
-                // 用户定义的 HEADER 参数最后应用：可覆盖默认 Content-Type，不覆盖认证头
+                // 应用顺序 = 优先级从低到高：静态模板头 < 运行时参数 HEADER < 认证头
+                // （setRequestProperty 同键覆盖，认证头最后写保证不可被覆盖）
+                applyStaticHeaders(connection, config);
                 headerValues.forEach(connection::setRequestProperty);
+                applyAuthorization(connection, config);
                 if (!bodyValues.isEmpty()) {
                     connection.setDoOutput(true);
-                    if (headerValues.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("Content-Type"))) {
+                    if (headerValues.keySet().stream().noneMatch(k -> k.equalsIgnoreCase("Content-Type"))
+                            && config.path("headers").path("Content-Type").asText("").isBlank()
+                            && config.path("headers").path("content-type").asText("").isBlank()) {
                         connection.setRequestProperty("Content-Type", "application/json");
                     }
                     try (OutputStream output = connection.getOutputStream()) {
@@ -243,6 +247,22 @@ public class ToolInvocationService {
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "工具配置 JSON 不合法", ex);
         }
+    }
+
+    /**
+     * 连接器模板的静态请求头（config.headers，string→string）：Host/UA/Content-Type 等基础头，
+     * 密钥类头请放顶层 credential（走认证）或命名命中 SecretCipher 词表自动加密。
+     */
+    private void applyStaticHeaders(java.net.HttpURLConnection connection, JsonNode config) {
+        JsonNode headers = config.path("headers");
+        if (!headers.isObject()) {
+            return;
+        }
+        headers.fields().forEachRemaining(field -> {
+            if (field.getValue().isTextual() && !field.getValue().asText().isBlank()) {
+                connection.setRequestProperty(field.getKey(), field.getValue().asText());
+            }
+        });
     }
 
     private void applyAuthorization(java.net.HttpURLConnection connection, JsonNode config) {

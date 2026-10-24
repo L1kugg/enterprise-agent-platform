@@ -68,6 +68,9 @@ export type ComposerChipKind = 'uploading' | 'parsing' | 'ready' | 'error';
 export interface ComposerUploadChip {
   kind: ComposerChipKind;
   name: string;
-  chatId: string;
+  /** 旧入库式上传的任务 id（轮询用）；临时附件模式为空 */
+  chatId?: string;
+  /** 附件就绪后的 attachmentId：随 /ai/react 请求携带 */
+  attachmentId?: string;
   text: string;
 }

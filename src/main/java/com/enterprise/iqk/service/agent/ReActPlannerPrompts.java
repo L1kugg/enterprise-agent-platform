@@ -27,6 +27,12 @@ public class ReActPlannerPrompts {
     public static final String FINAL_BASE_SYSTEM =
             "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。答案正文不要罗列「引用来源/参考文献」清单，来源由界面单独展示。";
 
+    /** ReAct 循环步数用尽时的成稿追加说明：让"未做完"对用户透明，而不是无声降质。 */
+    public static final String STEPS_EXHAUSTED_NOTE =
+            "%n%n注意：本次任务在规划步数上限内未完成全部动作，以上轨迹仅为部分进展。"
+                    + "请如实汇总已获取的信息作答，不要编造未执行步骤的结果，"
+                    + "并在答案末尾提醒用户：本问题较复杂，建议拆分为多个小问题分别提问，或由管理员调高该智能体的步数上限。";
+
     private final PlannerActionCatalog plannerActionCatalog;
     /** 绑定工具目录（R7.3）：per-agent 生成 tool_call 可用工具清单提示词段。 */
     private final AgentToolCatalog agentToolCatalog;
@@ -34,14 +40,16 @@ public class ReActPlannerPrompts {
 
     /**
      * 组装单步规划提示词：动作块（白名单）+ 绑定工具目录（per-agent，未绑定为空串零变化）
-     * + 规则 + JSON 格式 + 用户问题 + 已知记忆 + 滚动上下文 + 已有轨迹。
+     * + 规则 + JSON 格式 + 用户问题 + 已知记忆 + 附件段（聊天临时附件，空串零变化）
+     * + 滚动上下文 + 已有轨迹。
      */
     public String planningPrompt(ReactChatRequestVO request,
                                  String rollingContext,
                                  List<ReactTraceStepVO> trace,
                                  String knownMemory,
                                  String tenantId,
-                                 AgentChatRuntime.RunState runState) {
+                                 AgentChatRuntime.RunState runState,
+                                 String attachmentBlock) {
         // 绑定工具目录（R7.3）：per-agent 动态段，紧跟动作块之后；未绑定工具时为空串零变化
         String toolCatalogSection = agentToolCatalog.catalogSection(
                 runState == null ? null : runState.config().agentId(), tenantId);
@@ -68,7 +76,7 @@ public class ReActPlannerPrompts {
                 %n
                 已知记忆（用户画像 / 历史对话 / 已确认事实，作为背景参考）：
                 %s
-                %n
+                %n%s
                 滚动上下文：
                 %s
                 %n
@@ -78,23 +86,25 @@ public class ReActPlannerPrompts {
                 toolCatalogSection,
                 request.getPrompt(),
                 emptyIfBlank(knownMemory),
+                emptyIfBlank(attachmentBlock),
                 emptyIfBlank(rollingContext),
                 responseFormatter.traceSummary(trace)
         );
     }
 
-    /** 构造成稿提示词：用户问题 + 已知记忆 + ReAct 轨迹 + 观察上下文四段（记忆段两链路统一注入）。 */
+    /** 构造成稿提示词：用户问题 + 已知记忆 + 附件段 + ReAct 轨迹 + 观察上下文（记忆/附件段两链路统一注入）。 */
     public String finalPrompt(ReactChatRequestVO request,
                               List<ReactTraceStepVO> trace,
                               String rollingContext,
-                              String knownMemory) {
+                              String knownMemory,
+                              String attachmentBlock) {
         return """
                 用户问题:
                 %s
                 %n
                 已知记忆:
                 %s
-                %n
+                %n%s
                 ReAct轨迹:
                 %s
                 %n
@@ -103,7 +113,8 @@ public class ReActPlannerPrompts {
                 %n
                 请输出最终中文答案，要求简洁、可执行、结构清晰。
                 %n""".formatted(request.getPrompt(), emptyIfBlank(knownMemory),
-                responseFormatter.traceSummary(trace), emptyIfBlank(rollingContext));
+                emptyIfBlank(attachmentBlock), responseFormatter.traceSummary(trace),
+                emptyIfBlank(rollingContext));
     }
 
     private static String emptyIfBlank(String value) {

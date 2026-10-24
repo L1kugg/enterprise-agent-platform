@@ -64,6 +64,15 @@ public class AgentToolCatalog {
                     section.append("：").append(tool.getDescription().trim());
                 }
                 section.append('\n');
+                // text2sql 语义层：SQL 工具附带其绑定数据库资产的表/字段业务含义，
+                // 模型不用盲猜字段；字典在 DatabaseStudio 以 schemaNotes 维护。
+                if ("SQL".equalsIgnoreCase(config.path("toolType").asText())) {
+                    String notes = databaseSchemaNotes(tenantId, config.path("databaseId").asLong());
+                    if (!notes.isEmpty()) {
+                        section.append("  该工具查询的数据库语义字典（表/字段业务含义，写 SQL 前先对照）：\n")
+                                .append(notes).append('\n');
+                    }
+                }
             }
             if (section.isEmpty()) {
                 return "";
@@ -83,6 +92,28 @@ public class AgentToolCatalog {
                     || tool.getConfigJson().isBlank() ? "{}" : tool.getConfigJson());
         } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             return objectMapper.createObjectNode();
+        }
+    }
+
+    /** 取数据库资产的 schemaNotes 语义字典（截断 2000 字符）；资产不存在/未配置返回空串。 */
+    private String databaseSchemaNotes(String tenantId, long databaseId) {
+        if (databaseId <= 0) {
+            return "";
+        }
+        try {
+            PlatformAsset database = assetMapper.findByIdAndTypeVisible(databaseId, tenantId, "databases");
+            if (database == null) {
+                return "";
+            }
+            String notes = parseConfig(database).path("schemaNotes").asText("");
+            if (!StringUtils.hasText(notes)) {
+                return "";
+            }
+            String trimmed = notes.trim();
+            return trimmed.length() > 2000 ? trimmed.substring(0, 2000) + "...[截断]" : trimmed;
+        } catch (Exception ex) {
+            log.warn("读取数据库语义字典失败（不阻断目录）: databaseId={}, reason={}", databaseId, ex.toString());
+            return "";
         }
     }
 

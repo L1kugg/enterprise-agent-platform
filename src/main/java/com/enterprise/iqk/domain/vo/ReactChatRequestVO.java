@@ -14,5 +14,8 @@ public class ReactChatRequestVO {
     /** 用户在对话栏手选的模型服务 id（platform_asset model-services id）；
      * null 走默认档位路由；智能体已绑定模型时以绑定为准 */
     private Long modelServiceId;
+    /** 聊天内临时附件 id（ChatAttachmentService 解析产物，30 分钟有效）；
+     * 非空时附件文本注入规划与成稿提示词，不入知识库 */
+    private String attachmentId;
 }
 

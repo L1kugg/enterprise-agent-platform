@@ -65,6 +65,10 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.POST, "/auth/api-keys/**").hasAnyAuthority("PERM_AUTH_KEY_MANAGE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/chat", "/ai/chat/stream", "/ai/service").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 聊天内临时附件：解析短存不入知识库，与会话写侧同权限
+                    .requestMatchers(HttpMethod.POST, "/ai/chat-attachments").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 工作流图任务运行（V36）：上线的工作流运行为异步任务，业务运行与会话写侧同权限
+                    .requestMatchers(HttpMethod.POST, "/ai/workflows/**").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 平台工具人工确认（R7.3）：高危工具审批/取消与会话写侧同权限
                     .requestMatchers(HttpMethod.POST, "/ai/agent-tool-confirmations/**").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     // 智能体目录：普通用户挑选可用智能体，权限与聊天写侧一致（只出展示字段）
@@ -83,6 +87,8 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.PUT, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/feedback").hasAnyAuthority("PERM_FEEDBACK_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    // 业务效果看板：反馈聚合为管理视角，与平台统计看板同口径
+                    .requestMatchers(HttpMethod.GET, "/ai/feedback/insights").hasAnyAuthority("ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/ai/pdf/file/**").hasAnyAuthority("PERM_RAG_READ", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/pdf/chat").hasAnyAuthority("PERM_RAG_READ", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/pdf/upload/**", "/ingestion/upload/**").hasAnyAuthority("PERM_INGESTION_WRITE", "ROLE_ADMIN")

@@ -18,6 +18,8 @@ export interface ReactChatRequest {
   agentId?: number;
   /** 对话栏手选的模型服务 id；不传走默认档位路由，智能体已绑定模型时以绑定为准。 */
   modelServiceId?: number;
+  /** 聊天内临时附件（POST /ai/chat-attachments 返回的 id）；文本注入本次问答上下文，不入知识库。 */
+  attachmentId?: string;
 }
 
 /** 对话栏模型选择目录项（GET /ai/models）。 */
@@ -163,6 +165,8 @@ export interface FeedbackRequest {
   messageId?: string;
   rating: number;
   comment?: string;
+  /** 点踩原因（低分反馈快选）：不准确/答非所问/内容过时/没引用来源/其他 */
+  reason?: string;
   question?: string;
   answer: string;
 }
@@ -428,12 +432,15 @@ export type AgentEngine = 'standard' | 'workflow';
 
 /** 工作流 agent 单步留痕（对应后端 WorkflowStepVO）。 */
 export interface WorkflowStep {
+  stepId?: string;
   stepOrder: number;
   agentName?: string;
   status?: string;
   thought?: string;
   action?: string;
   actionInput?: Record<string, unknown>;
+  /** 步骤产出（结构化）：人工审批步骤的 confirmationId 在此 */
+  output?: unknown;
   observation?: unknown;
   latencyMs?: number;
   inputTokens?: number;

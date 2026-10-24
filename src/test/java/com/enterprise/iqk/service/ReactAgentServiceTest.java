@@ -14,8 +14,10 @@ import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.service.agent.AgentChatRuntime;
 import com.enterprise.iqk.service.agent.AgentInvocationLogRecorder;
 import com.enterprise.iqk.service.agent.AgentPromptMerger;
+import com.enterprise.iqk.domain.agent.AgentRuntimeConfig;
 import com.enterprise.iqk.service.agent.AgentRuntimeConfigService;
 import com.enterprise.iqk.service.agent.AgentSafetyService;
+import com.enterprise.iqk.service.agent.SafetyMatchResult;
 import com.enterprise.iqk.service.agent.ReActPlannerPrompts;
 import com.enterprise.iqk.service.agent.ReActSupport;
 import com.enterprise.iqk.testutil.TestGuards;
@@ -29,6 +31,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
@@ -39,11 +42,19 @@ import static org.mockito.Mockito.when;
 
 class ReactAgentServiceTest {
 
-    /** 智能体运行时桩：agentId 不传时全部穿透，模型调用只走档位路由路径。 */
-    private static AgentChatRuntime routerOnlyRuntime(ChatClient chatClient) {
+    /** 智能体运行时桩：agentId 不传时全部穿透，模型调用只走档位路由路径；传 config 时 prepare 返回该配置。 */
+    private static AgentChatRuntime routerOnlyRuntime(ChatClient chatClient, AgentRuntimeConfig config) {
+        AgentRuntimeConfigService configService = mock(AgentRuntimeConfigService.class);
+        AgentSafetyService safetyService = mock(AgentSafetyService.class);
+        if (config != null) {
+            when(configService.loadForChat(anyString(), org.mockito.ArgumentMatchers.anyLong(), anyBoolean()))
+                    .thenReturn(config);
+            when(safetyService.interceptInput(anyString(), org.mockito.ArgumentMatchers.any(), anyString()))
+                    .thenReturn(SafetyMatchResult.notBlocked());
+        }
         return new AgentChatRuntime(
-                mock(AgentRuntimeConfigService.class),
-                mock(AgentSafetyService.class),
+                configService,
+                safetyService,
                 mock(PlatformChatModelRegistry.class),
                 mock(AgentInvocationLogRecorder.class),
                 new AgentRuntimeProperties(),
@@ -56,6 +67,12 @@ class ReactAgentServiceTest {
     private static ReactAgentService newService(ModelRouter modelRouter, ChatClient chatClient,
                                                 AgentHarnessService harness, MemoryService memoryService,
                                                 ChatTurnMemoryRecorder recorder) {
+        return newService(modelRouter, chatClient, harness, memoryService, recorder, null);
+    }
+
+    private static ReactAgentService newService(ModelRouter modelRouter, ChatClient chatClient,
+                                                AgentHarnessService harness, MemoryService memoryService,
+                                                ChatTurnMemoryRecorder recorder, AgentRuntimeConfig config) {
         PlannerActionCatalog catalog =
                 new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class));
         ReactResponseFormatter formatter = new ReactResponseFormatter(new ObjectMapper());
@@ -70,9 +87,12 @@ class ReactAgentServiceTest {
                 formatter,
                 recorder,
                 new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient),
+                routerOnlyRuntime(chatClient, config),
                 new ReActPlannerPrompts(catalog, toolCatalog, formatter),
-                new ReActSupport(harness, memoryService, mock(MeterRegistry.class)));
+                new ReActSupport(harness, memoryService, mock(MeterRegistry.class)),
+                new com.enterprise.iqk.ingestion.ChatAttachmentService(
+                        mock(com.enterprise.iqk.security.FileSafetyScanner.class),
+                        new com.enterprise.iqk.ingestion.ChatAttachmentStore()));
     }
 
     @Test
@@ -160,6 +180,49 @@ class ReactAgentServiceTest {
         // 成稿写回 short 记忆（写侧闭环）：user 键（匿名回落 chatId）+ 用户原始问题与最终答案
         verify(recorder).recordTurn(anyString(), eq("chat-1"), eq("chat-1"),
                 eq("帮我推荐一门课"), eq("推荐《Java并发实战》"));
+    }
+
+    @Test
+    void stepsExhaustedForcesSummaryWithTransparencyNote() {
+        AgentHarnessService harness = mock(AgentHarnessService.class);
+        when(harness.execute(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.enterprise.iqk.agent.harness.AgentObservation.success(
+                        "builtin", java.util.Map.of("rows", 2), 3));
+        ChatClient chatClient = mock(ChatClient.class);
+        ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class, RETURNS_SELF);
+        ChatClient.CallResponseSpec callSpec = mock(ChatClient.CallResponseSpec.class);
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.call()).thenReturn(callSpec);
+        // 第 1 次调用 = 规划（rag_search，非 finish），第 2 次 = 步数用尽后的强制成稿
+        when(callSpec.content()).thenReturn(
+                "{\"thought\":\"先查库\",\"action\":\"rag_search\",\"action_input\":{\"query\":\"x\"}}",
+                "已获取的部分结果汇总");
+        ModelRouter modelRouter = mock(ModelRouter.class);
+        when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
+                new ModelRouter.ModelRouteDecision("balanced", "model-a", "standard", false, "profile_match", "", "", null)
+        );
+        // maxSteps=1 的智能体：单步未 finish 即触顶
+        AgentRuntimeConfig config = new AgentRuntimeConfig(35L, "受限智能体", "PUBLISHED", "提示词",
+                null, 10, 1, null, List.of(), false, null, null,
+                List.of(), List.of(), List.of(), List.of(), List.of());
+
+        ReactAgentService service = newService(modelRouter, chatClient, harness,
+                mock(MemoryService.class), mock(ChatTurnMemoryRecorder.class), config);
+        ReactChatRequestVO request = new ReactChatRequestVO();
+        request.setPrompt("复杂问题");
+        request.setChatId("chat-1");
+        request.setModelProfile("balanced");
+        request.setAgentId(35L);
+
+        var response = service.chat(request);
+
+        assertThat(response.getAnswer()).isEqualTo("已获取的部分结果汇总");
+        // 成稿提示词带透明化说明：如实汇总 + 建议拆分提问
+        ArgumentCaptor<String> prompts = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec, org.mockito.Mockito.times(2)).user(prompts.capture());
+        assertThat(prompts.getAllValues().get(1))
+                .contains("步数上限内未完成全部动作")
+                .contains("拆分为多个小问题");
     }
 
     @Test

@@ -179,6 +179,10 @@
           <el-form-item label="短期记忆对话轮数">
             <el-input-number v-model="form.memoryTurns" :min="1" :max="100" />
           </el-form-item>
+          <el-form-item label="规划步数上限">
+            <el-input-number v-model="form.maxSteps" :min="1" :max="10" />
+            <span class="field-hint">ReAct 单次任务最多执行的动作步数，复杂任务可调高；留空用平台默认（4）</span>
+          </el-form-item>
         </el-form>
 
         <!-- 分析看板（R2.2）：全部数字来自 agent_invocation_log 真实聚合 -->
@@ -458,6 +462,7 @@ const form = reactive({
   toolDescription: '',
   executionConfirm: true,
   memoryTurns: 10,
+  maxSteps: null as number | null,
 });
 
 /** 绑定选项展示真实可用状态（FR-R5-01）：非 ACTIVE 的知识库标注不可用，绑定前可辨。 */
@@ -483,6 +488,7 @@ const configObject = computed(() => {
     safetyGuardIds: form.safetyGuardIds,
     executionConfirm: form.executionConfirm,
     memoryTurns: form.memoryTurns,
+    ...(form.maxSteps ? { maxSteps: form.maxSteps } : {}),
   };
 });
 
@@ -709,6 +715,7 @@ function selectAgent(item: PlatformAsset): void {
   form.safetyGuardIds = readNumberArray(config.safetyGuardIds);
   form.executionConfirm = config.executionConfirm !== false;
   form.memoryTurns = typeof config.memoryTurns === 'number' ? config.memoryTurns : 10;
+  form.maxSteps = typeof config.maxSteps === 'number' ? config.maxSteps : null;
   advancedJson.value = JSON.stringify(config, null, 2);
   markSavedConfig();
   // 切换智能体后上一次调试结果不再属于当前对象，清空避免误导
@@ -734,6 +741,7 @@ function createDraft(): void {
   form.toolDescription = '';
   form.executionConfirm = true;
   form.memoryTurns = 10;
+  form.maxSteps = null;
   advancedJson.value = JSON.stringify(configObject.value, null, 2);
   markSavedConfig();
   debugResult.value = null;

@@ -38,7 +38,12 @@ class PlatformToolConfirmationServiceTest {
         ToolInvocationService invocation = new ToolInvocationService(null,
                 new CodeToolSandboxService(new ObjectMapper()), new ObjectMapper(),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
-        return new PlatformToolConfirmationService(confirmationMapper, invoker, invocation, new ObjectMapper());
+        return new PlatformToolConfirmationService(confirmationMapper, invoker, invocation, new ObjectMapper(),
+                new org.springframework.context.ApplicationEventPublisher() {
+                    @Override
+                    public void publishEvent(Object event) {
+                    }
+                });
     }
 
     @Test

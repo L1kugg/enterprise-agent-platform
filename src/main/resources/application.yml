@@ -276,6 +276,9 @@ app:
       max-sql-length: ${APP_AGENT_HARNESS_DB_QUERY_MAX_SQL_LENGTH:4000}
       # 拒绝查询的表/schema 黑名单（凭证类默认全拉黑；观测不做键名脱敏，放行即原样进模型与轨迹）
       denied-tables: ${APP_AGENT_HARNESS_DB_QUERY_DENIED_TABLES:users,roles,user_roles,refresh_tokens,api_keys,mysql}
+      # 主库语义字典（text2sql 语义层）：表/字段业务含义，非空时追加进 query_database 规划提示词。
+      # 建议每行一条 "表名.字段 = 含义"；平台 SQL 工具的语义字典在其数据库资产的 schemaNotes
+      schema-notes: ${APP_AGENT_HARNESS_DB_QUERY_SCHEMA_NOTES:}
   cost-governance:
     enabled: ${APP_COST_GOVERNANCE_ENABLED:true}
     default-monthly-budget-usd: ${APP_COST_DEFAULT_MONTHLY_BUDGET_USD:25.0000}

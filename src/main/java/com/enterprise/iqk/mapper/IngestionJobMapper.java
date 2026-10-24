@@ -184,6 +184,7 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
             <script>
             SELECT * FROM ingestion_job
             WHERE tenant_id = #{tenantId}
+              AND status != 'SUPERSEDED'
               AND id IN (
                   SELECT MAX(id) FROM ingestion_job
                   WHERE tenant_id = #{tenantId}
@@ -213,6 +214,7 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
             <script>
             SELECT COUNT(*) FROM ingestion_job
             WHERE tenant_id = #{tenantId}
+              AND status != 'SUPERSEDED'
               AND id IN (
                   SELECT MAX(id) FROM ingestion_job
                   WHERE tenant_id = #{tenantId}
@@ -247,6 +249,7 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
               MAX(finished_at) AS last_finished_at
             FROM ingestion_job
             WHERE tenant_id = #{tenantId}
+              AND status != 'SUPERSEDED'
               AND id IN (
                   SELECT MAX(id) FROM ingestion_job
                   WHERE tenant_id = #{tenantId}
@@ -277,6 +280,7 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                 SELECT MAX(id) FROM ingestion_job
                 GROUP BY tenant_id, chat_id
             )
+            AND status != 'SUPERSEDED'
             <if test="search != null and search != ''">
               AND (
                 tenant_id LIKE CONCAT('%', #{search}, '%')
@@ -300,6 +304,7 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                 SELECT MAX(id) FROM ingestion_job
                 GROUP BY tenant_id, chat_id
             )
+            AND status != 'SUPERSEDED'
             <if test="search != null and search != ''">
               AND (
                 tenant_id LIKE CONCAT('%', #{search}, '%')
@@ -310,4 +315,41 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
             </script>
             """)
     long countLatestPerChatCrossTenant(@Param("search") String search);
+
+    /**
+     * 知识库同名文档替换候选：同租户 + 同知识库 + 同名、批次最新任务为 SUCCEEDED、
+     * 且不是当前上传批次（后写胜语义）。返回每个待退役 chat 的代表行。
+     */
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND knowledge_base_id = #{knowledgeBaseId}
+              AND source_name = #{sourceName}
+              AND status = 'SUCCEEDED'
+              AND chat_id != #{currentChatId}
+              AND id IN (
+                  SELECT MAX(id) FROM ingestion_job
+                  WHERE tenant_id = #{tenantId}
+                    AND knowledge_base_id = #{knowledgeBaseId}
+                    AND source_name = #{sourceName}
+                    AND status = 'SUCCEEDED'
+                  GROUP BY chat_id
+              )
+            """)
+    List<IngestionJob> findReplaceCandidates(@Param("tenantId") String tenantId,
+                                             @Param("knowledgeBaseId") Long knowledgeBaseId,
+                                             @Param("sourceName") String sourceName,
+                                             @Param("currentChatId") String currentChatId);
+
+    /** 退役标记：旧批次全部 SUCCEEDED 行置 SUPERSEDED（任务行保留审计，向量/关键词/图谱已另行清理）。 */
+    @Update("""
+            UPDATE ingestion_job
+            SET status = 'SUPERSEDED', updated_at = #{updatedAt}
+            WHERE tenant_id = #{tenantId}
+              AND chat_id = #{chatId}
+              AND status = 'SUCCEEDED'
+            """)
+    int markSupersededByChat(@Param("tenantId") String tenantId,
+                             @Param("chatId") String chatId,
+                             @Param("updatedAt") LocalDateTime updatedAt);
 }

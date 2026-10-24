@@ -102,6 +102,13 @@ public class AgentHarnessProperties {
         /** 拒绝查询的表/schema 黑名单：凭证类默认全拉黑（观测不做键名脱敏，一旦放行原样进模型与轨迹） */
         private Set<String> deniedTables = new LinkedHashSet<>(Set.of(
                 "users", "roles", "user_roles", "refresh_tokens", "api_keys", "mysql"));
+        /**
+         * 主库语义字典（text2sql 语义层）：表/字段业务含义的文本描述，非空时追加进
+         * query_database 的规划器提示词，让模型不用盲猜字段。建议结构化书写：
+         * 表名.字段 = 含义，每行一条。已知取舍：主库字典暂放配置（yml/env），
+         * 平台 SQL 工具的语义字典在数据库资产的 configJson.schemaNotes。
+         */
+        private String schemaNotes = "";
     }
 
     /**

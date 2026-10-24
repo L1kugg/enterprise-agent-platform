@@ -14,6 +14,8 @@ public record AgentRuntimeConfig(
         /** null = 未配置，沿用模型服务默认参数 */
         Double temperature,
         int memoryTurns,
+        /** ReAct 循环步数上限；null = 未配置，走链路默认（对话 4 / 留痕 6） */
+        Integer maxSteps,
         String openingMessage,
         List<String> openingQuestions,
         boolean executionConfirm,
@@ -38,7 +40,7 @@ public record AgentRuntimeConfig(
      * 各链路对该配置的行为与"无智能体"完全相同。
      */
     public static AgentRuntimeConfig automatic() {
-        return new AgentRuntimeConfig(null, null, null, null, null, 4, null,
+        return new AgentRuntimeConfig(null, null, null, null, null, 4, null, null,
                 List.of(), false, null, null, List.of(), List.of(), List.of(), List.of(), List.of());
     }
 }

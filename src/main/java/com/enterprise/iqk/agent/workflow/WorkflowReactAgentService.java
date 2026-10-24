@@ -82,7 +82,7 @@ public class WorkflowReactAgentService {
 
         try {
             WorkflowState currentState = WorkflowState.PLANNING;
-            for (int stepNum = 1; stepNum <= maxSteps(); stepNum++) {
+            for (int stepNum = 1; stepNum <= maxSteps(runState); stepNum++) {
                 AgentStepRecord stepRecord = workflowEngine.startStep(
                         task.getTaskId(), "planner", stepNum,
                         Map.of("prompt", request.getPrompt(), "rollingContext", rollingContext));
@@ -95,7 +95,7 @@ public class WorkflowReactAgentService {
                 if ("finish".equals(decision.action())) {
                     String answer = StringUtils.hasText(decision.answer()) ? decision.answer()
                             : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId,
-                                    knownMemory, runState);
+                                    knownMemory, runState, null);
                     Map<String, Object> obs = new LinkedHashMap<>();
                     obs.put("status", "completed");
                     obs.put("citations", decision.citations() != null ? decision.citations() : List.of());
@@ -132,7 +132,7 @@ public class WorkflowReactAgentService {
             }
 
             String answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId,
-                    knownMemory, runState);
+                    knownMemory, runState, ReActPlannerPrompts.STEPS_EXHAUSTED_NOTE.formatted());
             workflowEngine.transitionStatus(task.getTaskId(), currentState, WorkflowState.WRITING);
             workflowEngine.completeTask(task.getTaskId(), WorkflowState.DONE, answer);
             workflowEngine.recordTaskMetrics("REACT", "DONE", reactSupport.elapsedMs(startedNs));
@@ -188,7 +188,7 @@ public class WorkflowReactAgentService {
                             tenantId, new ArrayList<>(), new AtomicReference<>(""), new AtomicReference<>(""),
                             firstTokenMs, outcomeRef, startedNs, new AtomicReference<>(WorkflowState.PLANNING),
                             reactSupport.memoryBlock(memorySnapshot), memorySnapshot,
-                            new AtomicReference<>(false), runState);
+                            new AtomicReference<>(false), new AtomicReference<>(false), runState);
                     // 步骤链（阻塞的规划/工具执行）调度到 boundedElastic：订阅立即返回、
                     // SSE emitter 随之初始化，trace 帧随每步完成实时落线（否则帧会在订阅期间
                     // 同步跑完被桥接层聚合到一起），且不再占用 Tomcat 请求线程跑长任务。
@@ -231,7 +231,8 @@ public class WorkflowReactAgentService {
     /** 递归单步流：每完成一轮 ReAct（reason→动作执行）立即向下游发一条 trace 帧，循环不再整体阻塞在 defer 里跑完才发首帧。 */
     private Flux<String> stepFlux(StreamState state, int stepNum) {
         return Flux.defer(() -> {
-            if (stepNum > maxSteps()) {
+            if (stepNum > maxSteps(state.runState())) {
+                state.stepsExhausted().set(true);
                 return Flux.<String>empty(); // 轮次用尽，交由 finalAnswerFlux 强制总结成稿
             }
             AgentStepRecord stepRecord = workflowEngine.startStep(
@@ -283,10 +284,12 @@ public class WorkflowReactAgentService {
                     String direct = state.directAnswer().get();
                     String finalSystem = promptMerger.finalSystem(ReActPlannerPrompts.FINAL_BASE_SYSTEM,
                             state.runState() == null ? null : state.runState().config());
+                    String exhaustedNote = state.stepsExhausted().get()
+                            ? ReActPlannerPrompts.STEPS_EXHAUSTED_NOTE.formatted() : "";
                     return StringUtils.hasText(direct) ? AnswerStreamSupport.chunked(direct)
                             : agentRuntime.callStream(finalSystem,
                             plannerPrompts.finalPrompt(state.request(), state.trace(),
-                                    state.rollingContext().get(), state.knownMemory()),
+                                    state.rollingContext().get(), state.knownMemory(), "") + exhaustedNote,
                             state.routeDecision(), state.tenantId(), "react_final", "workflow", state.runState());
                 })
                 .map(token -> {
@@ -325,6 +328,7 @@ public class WorkflowReactAgentService {
                                String knownMemory,
                                MemoryService.MemoryContextSnapshot memorySnapshot,
                                AtomicReference<Boolean> usedFallback,
+                               AtomicReference<Boolean> stepsExhausted,
                                AgentChatRuntime.RunState runState) {
     }
 
@@ -339,7 +343,7 @@ public class WorkflowReactAgentService {
                                   String knownMemory,
                                   AgentChatRuntime.RunState runState) {
         String planningPrompt = plannerPrompts.planningPrompt(
-                request, rollingContext, trace, knownMemory, tenantId, runState);
+                request, rollingContext, trace, knownMemory, tenantId, runState, "");
 
         try {
             String raw = agentRuntime.call(
@@ -352,13 +356,15 @@ public class WorkflowReactAgentService {
         }
     }
 
-    /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败给兜底文案。 */
+    /** 汇总最终答案：用轨迹 + 观察上下文再调一次模型；失败给兜底文案。appendNote 追加在提示词尾（步数用尽说明）。 */
     private String summarizeAnswer(ReactChatRequestVO request, List<ReactTraceStepVO> trace,
                                     String rollingContext, ModelRouter.ModelRouteDecision routeDecision,
-                                    String tenantId, String knownMemory, AgentChatRuntime.RunState runState) {
+                                    String tenantId, String knownMemory, AgentChatRuntime.RunState runState,
+                                    String appendNote) {
         String finalSystem = promptMerger.finalSystem(ReActPlannerPrompts.FINAL_BASE_SYSTEM,
                 runState == null ? null : runState.config());
-        String finalPrompt = plannerPrompts.finalPrompt(request, trace, rollingContext, knownMemory);
+        String finalPrompt = plannerPrompts.finalPrompt(request, trace, rollingContext, knownMemory, "")
+                + (appendNote == null ? "" : appendNote);
         try {
             String answer = agentRuntime.call(finalSystem, finalPrompt, routeDecision, tenantId,
                     "react_final", "workflow", runState);
@@ -377,7 +383,10 @@ public class WorkflowReactAgentService {
         workflowEngine.transitionStatus(state.task().getTaskId(), current, target);
     }
 
-    private int maxSteps() {
-        return Math.max(1, agentWorkflowProperties.getReactMaxSteps());
+    /** 智能体配置优先的步数上限：config.maxSteps 有值用之，否则走 app.workflow.react-max-steps。 */
+    private int maxSteps(AgentChatRuntime.RunState runState) {
+        Integer configured = runState == null || runState.config() == null
+                ? null : runState.config().maxSteps();
+        return configured != null ? Math.max(1, configured) : Math.max(1, agentWorkflowProperties.getReactMaxSteps());
     }
 }

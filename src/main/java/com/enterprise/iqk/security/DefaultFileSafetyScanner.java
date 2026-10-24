@@ -14,7 +14,7 @@ import java.util.Set;
 public class DefaultFileSafetyScanner implements FileSafetyScanner {
     private static final int SCAN_BYTES = 8192;
     /** 允许上传的后缀白名单；新增格式必须同步 IngestionService 的解析分发。 */
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(".pdf", ".doc", ".docx", ".md");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(".pdf", ".doc", ".docx", ".md", ".txt");
     /** OLE2（老版 .doc）文件头魔数。 */
     private static final byte[] OLE2_MAGIC = {
         (byte) 0xD0, (byte) 0xCF, (byte) 0x11, (byte) 0xE0,
@@ -29,7 +29,7 @@ public class DefaultFileSafetyScanner implements FileSafetyScanner {
         String filename = originalName == null ? "" : originalName.toLowerCase(Locale.ROOT);
         String extension = extensionOf(filename);
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new IllegalArgumentException("不支持的文件类型，仅允许 pdf、doc、docx、md");
+            throw new IllegalArgumentException("不支持的文件类型，仅允许 pdf、doc、docx、md、txt");
         }
         try {
             byte[] head = readHead(file);

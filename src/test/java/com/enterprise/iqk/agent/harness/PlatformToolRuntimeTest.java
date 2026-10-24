@@ -55,7 +55,8 @@ class PlatformToolRuntimeTest {
         PlatformToolInvoker invoker = new PlatformToolInvoker(assetMapper, bindingMapper, invocation);
         com.enterprise.iqk.service.platform.PlatformToolConfirmationService confirmationService =
                 new com.enterprise.iqk.service.platform.PlatformToolConfirmationService(
-                        confirmationMapper, invoker, invocation, new ObjectMapper());
+                        confirmationMapper, invoker, invocation, new ObjectMapper(),
+                        event -> { });
         return new PlatformToolRuntime(invoker, invocation, confirmationService, auditLogMapper,
                 new SimpleMeterRegistry());
     }

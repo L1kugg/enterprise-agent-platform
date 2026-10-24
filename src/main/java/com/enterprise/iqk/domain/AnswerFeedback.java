@@ -37,6 +37,8 @@ public class AnswerFeedback {
     private Integer rating;
     /** 用户评语（截断到 1024 字符） */
     private String comment;
+    /** 点踩原因（白名单枚举值，低分反馈选填；NULL = 未采集） */
+    private String reason;
     /** 问题快照：转写数据集时作为 question 字段 */
     private String questionText;
     /** 答案快照：转写数据集时作为 answer 字段（截断到 1500 字符） */

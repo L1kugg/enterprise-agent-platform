@@ -29,6 +29,8 @@ class ToolInvocationServiceTest {
     private static String base;
     /** 5xx 端点被请求的次数（验证重试）。 */
     private static final AtomicInteger FLAKY_HITS = new AtomicInteger();
+    /** 回显端点最近一次收到的请求头（验证静态模板头与认证优先级）。 */
+    private static volatile Map<String, String> LAST_HEADERS = Map.of();
 
     private final ToolInvocationService service = new ToolInvocationService(
             null,
@@ -48,6 +50,16 @@ class ToolInvocationServiceTest {
             }
         });
         server.createContext("/missing", exchange -> exchange.sendResponseHeaders(404, -1));
+        server.createContext("/echo", exchange -> {
+            Map<String, String> headers = new java.util.LinkedHashMap<>();
+            exchange.getRequestHeaders().forEach((key, values) -> headers.put(key, values.isEmpty() ? "" : values.get(0)));
+            LAST_HEADERS = headers;
+            byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(body);
+            }
+        });
         server.createContext("/flaky", exchange -> {
             int hits = FLAKY_HITS.incrementAndGet();
             exchange.sendResponseHeaders(hits < 3 ? 500 : 200, -1);
@@ -120,6 +132,28 @@ class ToolInvocationServiceTest {
         assertThatThrownBy(() -> service.validateAgainstSchema(config, Map.of("amount", "abc")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("amount");
+    }
+
+    @Test
+    void staticHeadersAppliedAndAuthWinsOverTemplate() throws Exception {
+        JsonNode config = json("""
+                {"toolType":"FORM_API","method":"GET","url":"%s/echo",
+                 "authType":"BEARER","credential":"secret-token",
+                 "headers":{"User-Agent":"enterprise-agent/1.0","Authorization":"SHOULD_BE_OVERRIDDEN"}}"""
+                .formatted(base));
+
+        service.invoke(config, Map.of());
+
+        // 静态模板头生效；认证头最后写入，模板里的同名键被覆盖（JDK 会规范化头名大小写，按不区分大小写查）
+        assertThat(headerValue("User-Agent")).isEqualTo("enterprise-agent/1.0");
+        assertThat(headerValue("Authorization")).isEqualTo("Bearer secret-token");
+    }
+
+    private static String headerValue(String name) {
+        return LAST_HEADERS.entrySet().stream()
+                .filter((entry) -> entry.getKey().equalsIgnoreCase(name))
+                .map(Map.Entry::getValue)
+                .findFirst().orElse(null);
     }
 
     private static JsonNode json(String text) {

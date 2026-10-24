@@ -9,7 +9,6 @@ import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
-import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.retrieval.KeywordIndexStore;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import com.enterprise.iqk.security.TenantContext;
@@ -28,8 +27,6 @@ import org.springframework.ai.reader.pdf.config.PdfDocumentReaderConfig;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.ai.vectorstore.filter.Filter;
-import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
@@ -41,13 +38,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -71,11 +65,12 @@ public class IngestionService {
     private final GraphExtractionService graphExtractionService;
     private final KeywordIndexStore keywordIndexStore;
     private final SimpleVectorStoreSnapshotPersister snapshotPersister;
-    private final MemoryService memoryService;
     /** 上传目标知识库校验与归属（FR-R5-01），校验逻辑在目录服务内闭环 */
     private final com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService knowledgeBaseCatalogService;
     /** 分段治理服务：入库落分段快照 + 切分配置解析（R8） */
     private final DocumentSegmentService documentSegmentService;
+    /** 知识库同名文档替换（后写胜）：新批次成功后退役旧批次 */
+    private final DocumentReplaceService documentReplaceService;
 
     /** 提交文档入库任务（PDF/DOC/DOCX/MD）；knowledgeBaseId 非空时校验归属（FR-R5-01）。 */
     public IngestionJob submitDocument(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
@@ -182,56 +177,11 @@ public class IngestionService {
     }
 
     /**
-     * 删除一个入库批次（文档）：先按 tenant + chat 过滤清掉向量切片，再删磁盘原文件与任务记录。
-     * 顺序不能反——向量删除失败直接抛异常中止，保证不出现"任务记录删了、切片还在库里当孤儿"。
+     * 删除一个入库批次（文档）：向量先行失败即中止，删除链语义见 DocumentCleanupService。
      * 返回本次删除的文件名集合（去重）。
      */
     public List<String> deleteDocumentByChat(String tenantId, String chatId) {
-        String normalizedTenantId = TenantContext.normalize(tenantId);
-        List<IngestionJob> jobs = ingestionJobMapper.findLatestByChatId(normalizedTenantId, chatId, 100);
-        if (jobs.isEmpty()) {
-            return List.of();
-        }
-        FilterExpressionBuilder builder = new FilterExpressionBuilder();
-        Filter.Expression scope = builder
-                .and(builder.eq("tenant_id", normalizedTenantId), builder.eq("chat_id", chatId))
-                .build();
-        vectorStore.delete(scope);
-        int keywordRows = keywordIndexStore.deleteByChat(normalizedTenantId, chatId);
-        // 图谱数据按同一 chatId 作用域联动清理；失败只留孤儿边不中止文档删除
-        // （读路径 getNeighbors 对悬空边已容忍：实体查不到就跳过）。
-        try {
-            int kgRows = graphExtractionService.deleteByChat(normalizedTenantId, chatId);
-            log.info("kg cleanup: tenant={}, chatId={}, rows={}", normalizedTenantId, chatId, kgRows);
-        } catch (Exception kgEx) {
-            log.warn("kg cleanup 失败（不影响文档删除）: tenant={}, chatId={}, reason={}",
-                    normalizedTenantId, chatId, kgEx.toString());
-        }
-        // 沉淀自该文档的 fact 记忆联动软失效：证据源没了，"可信事实"继续召回只会放大幻觉。
-        // best-effort——失败只留活事实不中止删除，且方法幂等（stale 条件更新），可重跑补齐。
-        try {
-            int factRows = memoryService.invalidateFactsForChat(normalizedTenantId, chatId);
-            if (factRows > 0) {
-                log.info("fact memory cleanup: tenant={}, chatId={}, rows={}",
-                        normalizedTenantId, chatId, factRows);
-            }
-        } catch (Exception memEx) {
-            log.warn("fact memory cleanup 失败（不影响文档删除）: tenant={}, chatId={}, reason={}",
-                    normalizedTenantId, chatId, memEx.toString());
-        }
-        Set<String> removedFiles = new LinkedHashSet<>();
-        for (IngestionJob job : jobs) {
-            File source = new File(job.getFilePath());
-            if (source.exists() && source.delete()) {
-                removedFiles.add(job.getSourceName());
-            }
-        }
-        ingestionJobMapper.deleteByChatIdAndTenant(normalizedTenantId, chatId);
-        log.info("keyword index cleanup: tenant={}, chatId={}, rows={}",
-                normalizedTenantId, chatId, keywordRows);
-        log.info("ingestion document deleted: tenant={}, chatId={}, jobs={}, files={}",
-                normalizedTenantId, chatId, jobs.size(), removedFiles);
-        return new ArrayList<>(removedFiles);
+        return documentReplaceService.deleteByChat(TenantContext.normalize(tenantId), chatId);
     }
 
     /** 无显式租户的重载：认领租户回退到 MDC（仅适用于 HTTP 请求线程调用）。 */
@@ -305,6 +255,14 @@ public class IngestionService {
             } catch (Exception kgEx) {
                 log.warn("KG 抽取提交失败（不影响入库）: jobId={}, reason={}",
                         running.getJobId(), kgEx.toString());
+            }
+            // 知识库同名文档替换（后写胜）：新批次成功后退役同库同名旧批次，检索不再混版本。
+            // 退役失败只告警，绝不把已成功的新文档拖进异常分支。
+            try {
+                documentReplaceService.retireSupersededBatches(running);
+            } catch (Exception replaceEx) {
+                log.warn("同名文档替换退役失败（不影响新文档）: jobId={}, reason={}",
+                        running.getJobId(), replaceEx.toString());
             }
             sample.stop(Timer.builder("ingestion.jobs.duration")
                     .tag("status", "succeeded")

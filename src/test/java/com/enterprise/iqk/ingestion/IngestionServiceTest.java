@@ -60,9 +60,9 @@ class IngestionServiceTest {
                 org.mockito.Mockito.mock(com.enterprise.iqk.graph.GraphExtractionService.class),
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(vectorStoreProperties),
-                mock(com.enterprise.iqk.memory.MemoryService.class),
                 mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class),
-                segmentService
+                segmentService,
+                mock(DocumentReplaceService.class)
         );
     }
 
@@ -251,9 +251,9 @@ class IngestionServiceTest {
                 mock(com.enterprise.iqk.graph.GraphExtractionService.class),
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties()),
-                mock(com.enterprise.iqk.memory.MemoryService.class),
                 catalog,
-                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class)
+                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class),
+                mock(DocumentReplaceService.class)
         );
 
         IngestionJob job = service.submitDocument("public", "chat-kb",

@@ -25,6 +25,9 @@ public class AgentToolConfirmationRecord {
     private String tenantId;
     private Long agentId;
     private String chatId;
+    /** 工作流审批节点关联的任务/步骤（非空 = 审批结果回调图运行时；聊天工具审批为空） */
+    private String taskId;
+    private String stepId;
     private Long toolAssetId;
     private String toolName;
     /** 模型给出的调用参数快照（审批后原样执行） */

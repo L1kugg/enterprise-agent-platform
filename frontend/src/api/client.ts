@@ -504,6 +504,29 @@ export async function submitAnswerFeedback(
   }
 }
 
+/** 业务效果看板聚合（GET /ai/feedback/insights，管理视角）。 */
+export interface FeedbackInsights {
+  summary: { total: number; positive: number; negative: number; neutral: number; positiveRate: number; days: number };
+  trend: Array<{ date: string; total: number; positive: number; negative: number }>;
+  topDislikeReasons: Array<{ reason: string; count: number }>;
+}
+
+export async function getFeedbackInsights(
+  days: number,
+  auth?: AuthContext,
+): Promise<FeedbackInsights> {
+  const response = await fetch(resolveApi(withQuery('/ai/feedback/insights', { days })), {
+    credentials: 'include',
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<{ ok?: number; msg?: string; data?: FeedbackInsights }>(response);
+  if (!response.ok || !payload || payload.ok !== 1 || !payload.data) {
+    throw formatHttpError(response.status, payload?.msg ?? '业务效果数据加载失败');
+  }
+  return payload.data;
+}
+
 export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCostSummary> {
   const response = await fetch(resolveApi('/cost/summary'), {
     credentials: 'include',
@@ -705,6 +728,35 @@ export async function uploadIngestionDocument(
     throw formatHttpError(response.status, payload?.msg ?? '文档上传失败');
   }
   return payload;
+}
+
+/** 聊天内临时附件解析结果（POST /ai/chat-attachments）：不入知识库，30 分钟内可追问。 */
+export interface ChatAttachmentUpload {
+  attachmentId: string;
+  filename: string;
+  chars: number;
+  truncated: boolean;
+}
+
+/** 上传聊天临时附件：解析纯文本短存，随 /ai/react 请求的 attachmentId 注入上下文。 */
+export async function uploadChatAttachment(
+  file: File,
+  auth?: AuthContext,
+): Promise<ChatAttachmentUpload> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(resolveApi('/ai/chat-attachments'), {
+    credentials: 'include',
+    method: 'POST',
+    // 不手动设 Content-Type：multipart 的边界串由浏览器自动生成
+    headers: buildAuthHeaders(auth),
+    body: form,
+  });
+  const payload = await parseJsonSafely<{ ok?: number; msg?: string; data?: ChatAttachmentUpload }>(response);
+  if (!response.ok || !payload || payload.ok !== 1 || !payload.data) {
+    throw formatHttpError(response.status, payload?.msg ?? '附件解析失败');
+  }
+  return payload.data;
 }
 
 export async function listRecentIngestionJobs(
@@ -1126,6 +1178,54 @@ export async function getResearchReport(
   );
   if (!response.ok || !payload) {
     throw formatHttpError(response.status, payload?.msg ?? '研究报告获取失败');
+  }
+  return payload;
+}
+
+/** 工作流图任务受理结果（POST /ai/workflows/{id}/run，V36）。 */
+export interface WorkflowGraphRunStart {
+  taskId: string;
+  chatId: string;
+}
+
+/** 把上线的工作流运行为异步任务（可审批可回放，详情走 /ai/workflow/tasks/{taskId}）。 */
+export async function runWorkflowGraph(
+  id: number,
+  input: Record<string, unknown>,
+  auth?: AuthContext,
+): Promise<WorkflowGraphRunStart> {
+  const response = await fetch(resolveApi(`/ai/workflows/${encodeURIComponent(String(id))}/run`), {
+    credentials: 'include',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJsonSafely<{ ok?: number; msg?: string; data?: WorkflowGraphRunStart }>(response);
+  if (!response.ok || !payload || payload.ok !== 1 || !payload.data) {
+    throw formatHttpError(response.status, payload?.msg ?? '工作流任务受理失败');
+  }
+  return payload.data;
+}
+
+/** 查询工作流任务详情（含步骤与状态，供运行面板轮询）。 */
+export async function getWorkflowRunTask(
+  taskId: string,
+  auth?: AuthContext,
+): Promise<WorkflowTask> {
+  const response = await fetch(
+    resolveApi(`/ai/workflow/tasks/${encodeURIComponent(taskId)}`),
+    {
+      credentials: 'include',
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<WorkflowTask & { ok?: number; msg?: string }>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? '任务查询失败');
   }
   return payload;
 }

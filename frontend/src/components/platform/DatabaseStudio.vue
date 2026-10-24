@@ -143,6 +143,17 @@
             placeholder='{"maxPoolSize": 10, "minIdle": 2}'
           />
         </el-form-item>
+        <el-form-item label="语义字典（text2sql）">
+          <el-input
+            v-model="form.schemaNotes"
+            type="textarea"
+            :rows="6"
+            spellcheck="false"
+            class="mono"
+            placeholder="每行一条「表名.字段 = 业务含义」，绑定此库的 SQL 工具会把字典注入规划提示词，模型不用盲猜字段。示例：&#10;biz_orders.order_no = 订单号&#10;biz_orders.amount = 实付金额（元）&#10;biz_refunds.status = 退款状态（PENDING/APPROVED/DONE）"
+          />
+          <span class="form-tip">留空 = 不注入。智能体写 SQL 前会先对照此字典，业务口径（金额单位/状态枚举）务必写清</span>
+        </el-form-item>
         <el-alert
           v-if="lastTest"
           :type="lastTest.status === 'AVAILABLE' ? 'success' : 'error'"
@@ -199,6 +210,7 @@ const defaultForm = () => ({
   password: '',
   readOnly: true,
   poolText: '{"maxPoolSize": 10, "minIdle": 2}',
+  schemaNotes: '',
   scope: 'TENANT' as 'TENANT' | 'SYSTEM',
 });
 const form = ref(defaultForm());
@@ -254,6 +266,7 @@ function applyAsset(asset: PlatformAsset): void {
     if (config.pool && typeof config.pool === 'object')
       next.poolText = JSON.stringify(config.pool, null, 2);
     else if (typeof config.jdbcUrl === 'string' && !next.host) next.host = config.jdbcUrl;
+    if (typeof config.schemaNotes === 'string') next.schemaNotes = config.schemaNotes;
   } catch {
     ElMessage.warning('数据库配置 JSON 不合法，已重置表单');
   }
@@ -301,6 +314,7 @@ async function save(): Promise<void> {
       readOnly: form.value.readOnly,
       pool,
     };
+    if (form.value.schemaNotes.trim()) config.schemaNotes = form.value.schemaNotes.trim();
     if (form.value.password.trim()) config.password = form.value.password.trim();
     // scope 仅创建时生效（后端更新路径忽略，避免系统↔租户语义漂移）
     const body: PlatformAssetUpsert = {

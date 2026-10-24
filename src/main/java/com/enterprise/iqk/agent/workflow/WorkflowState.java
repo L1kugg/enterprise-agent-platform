@@ -27,6 +27,8 @@ public enum WorkflowState {
     DONE,
     /** 证据不足待补证（转移边已定义，暂无编排使用） */
     NEED_MORE_EVIDENCE,
+    /** 等待人工审批（工作流 HUMAN_APPROVAL 节点挂起；审批通过后回执行态继续） */
+    WAITING_APPROVAL,
     /** 失败终态 */
     FAILED;
 
@@ -47,17 +49,21 @@ public enum WorkflowState {
     public boolean canTransitionTo(WorkflowState target) {
         return switch (this) {
             case CREATED -> target == PLANNING;
-            case PLANNING -> target == SEARCHING || target == RETRIEVING || target == WRITING || target == FAILED;
+            case PLANNING -> target == SEARCHING || target == RETRIEVING || target == WRITING
+                    || target == WAITING_APPROVAL || target == FAILED;
             // ReAct 动作顺序非确定：连续同类动作（如两次 rag_search）保持原状态，
             // 搜索后可直接成稿（finish）；检索类动作间可来回切换，不必经过固定轮次。
             case SEARCHING -> target == SEARCHING || target == RETRIEVING || target == JUDGING
-                    || target == WRITING || target == FAILED;
+                    || target == WRITING || target == WAITING_APPROVAL || target == FAILED;
             case RETRIEVING -> target == SEARCHING || target == RETRIEVING || target == JUDGING
-                    || target == REFLECTING || target == WRITING || target == FAILED;
+                    || target == REFLECTING || target == WRITING || target == WAITING_APPROVAL || target == FAILED;
             case JUDGING -> target == REFLECTING || target == WRITING || target == FAILED;
             case REFLECTING -> target == WRITING || target == NEED_MORE_EVIDENCE || target == FAILED;
             case NEED_MORE_EVIDENCE -> target == SEARCHING || target == RETRIEVING || target == FAILED;
             case WRITING -> target == WRITING || target == DONE || target == FAILED;
+            // 审批通过回到执行态继续（RETRIEVING 供工具/检索节点，WRITING 供 LLM/END 收尾）
+            case WAITING_APPROVAL -> target == PLANNING || target == SEARCHING || target == RETRIEVING
+                    || target == WRITING || target == FAILED;
             case DONE, FAILED -> false;
         };
     }

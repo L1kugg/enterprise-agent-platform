@@ -382,14 +382,70 @@
           <el-table-column prop="error" label="错误" min-width="140" show-overflow-tooltip />
         </el-table>
       </template>
+      <!-- 运行为任务（V36）：异步执行，审批挂起可在面板直接通过/拒绝 -->
+      <template v-if="runTask">
+        <el-descriptions :column="2" border size="small" class="run-summary">
+          <el-descriptions-item label="任务 ID">{{ runTask.taskId }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag
+              size="small"
+              :type="
+                runTask.status === 'DONE'
+                  ? 'success'
+                  : runTask.status === 'FAILED'
+                    ? 'danger'
+                    : runTask.status === 'WAITING_APPROVAL'
+                      ? 'warning'
+                      : 'info'
+              "
+            >
+              {{ runTask.status }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="最终输出">
+            <pre class="run-output">{{ runTask.finalOutput ?? '-' }}</pre>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-alert
+          v-if="pendingConfirmation"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="run-error"
+          :title="'等待人工审批：' + (pendingConfirmation.message || '请确认后继续')"
+        >
+          <el-button size="small" type="primary" @click="decideRunApproval(true)">通过</el-button>
+          <el-button size="small" type="danger" plain @click="decideRunApproval(false)">拒绝</el-button>
+        </el-alert>
+        <el-table
+          v-if="runTask.steps?.length"
+          :data="runTask.steps"
+          size="small"
+          max-height="240"
+          class="run-trace"
+        >
+          <el-table-column prop="stepOrder" label="#" width="56" />
+          <el-table-column prop="agentName" label="节点" min-width="110" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="140" />
+          <el-table-column prop="action" label="类型" width="130" />
+          <el-table-column prop="latencyMs" label="耗时(ms)" width="90" />
+          <el-table-column prop="errorMessage" label="错误" min-width="140" show-overflow-tooltip />
+        </el-table>
+      </template>
       <template #footer>
         <el-button @click="testRunVisible = false">关闭</el-button>
+        <el-button
+          :loading="runTaskLoading"
+          :disabled="!selected?.id"
+          @click="startWorkflowRun"
+          >运行为任务</el-button
+        >
         <el-button
           type="primary"
           :loading="testRunLoading"
           :disabled="!selected?.id"
           @click="runTest"
-          >运行</el-button
+          >试运行</el-button
         >
       </template>
     </el-dialog>
@@ -411,6 +467,12 @@ import {
   testRunPlatformWorkflow,
   updatePlatformAsset,
 } from '../../api/platform';
+import {
+  approveToolConfirmation,
+  cancelToolConfirmation,
+  getWorkflowRunTask,
+  runWorkflowGraph,
+} from '../../api/client';
 import type {
   PlatformAsset,
   WorkflowEdge,
@@ -418,6 +480,7 @@ import type {
   WorkflowNode,
   WorkflowTestRunResult,
 } from '../../types/platform';
+import type { WorkflowTask } from '../../types/react';
 import { authContext, isAdmin } from '../../composables/useAuthState';
 
 interface NodeTypeMeta {
@@ -438,6 +501,12 @@ const NODE_TYPES: NodeTypeMeta[] = [
     group: '模型',
   },
   { type: 'CONDITION', label: '条件分支', description: '按条件表达式路由', group: '逻辑' },
+  {
+    type: 'HUMAN_APPROVAL',
+    label: '人工审批',
+    description: '挂起等待审批后继续；参数 JSON：{"message":"审批说明"}',
+    group: '执行',
+  },
   { type: 'TOOL_CALL', label: '工具调用', description: '执行已绑定的平台工具', group: '执行' },
   { type: 'WORKFLOW_CALL', label: '子工作流', description: '调用另一个工作流', group: '执行' },
   { type: 'HTTP_REQUEST', label: 'HTTP 请求', description: '按配置发起外部请求', group: '执行' },
@@ -1019,6 +1088,98 @@ async function runTest(): Promise<void> {
   }
 }
 
+// ---------- 运行为任务（V36）：异步执行 + 轮询 + 审批挂起处理 ----------
+
+const runTaskId = ref('');
+const runTask = ref<WorkflowTask | null>(null);
+const runTaskLoading = ref(false);
+const runTaskError = ref('');
+let runTaskTimer: number | null = null;
+
+/** 挂起中的审批单：最新 WAITING_APPROVAL 步骤产出里的 confirmationId。 */
+const pendingConfirmation = computed((): { confirmationId: number; message: string } | null => {
+  const step = runTask.value?.steps?.find((item) => item.status === 'WAITING_APPROVAL');
+  if (!step || typeof step.output !== 'object' || step.output === null) return null;
+  const confirmationId = (step.output as Record<string, unknown>).confirmationId;
+  const message = (step.output as Record<string, unknown>).message;
+  return typeof confirmationId === 'number'
+    ? { confirmationId, message: typeof message === 'string' ? message : '' }
+    : null;
+});
+
+async function startWorkflowRun(): Promise<void> {
+  if (!selected.value?.id) return;
+  let input: Record<string, unknown>;
+  try {
+    input = testRunInput.value.trim()
+      ? (JSON.parse(testRunInput.value) as Record<string, unknown>)
+      : {};
+  } catch {
+    ElMessage.warning('输入参数 JSON 不合法');
+    return;
+  }
+  runTaskLoading.value = true;
+  runTaskError.value = '';
+  runTask.value = null;
+  try {
+    const started = await runWorkflowGraph(selected.value.id, input, authContext());
+    runTaskId.value = started.taskId;
+    startRunTaskPolling(started.taskId);
+  } catch (error) {
+    runTaskError.value = error instanceof Error ? error.message : '工作流任务受理失败';
+  } finally {
+    runTaskLoading.value = false;
+  }
+}
+
+function startRunTaskPolling(taskId: string): void {
+  stopRunTaskPolling();
+  runTaskTimer = window.setInterval(() => {
+    void (async () => {
+      try {
+        const task = await getWorkflowRunTask(taskId, authContext());
+        runTask.value = task;
+        if (task.status === 'DONE' || task.status === 'FAILED') {
+          stopRunTaskPolling();
+        }
+      } catch {
+        // 单次轮询失败不打断，等下一轮
+      }
+    })();
+  }, 2000);
+  // 立即拉一次，避免首帧空白
+  void (async () => {
+    try {
+      runTask.value = await getWorkflowRunTask(taskId, authContext());
+    } catch {
+      // 忽略首拉失败，轮询兜底
+    }
+  })();
+}
+
+function stopRunTaskPolling(): void {
+  if (runTaskTimer !== null) {
+    window.clearInterval(runTaskTimer);
+    runTaskTimer = null;
+  }
+}
+
+async function decideRunApproval(approved: boolean): Promise<void> {
+  const pending = pendingConfirmation.value;
+  if (!pending) return;
+  try {
+    if (approved) {
+      await approveToolConfirmation(pending.confirmationId, authContext());
+      ElMessage.success('已通过，任务继续执行');
+    } else {
+      await cancelToolConfirmation(pending.confirmationId, authContext());
+      ElMessage.info('已拒绝，任务终止');
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '审批操作失败');
+  }
+}
+
 async function copyWorkflow(): Promise<void> {
   if (!selected.value?.id) return;
   try {
@@ -1096,6 +1257,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   onPointerUp();
+  stopRunTaskPolling();
 });
 </script>
 

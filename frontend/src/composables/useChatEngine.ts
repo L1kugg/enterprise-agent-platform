@@ -45,6 +45,7 @@ import { runResearchInChat } from './useResearch';
 import { scrollToBottom } from './useChatViewport';
 import { authContext, canUseRemoteSync } from './useAuthState';
 import { openDocumentByCitation } from './useKnowledge';
+import { composerAttachmentId } from './useComposerUpload';
 
 export function startEditMessage(message: ChatMessage): void {
   if (message.role !== 'user') {
@@ -152,7 +153,12 @@ function findPreviousUserQuestion(index: number): string {
   return '';
 }
 
-export async function rateAnswer(index: number, message: ChatMessage, rating: number): Promise<void> {
+export async function rateAnswer(
+  index: number,
+  message: ChatMessage,
+  rating: number,
+  reason?: string,
+): Promise<void> {
   if (message.role !== 'assistant') {
     return;
   }
@@ -179,6 +185,7 @@ export async function rateAnswer(index: number, message: ChatMessage, rating: nu
         question: findPreviousUserQuestion(index),
         answer: message.content,
         comment: rating >= 4 ? '回答有帮助' : '回答需要改进',
+        ...(rating <= 2 && reason ? { reason } : {}),
       },
       authContext(),
     );
@@ -258,6 +265,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
           modelProfile: modelProfile.value,
           agentId: selectedAgentId.value ?? undefined,
           modelServiceId: selectedModelServiceId.value ?? undefined,
+          attachmentId: composerAttachmentId.value,
         },
         authContext(),
         (event, payload) => {
@@ -319,6 +327,7 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
           modelProfile: modelProfile.value,
           agentId: selectedAgentId.value ?? undefined,
           modelServiceId: selectedModelServiceId.value ?? undefined,
+          attachmentId: composerAttachmentId.value,
         },
         authContext(),
         controller.signal,

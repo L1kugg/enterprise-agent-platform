@@ -112,6 +112,33 @@ public class PlatformWorkflowService {
         return failure(trace, "工作流未连接到 END 节点");
     }
 
+    /** 图执行器复用：校验并返回工作流图（供 WorkflowGraphRuntime 运行为任务）。 */
+    public JsonNode validatedGraph(PlatformAsset workflow) {
+        JsonNode graph = graphOf(workflow);
+        validateGraph(graph);
+        return graph;
+    }
+
+    /** 图执行器复用：START 节点。 */
+    public JsonNode startNodeOf(JsonNode graph) {
+        return startNode(graph);
+    }
+
+    /** 图执行器复用：按边条件选下一节点。 */
+    public JsonNode nextNodeAfter(JsonNode graph, JsonNode current, Map<String, Object> context) {
+        return nextNode(graph, current, context);
+    }
+
+    /** 图执行器复用：HTTP_REQUEST 节点执行（与试运行同一实现）。 */
+    public void executeHttpNode(JsonNode node, Map<String, Object> context) throws Exception {
+        executeHttp(node, context);
+    }
+
+    /** 图执行器复用：TOOL_CALL 节点执行（与试运行同一实现，走 ToolTestService→ToolInvocationService 同链路）。 */
+    public void executeToolNode(JsonNode node, Map<String, Object> context) {
+        executeTool(node, context);
+    }
+
     private void executeHttp(JsonNode node, Map<String, Object> context) throws Exception {
         JsonNode parameters = node.path("parameters");
         String urlTemplate = parameters.path("url").asText(parameters.path("apiUrl").asText());

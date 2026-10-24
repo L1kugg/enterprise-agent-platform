@@ -8,6 +8,7 @@ import com.enterprise.iqk.graph.GraphExtractionService;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
 import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.retrieval.KeywordIndexStore;
 import com.enterprise.iqk.security.FileSafetyScanner;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -19,26 +20,33 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 文档批次清理与入库钩子测试：删除链（deleteByChat 图谱/ fact 联动）测 DocumentReplaceService，
+ * 解析失败路径测 IngestionService；成功钩子（processQueuedJob → submitAsync）依赖真实 PDF 解析，
+ * 单元层不覆盖，由发布后的线上验证确认。
+ */
 class IngestionServiceGraphHookTest {
 
-    private IngestionService buildService(IngestionJobMapper mapper,
-                                          VectorStore vectorStore,
-                                          GraphExtractionService graphExtractionService) {
-        return buildService(mapper, vectorStore, graphExtractionService, mock(MemoryService.class));
+    /** 删除链目标已迁至 DocumentReplaceService：直接构造被测对象。 */
+    private DocumentReplaceService cleanupService(IngestionJobMapper mapper,
+                                                  VectorStore vectorStore,
+                                                  GraphExtractionService graphExtractionService,
+                                                  MemoryService memoryService) {
+        return new DocumentReplaceService(mapper, vectorStore, mock(KeywordIndexStore.class),
+                graphExtractionService, memoryService);
     }
 
     private IngestionService buildService(IngestionJobMapper mapper,
                                           VectorStore vectorStore,
-                                          GraphExtractionService graphExtractionService,
-                                          MemoryService memoryService) {
+                                          GraphExtractionService graphExtractionService) {
         return new IngestionService(
                 mapper,
                 vectorStore,
@@ -51,9 +59,9 @@ class IngestionServiceGraphHookTest {
                 graphExtractionService,
                 mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
                 new SimpleVectorStoreSnapshotPersister(new VectorStoreProperties()),
-                memoryService,
                 mock(com.enterprise.iqk.service.kb.KnowledgeBaseCatalogService.class),
-                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class)
+                mock(com.enterprise.iqk.ingestion.DocumentSegmentService.class),
+                mock(com.enterprise.iqk.ingestion.DocumentReplaceService.class)
         );
     }
 
@@ -68,15 +76,15 @@ class IngestionServiceGraphHookTest {
     }
 
     @Test
-    void deleteDocumentByChatCleansGraphWithSameScope() {
+    void deleteByChatCleansGraphWithSameScope() {
         IngestionJobMapper mapper = mock(IngestionJobMapper.class);
         GraphExtractionService graphExtractionService = mock(GraphExtractionService.class);
         MemoryService memoryService = mock(MemoryService.class);
         when(mapper.findLatestByChatId("public", "chat-1", 100)).thenReturn(List.of(job("job-1", "chat-1")));
 
-        IngestionService service = buildService(mapper, mock(VectorStore.class),
+        DocumentReplaceService service = cleanupService(mapper, mock(VectorStore.class),
                 graphExtractionService, memoryService);
-        List<String> removed = service.deleteDocumentByChat("public", "chat-1");
+        List<String> removed = service.deleteByChat("public", "chat-1");
 
         assertThat(removed).isEmpty();
         // 图谱按同一 tenant + chatId 作用域联动清理
@@ -93,10 +101,10 @@ class IngestionServiceGraphHookTest {
         when(mapper.findLatestByChatId("public", "chat-1", 100)).thenReturn(List.of(job("job-1", "chat-1")));
         doThrow(new RuntimeException("db down")).when(memoryService).invalidateFactsForChat("public", "chat-1");
 
-        IngestionService service = buildService(mapper, mock(VectorStore.class),
+        DocumentReplaceService service = cleanupService(mapper, mock(VectorStore.class),
                 mock(GraphExtractionService.class), memoryService);
 
-        assertThatCode(() -> service.deleteDocumentByChat("public", "chat-1"))
+        assertThatCode(() -> service.deleteByChat("public", "chat-1"))
                 .doesNotThrowAnyException();
         // fact 记忆失效失败只留活事实：任务记录照常删除（失效幂等，可重跑补齐）
         verify(mapper).deleteByChatIdAndTenant("public", "chat-1");
@@ -109,25 +117,28 @@ class IngestionServiceGraphHookTest {
         when(mapper.findLatestByChatId("public", "chat-1", 100)).thenReturn(List.of(job("job-1", "chat-1")));
         doThrow(new RuntimeException("kg down")).when(graphExtractionService).deleteByChat("public", "chat-1");
 
-        IngestionService service = buildService(mapper, mock(VectorStore.class), graphExtractionService);
+        DocumentReplaceService service = cleanupService(mapper, mock(VectorStore.class), graphExtractionService,
+                mock(MemoryService.class));
 
-        assertThatCode(() -> service.deleteDocumentByChat("public", "chat-1"))
+        assertThatCode(() -> service.deleteByChat("public", "chat-1"))
                 .doesNotThrowAnyException();
         // 清理失败只留孤儿边：任务记录照常删除
         verify(mapper).deleteByChatIdAndTenant("public", "chat-1");
     }
 
     @Test
-    void deleteDocumentByChatWithNoJobsSkipsGraphCleanup() {
+    void deleteByChatWithNoJobsSkipsGraphCleanup() {
         IngestionJobMapper mapper = mock(IngestionJobMapper.class);
         GraphExtractionService graphExtractionService = mock(GraphExtractionService.class);
         when(mapper.findLatestByChatId(anyString(), anyString(), anyInt())).thenReturn(List.of());
 
-        IngestionService service = buildService(mapper, mock(VectorStore.class), graphExtractionService);
+        DocumentReplaceService service = cleanupService(mapper, mock(VectorStore.class),
+                graphExtractionService, mock(MemoryService.class));
 
-        assertThat(service.deleteDocumentByChat("public", "chat-none")).isEmpty();
+        assertThat(service.deleteByChat("public", "chat-none")).isEmpty();
         verify(graphExtractionService, never()).deleteByChat(anyString(), anyString());
-        verify(mapper, never()).deleteByChatIdAndTenant(anyString(), anyString());    }
+        verify(mapper, never()).deleteByChatIdAndTenant(anyString(), anyString());
+    }
 
     @Test
     void parseAndSplitThrowsWhenSourceFileMissing() {
@@ -138,7 +149,4 @@ class IngestionServiceGraphHookTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("source file missing");
     }
-
-    // 成功钩子（processQueuedJob → submitAsync）依赖真实 PDF 解析，单元层不覆盖；
-    // 由发布后的线上验证（传真实 PDF 再查 kg 表）确认。
 }

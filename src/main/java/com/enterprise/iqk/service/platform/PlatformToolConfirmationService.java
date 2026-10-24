@@ -28,6 +28,8 @@ public class PlatformToolConfirmationService {
 
     /** 待确认任务有效期：超时未审自动失效（防历史挂起被误批）。 */
     static final java.time.Duration PENDING_TTL = java.time.Duration.ofMinutes(10);
+    /** 工作流审批节点有效期：企业审批是异步的（主管可能几小时后才批），不能套用 10 分钟会话 TTL。 */
+    static final java.time.Duration WORKFLOW_TTL = java.time.Duration.ofHours(24);
     /** 结果摘要落库/回显截断上限。 */
     private static final int MAX_SUMMARY_CHARS = 4000;
 
@@ -35,6 +37,7 @@ public class PlatformToolConfirmationService {
     private final PlatformToolInvoker toolInvoker;
     private final ToolInvocationService toolInvocationService;
     private final ObjectMapper objectMapper;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /** 创建待确认任务（运行时挂起点）：参数快照原样存 JSON，审批后原样执行。 */
     public AgentToolConfirmationRecord create(Long agentId, String tenantId, String chatId,
@@ -55,6 +58,28 @@ public class PlatformToolConfirmationService {
         return record;
     }
 
+    /**
+     * 工作流 HUMAN_APPROVAL 节点的审批任务：无工具执行语义，审批结果经事件回调图运行时继续/终止。
+     * TTL 拉长到 24 小时（企业审批是异步的）。
+     */
+    public AgentToolConfirmationRecord createForWorkflow(String tenantId, String chatId, String taskId,
+                                                         String stepId, String nodeName, String message) {
+        LocalDateTime now = LocalDateTime.now();
+        AgentToolConfirmationRecord record = AgentToolConfirmationRecord.builder()
+                .tenantId(tenantId)
+                .chatId(chatId)
+                .taskId(taskId)
+                .stepId(stepId)
+                .toolName(nodeName)
+                .argumentsJson(writeArguments(Map.of("message", message == null ? "" : message)))
+                .status("PENDING")
+                .createdAt(now)
+                .expiresAt(now.plus(WORKFLOW_TTL))
+                .build();
+        confirmationMapper.insert(record);
+        return record;
+    }
+
     /** 审批并执行：CAS 抢到 PENDING → APPROVED 后重验绑定，执行结果/失败都落库收尾。 */
     public Map<String, Object> approve(Long id, String tenantId) {
         LocalDateTime now = LocalDateTime.now();
@@ -63,6 +88,14 @@ public class PlatformToolConfirmationService {
         if (confirmationMapper.casApprove(id, tenantId, now) == 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "确认任务当前状态为 " + record.getStatus() + "，无法审批（可能已过期/已取消/已执行）");
+        }
+        // 工作流审批节点：无工具执行语义，审批通过即发布事件让图运行时继续
+        if (StringUtils.hasText(record.getTaskId())) {
+            confirmationMapper.casFinish(id, "EXECUTED",
+                    toJson(Map.of("workflowApproved", true)), null, LocalDateTime.now());
+            eventPublisher.publishEvent(new com.enterprise.iqk.agent.workflow.WorkflowApprovalEvent(
+                    record.getTaskId(), record.getStepId(), true));
+            return Map.of("status", "EXECUTED", "workflowResumed", true);
         }
         try {
             PlatformAsset tool = toolInvoker.findBoundTool(record.getAgentId(), tenantId, record.getToolName());
@@ -87,13 +120,17 @@ public class PlatformToolConfirmationService {
         }
     }
 
-    /** 取消：CAS PENDING → CANCELLED；非 PENDING 报冲突。 */
+    /** 取消：CAS PENDING → CANCELLED；非 PENDING 报冲突。工作流审批取消会通知图运行时终止任务。 */
     public Map<String, Object> cancel(Long id, String tenantId) {
         LocalDateTime now = LocalDateTime.now();
         confirmationMapper.expireOverdue(tenantId, now);
-        require(id, tenantId);
+        AgentToolConfirmationRecord record = require(id, tenantId);
         if (confirmationMapper.casCancel(id, tenantId, now) == 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "确认任务不在待确认状态，无法取消");
+        }
+        if (StringUtils.hasText(record.getTaskId())) {
+            eventPublisher.publishEvent(new com.enterprise.iqk.agent.workflow.WorkflowApprovalEvent(
+                    record.getTaskId(), record.getStepId(), false));
         }
         return Map.of("status", "CANCELLED");
     }

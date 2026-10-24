@@ -76,6 +76,7 @@ public class AgentRuntimeConfigService {
                 prompt,
                 temperatureOf(config),
                 memoryTurnsOf(config),
+                maxStepsOf(config),
                 textOrNull(config.path("openingMessage")),
                 stringList(config.path("openingQuestions")),
                 !config.path("executionConfirm").isBoolean() || config.path("executionConfirm").asBoolean(true),
@@ -137,6 +138,16 @@ public class AgentRuntimeConfigService {
         JsonNode node = config.path("memoryTurns");
         int turns = node.isInt() ? node.asInt() : 10;
         return Math.max(1, Math.min(properties.getMaxMemoryTurns(), turns));
+    }
+
+    /** maxSteps 缺省 null（走链路默认），配置了则钳制 [1,10]——复杂任务步数预算按智能体放开。 */
+    private Integer maxStepsOf(JsonNode config) {
+        JsonNode node = config.path("maxSteps");
+        if (!node.isInt()) {
+            return null;
+        }
+        int steps = Math.max(1, Math.min(10, node.asInt()));
+        return steps;
     }
 
     private List<Long> resourceIds(List<AgentBindingRow> rows) {

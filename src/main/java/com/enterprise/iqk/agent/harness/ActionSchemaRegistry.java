@@ -19,8 +19,14 @@ import java.util.Set;
 public class ActionSchemaRegistry {
     private final Map<String, ActionSchema> schemas = new LinkedHashMap<>();
 
-    /** 构造期一次性注册全部动作：builtin 3 个（任务创建/RAG 检索/主库只读查询）、mcp_call 1 个、workspace 6 个（列文件/读文件/搜文本/提补丁/应用补丁/跑命令） */
+    /** 测试与无配置场景的入口：等价于无语义字典。 */
     public ActionSchemaRegistry() {
+        this(null);
+    }
+
+    /** 构造期一次性注册全部动作：builtin 3 个（任务创建/RAG 检索/主库只读查询）、mcp_call 1 个、workspace 6 个（列文件/读文件/搜文本/提补丁/应用补丁/跑命令） */
+    @org.springframework.beans.factory.annotation.Autowired
+    public ActionSchemaRegistry(com.enterprise.iqk.config.properties.AgentHarnessProperties properties) {
         register(new ActionSchema("create_task", "builtin",
                 Set.of("title", "description"),
                 Set.of("priority"), Set.of(), "write", false,
@@ -33,14 +39,24 @@ public class ActionSchemaRegistry {
         // 风险由 SqlReadOnlyGuard（只读/单语句/敏感表黑名单/LIMIT 收敛）
         // + 租户占位符校验 + DatabaseQueryTools 的只读会话/超时/行数截断兜住，
         // 可被 disabled-actions / 租户白名单 / database-query.enabled 三层随时熔断。
+        // 主库语义字典（text2sql 语义层）：配置了 schema-notes 时追加进提示词，
+        // 让模型对照业务含义写 SQL 而不是盲猜字段；两条 ReAct 链路经标准动作块自动生效。
+        String queryDatabaseHint = "直接查询主库业务表（只读）。action_input 示例："
+                + "{\"sql\":\"SELECT id, name, price FROM course WHERE tenant_id = '__TENANT__' LIMIT 10\"}。"
+                + "只能一条 SELECT 语句（可为 WITH 开头的 CTE）；业务表必须带 tenant_id = '__TENANT__' 过滤，"
+                + "系统会自动把 '__TENANT__' 替换为当前租户，禁止写出任何真实租户名；"
+                + "information_schema 等系统表可直接查（无 tenant_id 列，无需过滤）；"
+                + "禁止 INSERT/UPDATE/DELETE 等任何写操作与多语句；结果自动追加 LIMIT 并截断。";
+        String schemaNotes = properties == null ? "" : properties.getDatabaseQuery().getSchemaNotes();
+        if (schemaNotes != null && !schemaNotes.isBlank()) {
+            String notes = schemaNotes.trim();
+            if (notes.length() > 2000) {
+                notes = notes.substring(0, 2000) + "...[截断]";
+            }
+            queryDatabaseHint += "\n主库语义字典（表/字段业务含义，写 SQL 前先对照）：\n" + notes;
+        }
         register(new ActionSchema("query_database", "builtin",
-                Set.of("sql"), Set.of(), Set.of(), "read", false,
-                "直接查询主库业务表（只读）。action_input 示例："
-                        + "{\"sql\":\"SELECT id, name, price FROM course WHERE tenant_id = '__TENANT__' LIMIT 10\"}。"
-                        + "只能一条 SELECT 语句（可为 WITH 开头的 CTE）；业务表必须带 tenant_id = '__TENANT__' 过滤，"
-                        + "系统会自动把 '__TENANT__' 替换为当前租户，禁止写出任何真实租户名；"
-                        + "information_schema 等系统表可直接查（无 tenant_id 列，无需过滤）；"
-                        + "禁止 INSERT/UPDATE/DELETE 等任何写操作与多语句；结果自动追加 LIMIT 并截断。"));
+                Set.of("sql"), Set.of(), Set.of(), "read", false, queryDatabaseHint));
 
         // mcp_call 不设 trustedOnly：外部只读查询要能在聊天 ReAct 循环里直接用，
         // 风险由传输层的 SSRF 校验 + allowed-hosts 白名单 + 2MiB 响应上限兜住，

@@ -80,10 +80,7 @@ import {
   stopKnowledgePolling,
 } from './composables/useKnowledge';
 import { loadPlatformOverview } from './composables/usePlatformAssets';
-import {
-  dismissComposerUploadChip,
-  stopComposerUploadPolling,
-} from './composables/useComposerUpload';
+import { dismissComposerUploadChip } from './composables/useComposerUpload';
 import {
   activeSessionId,
   initChatFromActiveSession,
@@ -146,7 +143,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopKnowledgePolling();
   stopResearchPolling();
-  stopComposerUploadPolling();
   dismissComposerUploadChip();
 
   teardownViewport();

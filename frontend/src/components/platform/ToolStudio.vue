@@ -113,6 +113,21 @@
               spellcheck="false"
             />
           </el-form-item>
+          <el-form-item label="连接器模板（选填：一键预填常见系统接入）">
+            <el-select
+              :model-value="''"
+              placeholder="从模板开始…（选后可自由修改，不随工具保存）"
+              class="half-width"
+              @change="(key: string) => applyConnectorTemplate(key)"
+            >
+              <el-option
+                v-for="template in CONNECTOR_TEMPLATES"
+                :key="template.key"
+                :label="template.name"
+                :value="template.key"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item label="认证方式">
             <el-select v-model="form.authType" class="half-width">
               <el-option label="无认证" value="NONE" />
@@ -129,6 +144,17 @@
               autocomplete="new-password"
               placeholder="留空表示不修改已有凭据"
             />
+          </el-form-item>
+          <el-form-item label="静态请求头（每行一条 Key: Value，密钥请走上方认证凭据）">
+            <el-input
+              v-model="form.headersText"
+              type="textarea"
+              :rows="3"
+              spellcheck="false"
+              class="mono"
+              placeholder="Content-Type: application/json&#10;User-Agent: enterprise-agent/1.0"
+            />
+            <span class="field-hint">认证头（Authorization / X-API-Key）由认证方式自动注入且不可被此处覆盖</span>
           </el-form-item>
           <el-form-item label="超时时间（毫秒）">
             <el-input-number v-model="form.timeoutMs" :min="500" :max="60000" :step="500" />
@@ -467,6 +493,7 @@ function defaultForm() {
     url: '',
     authType: 'NONE',
     credential: '',
+    headersText: '',
     timeoutMs: 5000,
     retry: 0,
     language: 'JAVASCRIPT',
@@ -486,6 +513,92 @@ const responseMappingText = ref('{}');
 const errorMappingText = ref('{}');
 const inputSchemaText = ref('{}');
 const outputSchemaText = ref('{}');
+
+/** 连接器模板（前端预置）：选中即预填 method/url/认证/参数骨架，选后自由改，不随工具保存。 */
+const CONNECTOR_TEMPLATES: Array<{
+  key: string;
+  name: string;
+  method: string;
+  url: string;
+  authType: string;
+  headersText: string;
+  params: Array<{ name: string; location: 'PATH' | 'QUERY'; description: string }>;
+}> = [
+  {
+    key: 'rest-bearer',
+    name: '通用 REST + Bearer Token',
+    method: 'GET',
+    url: 'https://api.example.com/v1/resource/{id}',
+    authType: 'BEARER',
+    headersText: '',
+    params: [{ name: 'id', location: 'PATH', description: '资源 ID' }],
+  },
+  {
+    key: 'rest-apikey',
+    name: '通用 REST + API-Key 头',
+    method: 'GET',
+    url: 'https://api.example.com/v1/resource',
+    authType: 'API_KEY_HEADER',
+    headersText: '',
+    params: [],
+  },
+  {
+    key: 'wecom-webhook',
+    name: '企业微信群机器人',
+    method: 'POST',
+    url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send',
+    authType: 'NONE',
+    headersText: 'Content-Type: application/json',
+    params: [{ name: 'key', location: 'QUERY', description: '机器人 webhook 的 key' }],
+  },
+  {
+    key: 'dingtalk-webhook',
+    name: '钉钉群机器人',
+    method: 'POST',
+    url: 'https://oapi.dingtalk.com/robot/send',
+    authType: 'NONE',
+    headersText: 'Content-Type: application/json',
+    params: [{ name: 'access_token', location: 'QUERY', description: '机器人 access_token' }],
+  },
+  {
+    key: 'feishu-webhook',
+    name: '飞书自定义机器人',
+    method: 'POST',
+    url: 'https://open.feishu.cn/open-apis/bot/v2/hook/{hook_id}',
+    authType: 'NONE',
+    headersText: 'Content-Type: application/json',
+    params: [{ name: 'hook_id', location: 'PATH', description: '机器人 hook id' }],
+  },
+];
+
+function applyConnectorTemplate(key: string): void {
+  const template = CONNECTOR_TEMPLATES.find((item) => item.key === key);
+  if (!template) return;
+  form.value.method = template.method;
+  form.value.url = template.url;
+  form.value.authType = template.authType;
+  form.value.headersText = template.headersText;
+  form.value.params = template.params.map((param) => ({
+    location: param.location,
+    name: param.name,
+    type: 'STRING' as ToolParamType,
+    required: true,
+    defaultValue: '',
+    description: param.description,
+  }));
+  ElMessage.info(`已按「${template.name}」预填，请补全 URL 与凭据`);
+}
+
+/** "Key: Value" 行文本 → headers map（空行/无冒号行跳过）。 */
+function parseHeadersText(text: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of text.split(/\r?\n/)) {
+    const separator = line.indexOf(':');
+    if (!line.trim() || separator <= 0) continue;
+    headers[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+  }
+  return headers;
+}
 
 function statusTag(status?: string | null): 'success' | 'warning' | 'danger' | 'info' {
   if (status === 'ENABLED' || status === 'AVAILABLE') return 'success';
@@ -531,6 +644,12 @@ function applyAsset(asset: PlatformAsset): void {
     if (typeof config.authType === 'string') next.authType = config.authType;
     if (typeof config.timeoutMs === 'number') next.timeoutMs = config.timeoutMs;
     if (typeof config.retry === 'number') next.retry = config.retry;
+    if (config.headers && typeof config.headers === 'object') {
+      next.headersText = Object.entries(config.headers as Record<string, unknown>)
+        .filter(([, value]) => typeof value === 'string')
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\n');
+    }
     if (typeof config.language === 'string') next.language = config.language;
     if (typeof config.code === 'string') next.code = config.code;
     if (typeof config.databaseId === 'number') next.databaseId = config.databaseId;
@@ -666,6 +785,8 @@ function buildConfig(): Record<string, unknown> {
     config.responseMapping = responseMapping;
     config.errorMapping = errorMapping;
     if (form.value.credential.trim()) config.credential = form.value.credential.trim();
+    const headers = parseHeadersText(form.value.headersText);
+    if (Object.keys(headers).length) config.headers = headers;
   } else if (form.value.toolType === 'CODE_API') {
     config.language = form.value.language;
     config.code = form.value.code;
