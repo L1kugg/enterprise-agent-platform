@@ -34,10 +34,6 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class AnswerFeedbackService {
-    /** 点踩原因白名单（业务效果看板聚合维度）：与前端快选项逐字对齐。 */
-    private static final Set<String> ALLOWED_REASONS =
-            Set.of("不准确", "答非所问", "内容过时", "没引用来源", "其他");
-
     private final AnswerFeedbackMapper answerFeedbackMapper;
     private final FeedbackProperties feedbackProperties;
     private final ObjectMapper objectMapper;
@@ -56,7 +52,6 @@ public class AnswerFeedbackService {
         if (!StringUtils.hasText(payload.getAnswer())) {
             throw new IllegalArgumentException("answer is required");
         }
-        String reason = normalizeReason(payload.getReason());
 
         String tenant = TenantContext.normalize(tenantId);
         LocalDateTime now = LocalDateTime.now();
@@ -68,7 +63,6 @@ public class AnswerFeedbackService {
                 .messageId(payload.getMessageId())
                 .rating(payload.getRating())
                 .comment(trimToLength(payload.getComment(), 1024))
-                .reason(reason)
                 .questionText(payload.getQuestion())
                 .answerText(payload.getAnswer())
                 .createdAt(now)
@@ -78,18 +72,6 @@ public class AnswerFeedbackService {
         if (feedbackProperties.isEnabled()) {
             appendToDataset(tenant, feedback, now);
         }
-    }
-
-    /** 点踩原因归一：空白返回 null（未采集），白名单外拒绝——防脏值进聚合维度。 */
-    private String normalizeReason(String reason) {
-        if (!StringUtils.hasText(reason)) {
-            return null;
-        }
-        String trimmed = reason.trim();
-        if (!ALLOWED_REASONS.contains(trimmed)) {
-            throw new IllegalArgumentException("reason must be one of: " + ALLOWED_REASONS);
-        }
-        return trimmed;
     }
 
     /** 把一条反馈转写成评测数据集条目并追加写入 JSONL 文件。 */

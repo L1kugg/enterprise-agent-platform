@@ -310,37 +310,18 @@
               <el-icon :size="12"><CircleCheck /></el-icon>
               有帮助
             </button>
-            <el-dropdown
+            <button
               v-if="entry.item.role === 'assistant'"
-              trigger="click"
+              type="button"
               :disabled="
                 Boolean(answerFeedbackMap[entry.item.id]) ||
                 Boolean(answerFeedbackLoading[entry.item.id])
               "
-              @command="(reason: string) => rateAnswer(entry.index, entry.item, 1, reason)"
+              @click="rateAnswer(entry.index, entry.item, 1)"
             >
-              <button
-                type="button"
-                :disabled="
-                  Boolean(answerFeedbackMap[entry.item.id]) ||
-                  Boolean(answerFeedbackLoading[entry.item.id])
-                "
-              >
-                <el-icon :size="12"><CircleClose /></el-icon>
-                待改进 ▾
-              </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item
-                    v-for="reason in DISLIKE_REASONS"
-                    :key="reason"
-                    :command="reason"
-                  >
-                    {{ reason }}
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+              <el-icon :size="12"><CircleClose /></el-icon>
+              待改进
+            </button>
             <button
               v-if="entry.item.role === 'user'"
               type="button"
@@ -501,9 +482,6 @@ import {
 } from '@element-plus/icons-vue';
 import { computed, onMounted } from 'vue';
 import { welcomeSuggestions } from '../../utils/constants';
-
-/** 点踩原因快选项：与后端 AnswerFeedbackService 白名单逐字对齐。 */
-const DISLIKE_REASONS = ['不准确', '答非所问', '内容过时', '没引用来源', '其他'];
 import { renderMarkdown } from '../../utils/markdown';
 import { formatTime } from '../../utils/format';
 import { retrievalLanes } from '../../utils/retrieval';

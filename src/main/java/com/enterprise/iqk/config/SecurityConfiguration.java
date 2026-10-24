@@ -87,8 +87,6 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.PUT, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/sessions/**").hasAnyAuthority("PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/feedback").hasAnyAuthority("PERM_FEEDBACK_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN")
-                    // 业务效果看板：反馈聚合为管理视角，与平台统计看板同口径
-                    .requestMatchers(HttpMethod.GET, "/ai/feedback/insights").hasAnyAuthority("ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/ai/pdf/file/**").hasAnyAuthority("PERM_RAG_READ", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/pdf/chat").hasAnyAuthority("PERM_RAG_READ", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/pdf/upload/**", "/ingestion/upload/**").hasAnyAuthority("PERM_INGESTION_WRITE", "ROLE_ADMIN")

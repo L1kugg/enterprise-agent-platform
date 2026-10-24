@@ -165,8 +165,6 @@ export interface FeedbackRequest {
   messageId?: string;
   rating: number;
   comment?: string;
-  /** 点踩原因（低分反馈快选）：不准确/答非所问/内容过时/没引用来源/其他 */
-  reason?: string;
   question?: string;
   answer: string;
 }

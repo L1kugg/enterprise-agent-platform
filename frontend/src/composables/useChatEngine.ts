@@ -153,12 +153,7 @@ function findPreviousUserQuestion(index: number): string {
   return '';
 }
 
-export async function rateAnswer(
-  index: number,
-  message: ChatMessage,
-  rating: number,
-  reason?: string,
-): Promise<void> {
+export async function rateAnswer(index: number, message: ChatMessage, rating: number): Promise<void> {
   if (message.role !== 'assistant') {
     return;
   }
@@ -185,7 +180,6 @@ export async function rateAnswer(
         question: findPreviousUserQuestion(index),
         answer: message.content,
         comment: rating >= 4 ? '回答有帮助' : '回答需要改进',
-        ...(rating <= 2 && reason ? { reason } : {}),
       },
       authContext(),
     );

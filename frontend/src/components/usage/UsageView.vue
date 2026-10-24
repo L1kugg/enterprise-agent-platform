@@ -208,75 +208,6 @@
           </el-table-column>
         </el-table>
       </div>
-
-      <!-- 业务效果（仅管理员）：反馈好评率与点踩原因，回答"员工用得怎么样" -->
-      <div v-if="isAdmin" class="usage-chart-block">
-        <div class="usage-chart-head">
-          <p class="section-label">Feedback Insights</p>
-          <span class="usage-chart-range">近 {{ usageRange }} 天 · 来自答案反馈</span>
-        </div>
-        <el-alert
-          v-if="feedbackInsightsError"
-          type="error"
-          show-icon
-          :closable="false"
-          :title="'业务效果数据加载失败：' + feedbackInsightsError"
-        />
-        <div v-loading="feedbackInsightsLoading">
-          <div v-if="feedbackInsights" class="usage-cards">
-            <div class="eval-metric-card">
-              <span>反馈总数</span>
-              <strong>{{ feedbackInsights.summary.total.toLocaleString() }}</strong>
-            </div>
-            <div class="eval-metric-card">
-              <span>好评（4-5）</span>
-              <strong>{{ feedbackInsights.summary.positive.toLocaleString() }}</strong>
-            </div>
-            <div class="eval-metric-card">
-              <span>点踩（1-2）</span>
-              <strong>{{ feedbackInsights.summary.negative.toLocaleString() }}</strong>
-            </div>
-            <div class="eval-metric-card">
-              <span>好评率</span>
-              <strong>{{ (feedbackInsights.summary.positiveRate * 100).toFixed(1) }}%</strong>
-            </div>
-          </div>
-          <el-table
-            v-if="feedbackInsights && feedbackInsights.topDislikeReasons.length"
-            :data="feedbackInsights.topDislikeReasons"
-            size="small"
-            max-height="180"
-            empty-text="暂无点踩记录"
-          >
-            <el-table-column label="点踩原因 Top5" min-width="200">
-              <template #default="{ row }">{{ row.reason }}</template>
-            </el-table-column>
-            <el-table-column label="次数" width="110">
-              <template #default="{ row }">{{ row.count.toLocaleString() }}</template>
-            </el-table-column>
-          </el-table>
-          <el-table
-            v-if="feedbackTrendRows.length"
-            :data="feedbackTrendRows"
-            size="small"
-            max-height="240"
-            empty-text="窗口内暂无反馈"
-          >
-            <el-table-column label="日期" width="120">
-              <template #default="{ row }">{{ row.date }}</template>
-            </el-table-column>
-            <el-table-column label="反馈数" width="100">
-              <template #default="{ row }">{{ row.total }}</template>
-            </el-table-column>
-            <el-table-column label="好评" width="90">
-              <template #default="{ row }">{{ row.positive }}</template>
-            </el-table-column>
-            <el-table-column label="点踩" width="90">
-              <template #default="{ row }">{{ row.negative }}</template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </div>
     </section>
   </section>
 </template>
@@ -303,12 +234,6 @@ import {
   userUsageRows,
 } from '../../composables/useUsage';
 import { isAdmin } from '../../composables/useAuthState';
-import {
-  feedbackInsights,
-  feedbackInsightsError,
-  feedbackInsightsLoading,
-  loadFeedbackInsights,
-} from '../../composables/useFeedbackInsights';
 
 // 表格只列有实际用量的日子：全零行对用户是噪音，趋势图仍保留完整时间轴；
 // 日期倒序，今天（最新用量）永远在第一行
@@ -316,22 +241,15 @@ const usageTableRows = computed(() =>
   usagePoints.value.filter((d) => d.requestCount > 0).sort((a, b) => b.date.localeCompare(a.date)),
 );
 
-// 反馈趋势表倒序（与用量表同口味：最新在第一行）
-const feedbackTrendRows = computed(() =>
-  [...(feedbackInsights.value?.trend ?? [])].sort((a, b) => b.date.localeCompare(a.date)),
-);
-
-// 按用户统计/业务效果随页面进入与范围切换刷新（仅管理员发起请求）
+// 按用户统计随页面进入与范围切换刷新（仅管理员发起请求）
 onMounted(() => {
   if (isAdmin.value) {
     void loadUserUsage();
-    void loadFeedbackInsights(usageRange.value);
   }
 });
 watch(usageRange, () => {
   if (isAdmin.value) {
     void loadUserUsage();
-    void loadFeedbackInsights(usageRange.value);
   }
 });
 </script>

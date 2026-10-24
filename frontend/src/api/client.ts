@@ -504,29 +504,6 @@ export async function submitAnswerFeedback(
   }
 }
 
-/** 业务效果看板聚合（GET /ai/feedback/insights，管理视角）。 */
-export interface FeedbackInsights {
-  summary: { total: number; positive: number; negative: number; neutral: number; positiveRate: number; days: number };
-  trend: Array<{ date: string; total: number; positive: number; negative: number }>;
-  topDislikeReasons: Array<{ reason: string; count: number }>;
-}
-
-export async function getFeedbackInsights(
-  days: number,
-  auth?: AuthContext,
-): Promise<FeedbackInsights> {
-  const response = await fetch(resolveApi(withQuery('/ai/feedback/insights', { days })), {
-    credentials: 'include',
-    method: 'GET',
-    headers: buildAuthHeaders(auth),
-  });
-  const payload = await parseJsonSafely<{ ok?: number; msg?: string; data?: FeedbackInsights }>(response);
-  if (!response.ok || !payload || payload.ok !== 1 || !payload.data) {
-    throw formatHttpError(response.status, payload?.msg ?? '业务效果数据加载失败');
-  }
-  return payload.data;
-}
-
 export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCostSummary> {
   const response = await fetch(resolveApi('/cost/summary'), {
     credentials: 'include',
