@@ -1,7 +1,11 @@
 <template>
   <section class="admin-docs-page">
-    <section v-loading="adminDocsLoading" class="eval-main-panel admin-docs-main">
-      <div class="knowledge-list-head">
+    <section v-loading="adminDocsLoading" class="eval-main-panel admin-docs-main studio-panel">
+      <div class="panel-head list-head">
+        <div>
+          <p class="section-label">Document Governance</p>
+          <h3>文档总览</h3>
+        </div>
         <div class="admin-docs-toolbar">
           <el-input
             v-model="adminDocsSearch"
@@ -92,6 +96,12 @@ import { formatFileSize, formatJobTime, statusTagType } from '../../utils/format
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
+}
+
+/* 与平台工作台同一套面板头语言：小标签 + 模块标题 */
+.panel-head h3 {
+  margin: 3px 0 0;
+  font-size: 18px;
 }
 
 .admin-docs-pagination {

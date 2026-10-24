@@ -1,7 +1,11 @@
 <template>
   <section class="usage-page">
-    <section v-loading="usageLoading" class="eval-main-panel usage-main">
-      <div class="knowledge-list-head">
+    <section v-loading="usageLoading" class="eval-main-panel usage-main studio-panel">
+      <div class="panel-head list-head">
+        <div>
+          <p class="section-label">Usage Analytics</p>
+          <h3>用量统计</h3>
+        </div>
         <div class="admin-docs-toolbar">
           <el-select v-model="usageRange" size="small" class="usage-range-select">
             <el-option label="近 7 天" :value="7" />
@@ -28,7 +32,7 @@
       </div>
       <div class="usage-chart-block">
         <div class="usage-chart-head">
-          <p class="usage-chart-title">使用趋势</p>
+          <p class="section-label">Trend</p>
           <span class="usage-chart-range">近 {{ usageRange }} 天</span>
         </div>
         <svg
@@ -168,7 +172,7 @@
       <!-- 按用户统计（仅管理员加载；普通用户不渲染该区块） -->
       <div v-if="isAdmin" class="usage-chart-block">
         <div class="usage-chart-head">
-          <p class="usage-chart-title">按用户统计</p>
+          <p class="section-label">By User</p>
           <span class="usage-chart-range">近 {{ usageRange }} 天 · 按费用降序</span>
         </div>
         <el-alert
@@ -266,6 +270,17 @@ watch(usageRange, () => {
   width: 120px;
 }
 
+/* 与平台工作台同一套面板头语言：小标签 + 模块标题 */
+.usage-main .panel-head h3 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.usage-main .panel-head :deep(.el-select),
+.usage-main .panel-head :deep(.el-button) {
+  --el-component-size-small: 28px;
+}
+
 .usage-cards {
   display: grid;
   grid-template-columns: repeat(6, minmax(112px, 1fr));
@@ -281,6 +296,10 @@ watch(usageRange, () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ui-panel) 55%, transparent);
+  padding: 12px;
 }
 
 .usage-chart-head {
@@ -308,6 +327,7 @@ watch(usageRange, () => {
   flex: 1;
   width: 100%;
   min-height: 0;
+  background: transparent;
 }
 
 .usage-chart-svg .grid-line {
@@ -389,6 +409,10 @@ watch(usageRange, () => {
   margin: 0;
   font-size: 15px;
   font-weight: 700;
+}
+
+.usage-chart-head .section-label {
+  margin: 0;
 }
 
 .usage-chart-range {

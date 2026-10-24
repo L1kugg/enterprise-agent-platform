@@ -198,3 +198,12 @@
 .panel-head.list-head {
   align-items: center;
 }
+
+/*
+ * 控制台统一面板语言（用量/评测/文档总览对齐平台工作台）：
+ * 不透明卡片底色 + 与 Studio 相同的面板头（section-label + h3）。
+ * 挂在 eval-main-panel / eval-side-panel 上覆盖其半透明底色，其余规则不干涉。
+ */
+.studio-panel {
+  background: var(--ui-card);
+}

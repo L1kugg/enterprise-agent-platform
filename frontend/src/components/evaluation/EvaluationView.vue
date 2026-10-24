@@ -1,8 +1,11 @@
 <template>
   <section class="evaluation-page">
-    <aside class="eval-side-panel">
+    <aside class="eval-side-panel studio-panel">
       <div class="eval-panel-head list-head">
-        <span class="panel-title">评测集</span>
+        <div>
+          <p class="section-label">Datasets</p>
+          <h3>评测集</h3>
+        </div>
         <el-tag size="small" effect="plain">{{ evalDatasets.length }}</el-tag>
         <el-button
           size="small"
@@ -36,9 +39,12 @@
       </div>
     </aside>
 
-    <section class="eval-main-panel">
+    <section class="eval-main-panel studio-panel">
       <div class="eval-toolbar">
-        <span class="eval-toolbar-title">评测结果</span>
+        <div>
+          <p class="section-label">Evaluation Runs</p>
+          <h3>评测结果</h3>
+        </div>
         <div class="eval-toolbar-actions">
           <el-button size="small" :loading="evalLoading" @click="loadEvalDatasets">刷新</el-button>
           <el-button
@@ -366,6 +372,18 @@ watch(evalEditorMode, (mode) => {
   flex-wrap: wrap;
 }
 
+/* 与平台工作台同一套面板头语言：小标签 + 模块标题 */
+.eval-toolbar h3,
+.panel-head h3 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.panel-head .section-label,
+.eval-toolbar .section-label {
+  margin: 0;
+}
+
 .eval-toolbar-title {
   font-size: 14px;
   font-weight: 700;
@@ -416,7 +434,7 @@ watch(evalEditorMode, (mode) => {
   width: 32px;
   padding: 0;
   border: 1px solid var(--ui-border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--ui-muted);
   font-size: 12px;
@@ -432,15 +450,19 @@ watch(evalEditorMode, (mode) => {
 .eval-dataset-list button {
   width: 100%;
   border: 1px solid var(--ui-border);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 9px 10px;
   text-align: left;
   color: var(--ui-text);
-  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+  background: transparent;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
-.eval-dataset-list button.active {
+.eval-dataset-list button.active,
+.eval-dataset-list button:focus-visible {
   border-color: var(--ui-accent);
   background: color-mix(in oklab, var(--ui-accent) 8%, transparent);
   color: var(--ui-accent);
