@@ -16,6 +16,8 @@ import com.enterprise.iqk.service.agent.AgentInvocationLogRecorder;
 import com.enterprise.iqk.service.agent.AgentPromptMerger;
 import com.enterprise.iqk.service.agent.AgentRuntimeConfigService;
 import com.enterprise.iqk.service.agent.AgentSafetyService;
+import com.enterprise.iqk.service.agent.ReActPlannerPrompts;
+import com.enterprise.iqk.service.agent.ReActSupport;
 import com.enterprise.iqk.testutil.TestGuards;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -50,24 +52,33 @@ class ReactAgentServiceTest {
                 chatClient);
     }
 
-    @Test
-    void rejectsRequestsWithoutPromptOrChatIdBeforeCallingExternalDependencies() {
-        ReactAgentService service = new ReactAgentService(
-                mock(AgentHarnessService.class),
-                mock(ModelRouter.class),
-                mock(MeterRegistry.class),
-                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), new ObjectMapper()),
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
-                new ReactResponseFormatter(new ObjectMapper()),
-                mock(MemoryService.class),
-                mock(ChatTurnMemoryRecorder.class),
-                new AgentPromptMerger(),
-                routerOnlyRuntime(mock(ChatClient.class)),
+    /** 统一装配：共享内核（决策解析/提示词/执行支撑）用真实实现，协作方按用例注入桩。 */
+    private static ReactAgentService newService(ModelRouter modelRouter, ChatClient chatClient,
+                                                AgentHarnessService harness, MemoryService memoryService,
+                                                ChatTurnMemoryRecorder recorder) {
+        PlannerActionCatalog catalog =
+                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class));
+        ReactResponseFormatter formatter = new ReactResponseFormatter(new ObjectMapper());
+        com.enterprise.iqk.service.agent.AgentToolCatalog toolCatalog =
                 new com.enterprise.iqk.service.agent.AgentToolCatalog(
                         mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
                         mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
-                        new ObjectMapper())
-        );
+                        new ObjectMapper());
+        return new ReactAgentService(
+                modelRouter,
+                new ReactDecisionParser(catalog, new ObjectMapper()),
+                formatter,
+                recorder,
+                new AgentPromptMerger(),
+                routerOnlyRuntime(chatClient),
+                new ReActPlannerPrompts(catalog, toolCatalog, formatter),
+                new ReActSupport(harness, memoryService, mock(MeterRegistry.class)));
+    }
+
+    @Test
+    void rejectsRequestsWithoutPromptOrChatIdBeforeCallingExternalDependencies() {
+        ReactAgentService service = newService(mock(ModelRouter.class), mock(ChatClient.class),
+                mock(AgentHarnessService.class), mock(MemoryService.class), mock(ChatTurnMemoryRecorder.class));
         ReactChatRequestVO missingPrompt = new ReactChatRequestVO();
         missingPrompt.setChatId("chat-1");
         ReactChatRequestVO missingChatId = new ReactChatRequestVO();
@@ -90,22 +101,8 @@ class ReactAgentServiceTest {
         when(modelRouter.resolve(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new ModelRouter.ModelRouteDecision("quality", "model-a", "premium", false, "profile_match", "", "", null)
         );
-        ReactAgentService service = new ReactAgentService(
-                harness,
-                modelRouter,
-                mock(MeterRegistry.class),
-                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), new ObjectMapper()),
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
-                new ReactResponseFormatter(new ObjectMapper()),
-                mock(MemoryService.class),
-                mock(ChatTurnMemoryRecorder.class),
-                new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient),
-                new com.enterprise.iqk.service.agent.AgentToolCatalog(
-                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
-                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
-                        new ObjectMapper())
-        );
+        ReactAgentService service = newService(modelRouter, chatClient, harness,
+                mock(MemoryService.class), mock(ChatTurnMemoryRecorder.class));
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("高温健康风险有哪些？");
         request.setChatId("chat-1");
@@ -137,22 +134,8 @@ class ReactAgentServiceTest {
                         List.of(), List.of(profile), List.of()));
         ChatTurnMemoryRecorder recorder = mock(ChatTurnMemoryRecorder.class);
 
-        ReactAgentService service = new ReactAgentService(
-                mock(AgentHarnessService.class),
-                modelRouter,
-                mock(MeterRegistry.class),
-                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), new ObjectMapper()),
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
-                new ReactResponseFormatter(new ObjectMapper()),
-                memoryService,
-                recorder,
-                new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient),
-                new com.enterprise.iqk.service.agent.AgentToolCatalog(
-                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
-                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
-                        new ObjectMapper())
-        );
+        ReactAgentService service = newService(modelRouter, chatClient, mock(AgentHarnessService.class),
+                memoryService, recorder);
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");
         request.setChatId("chat-1");
@@ -196,22 +179,8 @@ class ReactAgentServiceTest {
         when(memoryService.buildContext(anyString(), anyString(), anyString()))
                 .thenThrow(new RuntimeException("memory down"));
 
-        ReactAgentService service = new ReactAgentService(
-                mock(AgentHarnessService.class),
-                modelRouter,
-                mock(MeterRegistry.class),
-                new ReactDecisionParser(new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)), new ObjectMapper()),
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
-                new ReactResponseFormatter(new ObjectMapper()),
-                memoryService,
-                mock(ChatTurnMemoryRecorder.class),
-                new AgentPromptMerger(),
-                routerOnlyRuntime(chatClient),
-                new com.enterprise.iqk.service.agent.AgentToolCatalog(
-                        mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
-                        mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
-                        new ObjectMapper())
-        );
+        ReactAgentService service = newService(modelRouter, chatClient, mock(AgentHarnessService.class),
+                memoryService, mock(ChatTurnMemoryRecorder.class));
         ReactChatRequestVO request = new ReactChatRequestVO();
         request.setPrompt("帮我推荐一门课");
         request.setChatId("chat-1");

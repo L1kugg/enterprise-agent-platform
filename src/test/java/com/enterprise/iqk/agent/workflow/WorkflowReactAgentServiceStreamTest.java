@@ -13,6 +13,7 @@ import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.llm.PlatformChatModelRegistry;
 import com.enterprise.iqk.memory.MemoryService;
 import com.enterprise.iqk.service.TenantCostService;
+import com.enterprise.iqk.service.ReactDecisionParser;
 import com.enterprise.iqk.service.ReactResponseFormatter;
 import com.enterprise.iqk.service.agent.AgentChatRuntime;
 import com.enterprise.iqk.service.agent.AgentInvocationLogRecorder;
@@ -98,21 +99,23 @@ class WorkflowReactAgentServiceStreamTest {
                 TestGuards.real(),
                 mock(TenantCostService.class),
                 chatClient);
-        service = new WorkflowReactAgentService(workflowEngine, harness,
-                new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
-                modelRouter, new ObjectMapper(), new SimpleMeterRegistry(),
+        service = new WorkflowReactAgentService(workflowEngine,
                 new AgentWorkflowProperties(),
-                memoryService,
+                modelRouter,
+                new ReactDecisionParser(
+                        new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
+                        new ObjectMapper()),
                 new ReactResponseFormatter(new ObjectMapper()),
                 new AgentPromptMerger(),
                 agentRuntime,
-                new com.enterprise.iqk.agent.workflow.WorkflowPlannerPrompts(
+                new com.enterprise.iqk.service.agent.ReActPlannerPrompts(
                         new PlannerActionCatalog(new ActionSchemaRegistry(), mock(McpToolCatalog.class)),
                         new com.enterprise.iqk.service.agent.AgentToolCatalog(
                                 mock(com.enterprise.iqk.mapper.AgentBindingMapper.class),
                                 mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class),
                                 new ObjectMapper()),
-                        new ReactResponseFormatter(new ObjectMapper())));
+                        new ReactResponseFormatter(new ObjectMapper())),
+                new com.enterprise.iqk.service.agent.ReActSupport(harness, memoryService, new SimpleMeterRegistry()));
     }
 
     private ReactChatRequestVO request() {
