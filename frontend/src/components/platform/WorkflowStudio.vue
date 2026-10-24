@@ -482,6 +482,7 @@ import type {
 } from '../../types/platform';
 import type { WorkflowTask } from '../../types/react';
 import { authContext, isAdmin } from '../../composables/useAuthState';
+import { confirmLeaveUnsaved, registerUnsavedCheck, unregisterUnsavedCheck } from '../../composables/useUnsavedGuard';
 
 interface NodeTypeMeta {
   type: string;
@@ -537,6 +538,8 @@ const formName = ref('');
 const formDescription = ref('');
 const dirty = ref(false);
 const saving = ref(false);
+/** 未保存守卫回调（注册进全局注册表）：画布/属性有任何未保存改动即触发。 */
+const unsavedCheck = () => dirty.value;
 
 const selectedNodeId = ref<string | null>(null);
 const selectedEdgeId = ref<string | null>(null);
@@ -667,7 +670,11 @@ async function loadWorkflows(): Promise<void> {
   }
 }
 
-function selectWorkflow(asset: PlatformAsset): void {
+async function selectWorkflow(asset: PlatformAsset): Promise<void> {
+  // 未保存守卫：画布有改动时切换/新建先确认丢弃
+  if (dirty.value && !(await confirmLeaveUnsaved('切换工作流将丢弃画布上未保存的修改，确定？'))) {
+    return;
+  }
   selected.value = asset;
   graph.value = parseGraphConfig(asset);
   formName.value = asset.name;
@@ -677,7 +684,10 @@ function selectWorkflow(asset: PlatformAsset): void {
   void nextTick(fitView);
 }
 
-function createDraft(): void {
+async function createDraft(): Promise<void> {
+  if (dirty.value && !(await confirmLeaveUnsaved('新建将丢弃画布上未保存的修改，确定？'))) {
+    return;
+  }
   selected.value = null;
   graph.value = emptyGraph();
   formName.value = '未命名工作流';
@@ -1253,11 +1263,13 @@ async function removeWorkflow(): Promise<void> {
 
 onMounted(() => {
   void loadWorkflows();
+  registerUnsavedCheck(unsavedCheck);
 });
 
 onBeforeUnmount(() => {
   onPointerUp();
   stopRunTaskPolling();
+  unregisterUnsavedCheck(unsavedCheck);
 });
 </script>
 

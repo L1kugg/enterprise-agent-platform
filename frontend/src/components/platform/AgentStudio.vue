@@ -40,6 +40,7 @@
           <h3>{{ form.name || '未命名智能体' }}</h3>
         </div>
         <div class="studio-actions">
+          <el-tag v-if="unsavedCheck()" size="small" type="warning" effect="light">未保存</el-tag>
           <el-button size="small" :disabled="!editingId" :loading="saving" @click="saveAgent(true)"
             >保存草稿</el-button
           >
@@ -400,7 +401,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   getAgentLogs,
@@ -420,6 +421,7 @@ import type {
 } from '../../types/platform';
 import { authContext } from '../../composables/useAuthState';
 import { statusTag } from '../../composables/usePlatformAssets';
+import { confirmLeaveUnsaved, registerUnsavedCheck, unregisterUnsavedCheck } from '../../composables/useUnsavedGuard';
 import { formatTime } from '../../utils/format';
 
 const sections = [
@@ -498,6 +500,9 @@ const debugRunning = ref(false);
 const debugResult = ref<AgentDebugResult | null>(null);
 /** 最近一次表单同步自的已保存配置（用于判断表单是否有未保存修改）。 */
 const savedConfigJson = ref('{}');
+
+/** 未保存守卫回调（注册进全局注册表）：含新建草稿——selected 为空也跟踪表单快照差异。 */
+const unsavedCheck = () => JSON.stringify(configObject.value) !== savedConfigJson.value;
 
 const formDirty = computed(() => selected.value !== null && JSON.stringify(configObject.value) !== savedConfigJson.value);
 
@@ -674,7 +679,14 @@ function readNumberArray(value: unknown): number[] {
     : [];
 }
 
-function selectAgent(item: PlatformAsset): void {
+async function selectAgent(item: PlatformAsset): Promise<void> {
+  // 未保存守卫：切换/新建前确认丢弃（formDirty 与调试提示同一数据源）
+  if (
+    JSON.stringify(configObject.value) !== savedConfigJson.value &&
+    !(await confirmLeaveUnsaved('切换智能体将丢弃当前未保存的修改，确定？'))
+  ) {
+    return;
+  }
   selected.value = item;
   selectedId.value = item.id;
   editingId.value = item.id;
@@ -811,6 +823,11 @@ onMounted(() => {
   void loadReferenceData()
     .then(createDraft)
     .catch(() => ElMessage.error('关联资源加载失败'));
+  registerUnsavedCheck(unsavedCheck);
+});
+
+onBeforeUnmount(() => {
+  unregisterUnsavedCheck(unsavedCheck);
 });
 </script>
 

@@ -54,6 +54,7 @@
           <el-button size="small" type="danger" :disabled="!selected?.id" @click="removeItem"
             >删除</el-button
           >
+          <el-tag v-if="unsavedCheck()" size="small" type="warning" effect="light">未保存</el-tag>
           <el-button size="small" type="primary" :loading="saving" @click="save">{{
             selected?.id ? '保存配置' : '创建模型服务'
           }}</el-button>
@@ -178,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   createPlatformAsset,
@@ -190,6 +191,7 @@ import {
 } from '../../api/platform';
 import type { PlatformAsset, PlatformAssetUpsert } from '../../types/platform';
 import { authContext, isAdmin } from '../../composables/useAuthState';
+import { confirmLeaveUnsaved, registerUnsavedCheck, unregisterUnsavedCheck } from '../../composables/useUnsavedGuard';
 
 interface LastTest {
   status: string;
@@ -278,16 +280,29 @@ function applyAsset(asset: PlatformAsset): void {
     ElMessage.warning('模型配置 JSON 不合法，已重置表单');
   }
   form.value = next;
+  savedSnapshot.value = snapshotForm();
   lastTest.value = null;
 }
 
-function selectItem(asset: PlatformAsset): void {
+/** 未保存守卫：表单快照对比（applyAsset/createDraft/save 成功后重置基线）。 */
+const snapshotForm = (): string => JSON.stringify(form.value);
+const savedSnapshot = ref(snapshotForm());
+const unsavedCheck = () => snapshotForm() !== savedSnapshot.value;
+
+async function selectItem(asset: PlatformAsset): Promise<void> {
+  if (unsavedCheck() && !(await confirmLeaveUnsaved('切换模型服务将丢弃当前未保存的修改，确定？'))) {
+    return;
+  }
   applyAsset(asset);
 }
 
-function createDraft(): void {
+async function createDraft(): Promise<void> {
+  if (unsavedCheck() && !(await confirmLeaveUnsaved('新建将丢弃当前未保存的修改，确定？'))) {
+    return;
+  }
   selected.value = null;
   form.value = defaultForm();
+  savedSnapshot.value = snapshotForm();
   lastTest.value = null;
 }
 
@@ -414,6 +429,11 @@ async function removeItem(): Promise<void> {
 
 onMounted(() => {
   void load();
+  registerUnsavedCheck(unsavedCheck);
+});
+
+onBeforeUnmount(() => {
+  unregisterUnsavedCheck(unsavedCheck);
 });
 </script>
 

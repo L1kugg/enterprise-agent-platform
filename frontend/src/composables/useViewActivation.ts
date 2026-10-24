@@ -17,8 +17,13 @@ import {
 import { loadAdminDocuments } from './useAdmin';
 import { loadPlatformOverview } from './usePlatformAssets';
 import { loadUsageTrend } from './useUsage';
+import { confirmLeaveUnsaved } from './useUnsavedGuard';
 
-export function activateView(view: ConsoleView): void {
+export async function activateView(view: ConsoleView): Promise<void> {
+  // 未保存守卫：各编辑页（Studio）注册脏检查，有修改时切页签先确认（取消则留在本页）
+  if (view !== activeView.value && !(await confirmLeaveUnsaved('切换页签将丢失当前未保存的修改，确定离开？'))) {
+    return;
+  }
   activeView.value = view;
   persistState();
   if (view === 'evaluation' && evalDatasets.value.length === 0 && !evalLoading.value) {

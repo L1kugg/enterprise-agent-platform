@@ -50,6 +50,7 @@
           <el-button size="small" type="danger" :disabled="!selected?.id" @click="removeTool"
             >删除</el-button
           >
+          <el-tag v-if="unsavedCheck()" size="small" type="warning" effect="light">未保存</el-tag>
           <el-button size="small" type="primary" :loading="saving" @click="saveTool">{{
             selected?.id ? '保存配置' : '创建工具'
           }}</el-button>
@@ -429,7 +430,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   createPlatformAsset,
@@ -440,6 +441,7 @@ import {
 } from '../../api/platform';
 import type { PlatformAsset, ToolParamType, ToolTestResult } from '../../types/platform';
 import { authContext, isAdmin } from '../../composables/useAuthState';
+import { confirmLeaveUnsaved, registerUnsavedCheck, unregisterUnsavedCheck } from '../../composables/useUnsavedGuard';
 
 type ToolType = 'FORM_API' | 'CODE_API' | 'SQL';
 
@@ -690,6 +692,7 @@ function applyAsset(asset: PlatformAsset): void {
   inputSchemaText.value = JSON.stringify(next.inputSchema ?? {}, null, 2);
   outputSchemaText.value = JSON.stringify(next.outputSchema ?? {}, null, 2);
   form.value = next;
+  savedSnapshot.value = snapshotForm();
   testResult.value = null;
   testError.value = '';
   testParams.value = {};
@@ -712,12 +715,23 @@ async function loadTools(): Promise<void> {
   }
 }
 
-function selectTool(asset: PlatformAsset): void {
+/** 未保存守卫：表单快照对比（applyAsset/createDraft/save 成功后重置基线）。 */
+const snapshotForm = (): string => JSON.stringify(form.value);
+const savedSnapshot = ref(snapshotForm());
+const unsavedCheck = () => snapshotForm() !== savedSnapshot.value;
+
+async function selectTool(asset: PlatformAsset): Promise<void> {
+  if (unsavedCheck() && !(await confirmLeaveUnsaved('切换工具将丢弃当前未保存的修改，确定？'))) {
+    return;
+  }
   applyAsset(asset);
   activeStep.value = 'basic';
 }
 
-function createDraft(): void {
+async function createDraft(): Promise<void> {
+  if (unsavedCheck() && !(await confirmLeaveUnsaved('新建将丢弃当前未保存的修改，确定？'))) {
+    return;
+  }
   selected.value = null;
   form.value = defaultForm();
   activeStep.value = 'basic';
@@ -905,7 +919,12 @@ async function runTest(): Promise<void> {
 }
 
 onMounted(() => {
+  registerUnsavedCheck(unsavedCheck);
   void loadTools();
+});
+
+onBeforeUnmount(() => {
+  unregisterUnsavedCheck(unsavedCheck);
 });
 </script>
 
