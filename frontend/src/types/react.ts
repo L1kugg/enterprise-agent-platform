@@ -86,9 +86,9 @@ export interface ReactErrorEvent {
 
 export type ReactStreamEvent = 'trace' | 'token' | 'done' | 'error';
 
+/** 前端认证上下文：只有 JWT 一条路；API Key 是程序化接入通道（X-API-Key 直调后端），不经前端。 */
 export interface AuthContext {
   token?: string;
-  apiKey?: string;
   tenantId?: string;
 }
 

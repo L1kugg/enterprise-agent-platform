@@ -1,13 +1,13 @@
-// 认证动作：API-Key 换 JWT、JWT 刷新、密码登录/注册、退出。
+// 认证动作：JWT 刷新、密码登录/注册、退出。
 // 从 App.vue 单体拆出，函数体逐字一致。依赖 useAuthState（状态）、
 // useSessions（登录后拉云端会话）、useUsage（登出清空用量）、useGlobalUi（回聊天页）。
 // registerAuthEffects() 只允许被调用一次（原 App.vue 的 auth watch 原文搬入）。
+// API Key 前端登录入口已移除（2026-10-24）：人的登录只有密码一条路。
 import { ElMessage } from 'element-plus';
 
-import { exchangeApiKey, loginWithPassword, refreshJwt, registerUser, setUnauthorizedHandler } from '../api/client';
+import { loginWithPassword, refreshJwt, registerUser, setUnauthorizedHandler } from '../api/client';
 import { persistState } from './persistence';
 import {
-  apiKeyInput,
   authLoading,
   authMode,
   authPassword,
@@ -34,36 +34,6 @@ import { watch } from 'vue';
 /** 记录访问令牌到期时刻：静默续期定时器据此判断临期；响应缺字段时记 0（不做定时续期，401 兜底）。 */
 function applyTokenExpiry(auth: { expiresInSeconds?: number }): void {
   tokenExpiresAt.value = auth.expiresInSeconds ? Date.now() + auth.expiresInSeconds * 1000 : 0;
-}
-
-export async function handleLogin(): Promise<void> {
-  if (!apiKeyInput.value.trim()) {
-    ElMessage.warning('请先输入 API Key');
-    return;
-  }
-
-  authLoading.value = true;
-  try {
-    const auth = await exchangeApiKey(
-      apiKeyInput.value.trim(),
-      tenantInput.value.trim() || undefined,
-    );
-    token.value = auth.token ?? '';
-    refreshToken.value = auth.refreshToken ?? '';
-    role.value = auth.role ?? '';
-    if (auth.tenantId) {
-      tenantInput.value = auth.tenantId;
-    }
-    applyTokenExpiry(auth);
-    ElMessage.success('JWT 获取成功');
-    persistState();
-    await loadSessionsFromCloud();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'API Key 登录失败';
-    ElMessage.error(message);
-  } finally {
-    authLoading.value = false;
-  }
 }
 
 /** 续期令牌：silent=true 为后台静默续期（成败都不弹提示）；手动按钮走默认 false。 */
@@ -116,7 +86,6 @@ export function clearAuth(): void {
   token.value = '';
   refreshToken.value = '';
   role.value = '';
-  apiKeyInput.value = '';
   tenantInput.value = '';
   tokenExpiresAt.value = 0;
   costSummary.value = null;
@@ -168,7 +137,7 @@ export async function handlePasswordAuth(): Promise<void> {
 
 /** 认证副作用（凭据变化 → 持久化 + 用量刷新/清空 + 401 兜底 + 静默续期），只允许被调用一次。 */
 export function registerAuthEffects(): void {
-  watch([apiKeyInput, tenantInput, token, refreshToken, role], () => {
+  watch([tenantInput, token, refreshToken, role], () => {
     persistState();
     if (canUseRemoteSync.value) {
       void refreshCostSummary();
@@ -185,7 +154,7 @@ export function registerAuthEffects(): void {
   // 任意接口 401（令牌过期/无效）→ 清凭据，门闩（canUseRemoteSync 变 false）整页弹回登录。
   // 先到的 401 已把凭据清空，并发 401 再进来时直接短路，不会重复弹提示。
   setUnauthorizedHandler(() => {
-    if (!token.value && !apiKeyInput.value.trim()) {
+    if (!token.value) {
       return;
     }
     clearAuth();

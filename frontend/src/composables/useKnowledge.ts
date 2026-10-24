@@ -1,4 +1,4 @@
-// 知识库（文档入库 + 文档清单 + 试搜）：从 App.vue 单体拆出，字段与原定义逐字一致。
+﻿// 知识库（文档入库 + 文档清单 + 试搜）：从 App.vue 单体拆出，字段与原定义逐字一致。
 // 含入库轮询与「上传批次的通用上传函数」——聊天输入框上传（useComposerUpload）
 // 复用 submitIngestionUpload / mintIngestionChatId，依赖方向 composerUpload → knowledge。
 import { ref } from 'vue';
@@ -27,7 +27,7 @@ import type {
 } from '../types/react';
 import { isAuthError, shortId } from '../utils/format';
 import { activeView } from './useGlobalUi';
-import { apiKeyInput, authContext, token } from './useAuthState';
+import { authContext, token } from './useAuthState';
 
 export const knowledgeJobs = ref<IngestionJob[]>([]);
 export const knowledgeLoading = ref(false);
@@ -70,7 +70,7 @@ export function openSegmentManager(chatId: string, sourceName: string): void {
 }
 
 export async function loadKnowledgeJobs(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     // 压根没登录过，别去打接口，页面里提示即可
     knowledgeNeedsAuth.value = true;
     knowledgeJobs.value = [];
@@ -99,7 +99,7 @@ export async function loadKnowledgeJobs(silent = false): Promise<void> {
 }
 
 export async function loadKnowledgeDocuments(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     knowledgeNeedsAuth.value = true;
     knowledgeDocuments.value = [];
     return;
@@ -134,7 +134,7 @@ export async function loadKnowledgeDocuments(silent = false): Promise<void> {
 
 /** 加载用户侧知识库目录（ACTIVE 库 + 真实文档统计），上传/过滤/试搜选择器共用。 */
 export async function loadKnowledgeCatalog(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     knowledgeCatalog.value = [];
     return;
   }
@@ -196,7 +196,7 @@ export async function removeKnowledgeDocument(row: IngestionDocumentSummary): Pr
  * 定位到被引用的内容块（高亮 + 滚动）。同文档名多份时取最新一份。
  */
 export async function openDocumentByCitation(sourceName: string, chunkId: string): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     knowledgeNeedsAuth.value = true;
     return;
   }
@@ -219,7 +219,7 @@ export async function openDocumentByCitation(sourceName: string, chunkId: string
 
 /** 点文件名打开内容预览：每次打开都重置旧内容；报错弹 toast 并收起抽屉（401 走页面内未登录提示）。 */
 export async function openKnowledgeDocument(row: IngestionDocumentSummary): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     knowledgeNeedsAuth.value = true;
     return;
   }

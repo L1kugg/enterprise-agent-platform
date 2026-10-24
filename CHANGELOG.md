@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### 变更
+- 【移除】前端 API Key 登录入口：登录页"管理员 API Key 登录"折叠区与设置弹窗的 API Key 面板整体下线，`canUseRemoteSync` 只认 JWT——人的登录只剩用户名密码一条路，彻底消除"填了 Key 没换 JWT"的半登录态（此前该态以 GUEST 角色进入控制台、ADMIN 功能全部隐没）。连带清理：`handleLogin`/`exchangeApiKey` 删除、`AuthContext` 类型去掉 apiKey 字段、三处 composable 的登录判断简化、遗留样式与 localStorage 的 apiKey 字段不再写入（老数据多出的键被忽略，无感迁移）。**后端 X-API-Key 认证通道原样保留**——程序化接入（演示安装脚本/冒烟验证/CI）继续直调后端，不受影响；`POST /auth/token` 换 JWT 接口也保留（API 契约不变）。
 - 用量统计/评测中心/文档总览三页面对齐企业控制台品牌风格：三页主面板挂 `studio-panel`（不透明卡片底色，与平台工作台一致），面板头统一为 `section-label` 小标签 + h3 模块标题语言（Usage Analytics / Trend / By User、Datasets / Evaluation Runs、Document Governance）；评测侧栏列表项圆角/激活态对齐 studio 列表项（8px 圆角 + hover 过渡），趋势图与按用户统计块包进面板卡片。生产截图验收：用量统计与评测中心两页已确认新风格生效。
 - 【破坏性】租户模型演进为**公司单租户**（公司内部部署形态，V33）：产品定位从"自助 SaaS（注册用户一人一租户 `u-<用户名>`）"调整为"公司开发项目——全公司共用租户 `public`，公司管理员 + 公司用户"。`UserAuthService.register` 改为把新用户直接加入公司租户（与管理员 bootstrap key 同租户），管理员天然可见可管全部公司资产（此前"管理员看不到自己装的资产"即旧模型的租户墙所致）；V33 迁移把存量身份类数据（users / api_keys / refresh_tokens 的 `u-%` 行）迁入 public，旧个人租户名下的业务数据（会话/评测集等）不迁移保持休眠，audit_log 历史不追溯改写。**tenant_id 行级隔离机制原样保留**（全表租户过滤、query_database 租户占位符、身份定租户防请求头伪造、SYSTEM 共享资产语义均不变）——未来多公司 SaaS 化只需引入组织租户，属增量演进。测试：`UserAuthServiceTest` 注册用例改断言公司租户；`MysqlContainerSmokeTest` Flyway 断言修正 28→33（V29-V32 期间未同步，Testcontainers 静默跳过掩盖了过期）。
 

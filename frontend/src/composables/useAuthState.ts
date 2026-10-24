@@ -1,13 +1,14 @@
 // 认证状态（叶模块）：从 App.vue 单体拆出，字段与原定义逐字一致。
 // 只含状态与派生值；登录/刷新/登出等动作在 useAuthActions（动作会反向调用
 // sessions/usage 等模块，与状态层分开避免成环）。
+// 人的登录只有密码一条路；API Key 是程序化接入通道（X-API-Key 直调后端），
+// 不再出现在前端登录界面（2026-10-24 移除）。
 import { computed, ref } from 'vue';
 
 import { readBootstrap, registerPersistSlice } from './persistence';
 
 const bootstrap = readBootstrap();
 
-export const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
 export const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
 export const token = ref((bootstrap.token as string | undefined) ?? '');
 export const refreshToken = ref((bootstrap.refreshToken as string | undefined) ?? '');
@@ -21,10 +22,9 @@ export const authPassword = ref('');
 export const isAdmin = computed(() => role.value === 'ADMIN');
 export const authLoading = ref(false);
 export const refreshing = ref(false);
-export const canUseRemoteSync = computed(() => Boolean(token.value || apiKeyInput.value.trim()));
+export const canUseRemoteSync = computed(() => Boolean(token.value));
 
 registerPersistSlice(() => ({
-  apiKey: apiKeyInput.value,
   tenantId: tenantInput.value,
   token: token.value,
   refreshToken: refreshToken.value,
@@ -38,7 +38,6 @@ registerPersistSlice(() => ({
 export function authContext() {
   return {
     token: token.value || undefined,
-    apiKey: apiKeyInput.value || undefined,
     tenantId: tenantInput.value || undefined,
   };
 }

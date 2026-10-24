@@ -1,4 +1,4 @@
-// 管理员文档总览（跨租户）：从 App.vue 单体拆出，字段与原定义逐字一致。
+﻿// 管理员文档总览（跨租户）：从 App.vue 单体拆出，字段与原定义逐字一致。
 // 仅 ADMIN 角色可用；未登录/过期时页面内提示，不弹报错。
 import { ref } from 'vue';
 
@@ -7,7 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { deleteAdminDocument, listAdminDocuments } from '../api/client';
 import type { AdminDocumentSummary } from '../types/react';
 import { isAuthError } from '../utils/format';
-import { apiKeyInput, authContext, isAdmin, token } from './useAuthState';
+import { authContext, isAdmin, token } from './useAuthState';
 
 export const adminDocs = ref<AdminDocumentSummary[]>([]);
 export const adminDocsLoading = ref(false);
@@ -21,7 +21,7 @@ export async function loadAdminDocuments(silent = false): Promise<void> {
   if (!isAdmin.value) {
     return;
   }
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     // 压根没登录过，别去打接口，页面里提示即可
     adminNeedsAuth.value = true;
     adminDocs.value = [];

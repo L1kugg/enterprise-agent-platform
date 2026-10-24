@@ -20,38 +20,6 @@
         </div>
       </section>
 
-      <!-- 管理员 API Key 登录：折叠收起，普通用户不占注意力 -->
-      <section class="settings-section">
-        <button
-          type="button"
-          class="section-toggle"
-          @click="apiKeySectionOpen = !apiKeySectionOpen"
-        >
-          <el-icon :size="12" class="toggle-icon" :class="{ open: apiKeySectionOpen }">
-            <CaretRight />
-          </el-icon>
-          管理员 API Key 登录
-        </button>
-        <div v-if="apiKeySectionOpen" class="api-key-panel">
-          <el-form label-position="top" size="small">
-            <el-form-item label="API Key">
-              <el-input
-                v-model="apiKeyInput"
-                placeholder="输入 API Key（生产建议短时使用）"
-                show-password
-                type="password"
-              />
-            </el-form-item>
-            <el-form-item label="Tenant（可选）">
-              <el-input v-model="tenantInput" placeholder="public" />
-            </el-form-item>
-          </el-form>
-          <el-button type="primary" size="small" :loading="authLoading" @click="handleLogin"
-            >换取 JWT</el-button
-          >
-        </div>
-      </section>
-
       <!-- 对话偏好 -->
       <section class="settings-section">
         <p class="section-label">对话偏好</p>
@@ -112,15 +80,13 @@
 </template>
 
 <script setup lang="ts">
-// 设置弹窗：当前身份卡片 + 折叠式管理员入口 + 带说明的对话偏好。
+// 设置弹窗：当前身份卡片 + 带说明的对话偏好。
 // 令牌倒计时只在弹窗打开时计时，关闭即停，不常驻后台定时器。
+// API Key 登录区块已移除（2026-10-24）：人的登录只有密码一条路。
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { CaretRight } from '@element-plus/icons-vue';
 import { darkMode, opsDialogVisible } from '../composables/useGlobalUi';
 import { agentEngine, modelProfile, streaming } from '../composables/useChatState';
 import {
-  apiKeyInput,
-  authLoading,
   isAdmin,
   refreshToken,
   refreshing,
@@ -129,9 +95,7 @@ import {
   token,
   tokenExpiresAt,
 } from '../composables/useAuthState';
-import { handleLogin, handleRefresh, logout } from '../composables/useAuthActions';
-
-const apiKeySectionOpen = ref(false);
+import { handleRefresh, logout } from '../composables/useAuthActions';
 
 const PROFILE_HINTS: Record<string, string> = {
   economy: '经济档 · qwen-turbo：速度最快、成本最低，适合日常问答',
@@ -283,40 +247,6 @@ const tokenToneClass = computed(() =>
 
 .tone-danger {
   color: #dc2626;
-}
-
-/* 折叠式管理员入口 */
-.section-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  padding: 2px 0;
-  color: var(--ui-muted);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.section-toggle:hover {
-  color: var(--ui-text);
-}
-
-.toggle-icon {
-  transition: transform 160ms ease;
-}
-
-.toggle-icon.open {
-  transform: rotate(90deg);
-}
-
-.api-key-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border: 1px dashed var(--ui-border);
-  border-radius: 10px;
 }
 
 /* 字段说明 */

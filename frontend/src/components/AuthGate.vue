@@ -1,5 +1,5 @@
 <template>
-  <!-- 登录门闩：未登录（无 token 且无 API Key）时整页显示登录/注册，登录后才渲染控制台 -->
+  <!-- 登录门闩：未登录（无 token）时整页显示登录/注册，登录后才渲染控制台 -->
   <div v-if="!canUseRemoteSync" class="auth-gate">
     <div class="auth-card">
       <div class="auth-brand">
@@ -32,34 +32,22 @@
         @click="handlePasswordAuth"
         >{{ authMode === 'login' ? '登录' : '注册并登录' }}</el-button
       >
-      <details class="admin-key-login">
-        <summary>管理员 API Key 登录</summary>
-        <el-input
-          v-model="apiKeyInput"
-          type="password"
-          show-password
-          placeholder="X-API-Key（管理员用）"
-        />
-        <el-input v-model="tenantInput" placeholder="租户（默认 public）" />
-        <el-button :loading="authLoading" @click="handleLogin">换取 JWT</el-button>
-      </details>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 登录/注册门闩：模板与样式从 App.vue 原文搬入，行为零变化。
-// 状态来自 useAuthState 单例、动作来自 useAuthActions，无需 props/emits。
+// 登录/注册门闩：未登录（无 token）时整页显示登录/注册，登录后才渲染控制台。
+// API Key 前端登录入口已移除（2026-10-24）：程序化接入走 X-API-Key 直调后端，
+// 人的登录只有用户名密码一条路，杜绝"有 Key 无 JWT"的半登录态。
 import {
-  apiKeyInput,
   authLoading,
   authMode,
   authPassword,
   authUsername,
   canUseRemoteSync,
-  tenantInput,
 } from '../composables/useAuthState';
-import { handleLogin, handlePasswordAuth } from '../composables/useAuthActions';
+import { handlePasswordAuth } from '../composables/useAuthActions';
 </script>
 
 <style scoped>
@@ -149,23 +137,5 @@ import { handleLogin, handlePasswordAuth } from '../composables/useAuthActions';
 
 :deep(.el-tabs__item) {
   font-weight: 600;
-}
-
-
-.admin-key-login summary {
-  font-size: 13px;
-  color: var(--ui-muted);
-  cursor: pointer;
-}
-
-.admin-key-login {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.admin-key-login[open] {
-  padding-top: 10px;
-  border-top: 1px dashed var(--ui-border);
 }
 </style>

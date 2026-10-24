@@ -1,4 +1,4 @@
-// 用量（本租户 token 统计 + 每日趋势 + SVG 图表几何）：从 App.vue 单体拆出，
+﻿// 用量（本租户 token 统计 + 每日趋势 + SVG 图表几何）：从 App.vue 单体拆出，
 // 字段与原定义逐字一致。依赖 useAuthState 的凭证。
 // watch(usageRange) 放在 registerUsageEffects()，只允许被调用一次。
 import { computed, ref, watch } from 'vue';
@@ -9,7 +9,7 @@ import { getTenantCostSummary, getTenantCostTrend, getTenantUserUsage } from '..
 import type { TenantCostSummary, TenantCostTrendPoint, TenantUserUsage } from '../types/react';
 import { USAGE_CHART_H, USAGE_CHART_W } from '../utils/constants';
 import { isAuthError } from '../utils/format';
-import { apiKeyInput, authContext, canUseRemoteSync, isAdmin, token } from './useAuthState';
+import { authContext, canUseRemoteSync, isAdmin, token } from './useAuthState';
 
 export const costSummary = ref<TenantCostSummary | null>(null);
 
@@ -187,7 +187,7 @@ const usageHoverDay = computed(() => {
 });
 
 async function loadUsageTrend(silent = false): Promise<void> {
-  if (!token.value && !apiKeyInput.value) {
+  if (!token.value) {
     // 压根没登录过，别去打接口，页面里提示即可
     usageNeedsAuth.value = true;
     usagePoints.value = [];

@@ -28,7 +28,6 @@ function resolveApi(path: string): string {
 function buildAuthHeaders(auth?: AuthContext): HeadersInit {
   const headers: Record<string, string> = {};
   if (auth?.token) headers.Authorization = `Bearer ${auth.token}`;
-  else if (auth?.apiKey) headers['X-API-Key'] = auth.apiKey;
   if (auth?.tenantId) headers['X-Tenant-ID'] = auth.tenantId;
   return headers;
 }

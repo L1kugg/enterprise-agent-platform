@@ -48,8 +48,6 @@ function buildAuthHeaders(auth?: AuthContext): HeadersInit {
   const headers: Record<string, string> = {};
   if (auth?.token) {
     headers.Authorization = `Bearer ${auth.token}`;
-  } else if (auth?.apiKey) {
-    headers['X-API-Key'] = auth.apiKey;
   }
   if (auth?.tenantId) {
     headers['X-Tenant-ID'] = auth.tenantId;
@@ -107,25 +105,6 @@ function withQuery(
     return path;
   }
   return `${path}?${query}`;
-}
-
-export async function exchangeApiKey(
-  apiKey: string,
-  tenantId?: string,
-): Promise<AuthTokenResponse> {
-  const response = await fetch(resolveApi('/auth/token'), {
-    credentials: 'include',
-    method: 'POST',
-    headers: {
-      'X-API-Key': apiKey,
-      ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
-    },
-  });
-  const payload = await parseJsonSafely<AuthTokenResponse>(response);
-  if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? 'API Key 登录失败');
-  }
-  return payload;
 }
 
 export async function refreshJwt(refreshToken: string): Promise<AuthTokenResponse> {
