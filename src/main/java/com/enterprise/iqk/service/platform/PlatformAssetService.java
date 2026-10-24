@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -163,6 +164,8 @@ public class PlatformAssetService {
         }
     }
 
+    /** 级联删除（资产 + 绑定表/KB 归属解绑）需原子；evict 在事务内无害——失败回滚后缓存按 DB 重建。 */
+    @Transactional
     public void delete(String assetType, Long id) {
         PlatformAsset asset = getOwned(assetType, id);
         mapper.deleteById(asset.getId());

@@ -46,7 +46,8 @@ public class AgentBindingSyncService {
         replace(tenantId, agentId, AgentBindingTable.PUBLISH_CHANNEL, channelRows(root));
     }
 
-    /** 删除智能体全部绑定（随资源删除调用）。 */
+    /** 删除智能体全部绑定（随资源删除调用）；六表删除需原子，独立调用时也要成事务。 */
+    @Transactional
     public void deleteAllBindings(String tenantId, Long agentId) {
         for (AgentBindingTable table : AgentBindingTable.values()) {
             bindingMapper.deleteByAgent(table.tableName(), tenantId, agentId);
