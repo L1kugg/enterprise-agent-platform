@@ -1,7 +1,7 @@
 package com.enterprise.iqk.memory;
 
 import com.enterprise.iqk.config.properties.MemoryProperties;
-import com.enterprise.iqk.utils.VectorDistanceUtils;
+import com.enterprise.iqk.util.VectorDistanceUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

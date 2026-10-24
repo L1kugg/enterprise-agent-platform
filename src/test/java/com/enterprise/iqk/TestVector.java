@@ -1,6 +1,6 @@
 package com.enterprise.iqk;
 
-import com.enterprise.iqk.utils.VectorDistanceUtils;
+import com.enterprise.iqk.util.VectorDistanceUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Disabled;
 import org.springframework.ai.document.Document;
