@@ -181,6 +181,7 @@ import {
   setPlatformSection,
   type PlatformSection,
 } from '../composables/usePlatformAssets';
+import { confirmLeaveUnsaved } from '../composables/useUnsavedGuard';
 
 const platformModuleLabels: Record<PlatformSection, string> = {
   overview: '平台总览',
@@ -208,7 +209,16 @@ const currentModuleLabel = computed(() =>
     : (viewModuleLabels[activeView.value] ?? '工作台'),
 );
 
-function goPlatform(section: PlatformSection): void {
+async function goPlatform(section: PlatformSection): Promise<void> {
+  // 未保存守卫：平台内六个工作台之间的切换不经 activateView，在此同样拦截
+  const switching =
+    activeView.value !== 'platform' || section !== platformSection.value;
+  if (
+    switching &&
+    !(await confirmLeaveUnsaved('切换到「' + (platformModuleLabels[section] ?? '其他模块') + '」将丢失当前未保存的修改，确定离开？'))
+  ) {
+    return;
+  }
   activeView.value = 'platform';
   setPlatformSection(section);
 }

@@ -6,6 +6,7 @@ import { computed, ref, watch } from 'vue';
 
 import type { ConsoleView } from '../types/console';
 import { persistState, readBootstrap, registerPersistSlice } from './persistence';
+import { confirmLeaveUnsaved } from './useUnsavedGuard';
 
 const bootstrap = readBootstrap();
 
@@ -75,10 +76,19 @@ export function registerGlobalUiEffects(): void {
     }
   });
   window.addEventListener('popstate', () => {
-    // 前进/后退到根路径按 chat 处理（根路径本就是聊天页的别名）；未知路径不动视图
+    // 前进/后退到根路径按 chat 处理（根路径本就是聊天页的别名）；未知路径不动视图。
+    // 未保存守卫：popstate 的目标视图与当前不同且有未保存修改时弹确认——
+    // 取消则把地址栏推回当前视图（URL 已被浏览器改掉，需手动还原）。
     const view = viewFromPath(window.location.pathname, 'chat');
-    if (view !== null && view !== activeView.value) {
-      activeView.value = view;
+    if (view === null || view === activeView.value) {
+      return;
     }
+    void confirmLeaveUnsaved('切换页签将丢失当前未保存的修改，确定离开？').then((leave) => {
+      if (leave) {
+        activeView.value = view;
+      } else {
+        window.history.pushState(null, '', `/${activeView.value}`);
+      }
+    });
   });
 }

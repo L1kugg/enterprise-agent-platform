@@ -50,7 +50,6 @@
           <el-button size="small" type="danger" :disabled="!selected?.id" @click="removeTool"
             >删除</el-button
           >
-          <el-tag v-if="unsavedCheck()" size="small" type="warning" effect="light">未保存</el-tag>
           <el-button size="small" type="primary" :loading="saving" @click="saveTool">{{
             selected?.id ? '保存配置' : '创建工具'
           }}</el-button>

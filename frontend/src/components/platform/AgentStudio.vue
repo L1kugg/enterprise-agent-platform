@@ -40,7 +40,6 @@
           <h3>{{ form.name || '未命名智能体' }}</h3>
         </div>
         <div class="studio-actions">
-          <el-tag v-if="unsavedCheck()" size="small" type="warning" effect="light">未保存</el-tag>
           <el-button size="small" :disabled="!editingId" :loading="saving" @click="saveAgent(true)"
             >保存草稿</el-button
           >
