@@ -103,6 +103,31 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
     int markFactsStaleByChat(@Param("tenantId") String tenantId,
                              @Param("chatId") String chatId);
 
+    /** 写侧判重扫描：租户内活跃 fact（不过滤置信度，低置信旧条目也参与合并），最新优先。 */
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND type = 'fact'
+              AND stale = 0
+              AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
+    List<MemoryItemRecord> findActiveFactsByTenant(@Param("tenantId") String tenantId,
+                                                   @Param("limit") int limit);
+
+    /** 近重复合并：置信度取 max（调用方算好传入），缺失向量补齐、已有向量保留。 */
+    @Update("""
+            UPDATE memory_item
+            SET confidence = #{confidence},
+                embedding_json = COALESCE(#{embeddingJson, jdbcType=VARCHAR}, embedding_json),
+                updated_at = NOW()
+            WHERE id = #{id}
+            """)
+    int mergeFactConfidence(@Param("id") Long id,
+                            @Param("confidence") double confidence,
+                            @Param("embeddingJson") String embeddingJson);
+
     @Delete("DELETE FROM memory_item WHERE expires_at IS NOT NULL AND expires_at < NOW()")
     int deleteExpired();
 }

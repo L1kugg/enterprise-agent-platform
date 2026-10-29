@@ -13,12 +13,12 @@ import java.util.List;
  *
  * fact 是唯一按租户共享的记忆层：保存的是知识库能给出引用佐证的陈述，
  * 召回时按置信度过滤（见 MemoryService#buildContext，门槛 0.7）。
- * 写入门槛与召回门槛保持一致，每条事实继承证据综合分作为置信度，
- * 低质量证据永远进不了生成上下文。
- * chatId 记入 source_chat_id 列：文档删除时可级联软失效，防"引用已删
- * 来源的可信事实"继续被召回。向量按批次一次批量计算（单次管线最多
- * 多一次 embedding 调用），失败整体回退词面召回。
- * 写入是尽力而为的，且每次请求有条数上限，防止记忆表无界增长。
+ * 写入走 upsertFactMemory：同一事实被反复引用沉淀时合并进既有条目
+ * （置信度取 max、缺失向量补齐），fact 层不再无界增长。
+ * chatId 记入 source_chat_id 列：文档删除/同名替换退役时可级联软失效，
+ * 防"引用已删来源的可信事实"继续被召回。向量按批次一次批量计算
+ * （单次管线最多多一次 embedding 调用），失败整体回退词面召回。
+ * 写入是尽力而为的，且每次请求有条数上限，防止单请求写入过多。
  */
 @Slf4j
 @Component
@@ -59,7 +59,7 @@ public class RagFactMemoryRecorder {
         for (int i = 0; i < qualified.size(); i++) {
             EvidenceItem item = qualified.get(i);
             try {
-                memoryService.saveFactMemory(tenantId, chatId, contents.get(i),
+                memoryService.upsertFactMemory(tenantId, chatId, contents.get(i),
                         factSource(item), item.getScore(), embeddings.get(i));
             } catch (Exception ex) {
                 log.warn("fact memory persistence failed: title={}, reason={}",

@@ -28,7 +28,9 @@ import java.util.UUID;
  * 1. short：对话轮次完成写入，24 小时过期；
  * 2. task：工作流到达 DONE 写入结论，绑定 taskId，30 天过期；
  * 3. fact：RAG 证据置信度达标（>= 0.7）写入，永久、按租户共享，
- *    且记录证据源 chatId，文档删除时级联软失效（见 invalidateFactsForChat）；
+ *    且记录证据源 chatId，文档删除/同名替换退役时级联软失效
+ *    （见 invalidateFactsForChat）；写入走 upsertFactMemory 近重复合并，
+ *    同一事实反复沉淀只刷新置信度不新增行；
  * 4. long：异步画像提取命中写入，永久。
  * 查询一律过滤已过期（expires_at 为空视为永久）与软失效（stale=1）条目；
  * 写入失败由调用方（各 Recorder）以 best-effort 方式兜底，不阻塞主链路。
@@ -37,6 +39,8 @@ public class MemoryService {
 
     /** 非智能体路径 short 层默认注入条数（维持旧行为）；一条 short 记忆对应一轮问答 */
     private static final int DEFAULT_SHORT_LIMIT = 4;
+    /** fact 写侧判重扫描的候选池上限（活跃条目，最新优先） */
+    private static final int FACT_DEDUP_SCAN_LIMIT = 50;
 
     private final MemoryItemMapper itemMapper;
     private final MemoryEventMapper eventMapper;
@@ -71,12 +75,81 @@ public class MemoryService {
      * 保存租户级 fact 记忆：永久有效，置信度由调用方（RAG 证据综合分）给定；
      * chatId 记录证据源批次供文档删除时级联失效，embeddingJson 为调用方批量
      * 预计算的向量（null 时由本方法兜底单条补算一次）。
+     * 优先走 {@link #upsertFactMemory}（写侧近重复合并），本方法是纯新增路径。
      */
     public MemoryItemRecord saveFactMemory(String tenantId, String chatId,
                                             String content, String source,
                                             double confidence, String embeddingJson) {
         return save(tenantId, null, "fact", content, source, chatId, null,
                 confidence, null, embeddingJson);
+    }
+
+    /**
+     * fact 写入统一入口（带近重复合并）：fact 是唯一永久层，无 TTL 自然清退，
+     * 同一事实被反复引用沉淀时若不查重，表将无界增长，且召回候选池按时间切
+     * 30 条会被重复项挤占。命中既有条目（词面互含/bigram Jaccard，或向量
+     * 余弦达语义去重阈值）时合并：置信度取 max（更强证据支撑同一事实），
+     * 缺失向量补齐、已有向量保留，source/source_chat_id 不变（证据溯源锚点
+     * 保持首次写入），并记 UPDATE 事件留痕。
+     * 判重扫描异常或开关关闭时退化为直接写入——合并是治理增强，绝不阻塞证据沉淀。
+     *
+     * @return 落库后的条目（新建，或合并后的既有条目）
+     */
+    public MemoryItemRecord upsertFactMemory(String tenantId, String chatId,
+                                             String content, String source,
+                                             double confidence, String embeddingJson) {
+        if (memoryProperties.isFactWriteDedupEnabled() && StringUtils.hasText(content)) {
+            try {
+                MemoryItemRecord existing = findFactDuplicate(tenantId, content, embeddingJson);
+                if (existing != null) {
+                    double oldConfidence = existing.getConfidence() == null ? 0 : existing.getConfidence();
+                    double mergedConfidence = Math.max(oldConfidence, confidence);
+                    itemMapper.mergeFactConfidence(existing.getId(), mergedConfidence, embeddingJson);
+                    emitEvent(existing.getMemoryId(), "UPDATE", "near-duplicate fact merged: confidence "
+                            + oldConfidence + " -> " + mergedConfidence);
+                    existing.setConfidence(mergedConfidence);
+                    if (embeddingJson != null) {
+                        existing.setEmbeddingJson(embeddingJson);
+                    }
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return existing;
+                }
+            } catch (Exception ex) {
+                log.warn("fact 写侧判重失败（回退直接写入）: tenant={}, reason={}",
+                        tenantId, ex.toString());
+            }
+        }
+        return save(tenantId, null, "fact", content, source, chatId, null,
+                confidence, null, embeddingJson);
+    }
+
+    /**
+     * 在租户活跃 fact 池（最新 50 条）中查找与候选近重复的既有条目：
+     * 词面判定复用召回侧同一套 isNearDuplicate（互含或 bigram Jaccard），
+     * 语义兜底用候选与既有的缓存向量余弦（阈值同 long 层语义去重），
+     * 任一命中即返回。池子按时间倒序，命中越新越优先。
+     */
+    private MemoryItemRecord findFactDuplicate(String tenantId, String content, String embeddingJson) {
+        List<MemoryItemRecord> pool = itemMapper.findActiveFactsByTenant(
+                TenantContext.normalize(tenantId), FACT_DEDUP_SCAN_LIMIT);
+        if (pool.isEmpty()) {
+            return null;
+        }
+        float[] candidateVector = memoryProperties.isSemanticEnabled()
+                ? MemoryEmbeddingHelper.fromJson(embeddingJson) : null;
+        for (MemoryItemRecord item : pool) {
+            if (relevanceScorer.isNearDuplicate(content, item.getContent())) {
+                return item;
+            }
+            if (candidateVector != null) {
+                float[] existingVector = MemoryEmbeddingHelper.fromJson(item.getEmbeddingJson());
+                if (existingVector != null && MemoryEmbeddingHelper.cosine(candidateVector, existingVector)
+                        >= memoryProperties.getSemanticDedupThreshold()) {
+                    return item;
+                }
+            }
+        }
+        return null;
     }
 
     /**

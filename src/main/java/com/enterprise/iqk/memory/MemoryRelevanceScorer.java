@@ -137,9 +137,12 @@ public class MemoryRelevanceScorer {
      * 近重复判定：去除全部空白并小写后，互为包含视为重复；
      * 否则按字符 bigram 的 Jaccard 相似度比对（中文无分词器也能工作）。
      */
-    private boolean nearDuplicate(MemoryItemRecord champion, MemoryItemRecord candidate) {
-        String a = normalizeForDedup(champion.getContent());
-        String b = normalizeForDedup(candidate.getContent());
+    /**
+     * 近重复判定（写侧 upsert 复用入口）：规范化互含或 bigram Jaccard 达阈值。
+     */
+    public boolean isNearDuplicate(String contentA, String contentB) {
+        String a = normalizeForDedup(contentA);
+        String b = normalizeForDedup(contentB);
         if (a.isEmpty() || b.isEmpty()) {
             return false;
         }
@@ -147,6 +150,10 @@ public class MemoryRelevanceScorer {
             return true;
         }
         return bigramJaccard(a, b) >= nearDuplicateThreshold;
+    }
+
+    private boolean nearDuplicate(MemoryItemRecord champion, MemoryItemRecord candidate) {
+        return isNearDuplicate(champion.getContent(), candidate.getContent());
     }
 
     private String normalizeForDedup(String content) {

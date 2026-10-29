@@ -23,4 +23,6 @@ public class MemoryProperties {
     private double semanticBlendWeight = 0.5;
     /** long 画像写入侧语义去重阈值：候选与既有记忆余弦相似度达到即视为重复（仅比对已缓存向量的记录） */
     private double semanticDedupThreshold = 0.88;
+    /** fact 写入侧近重复合并（upsert）：同一事实反复沉淀不再新增行，置信度取 max、缺失向量补齐 */
+    private boolean factWriteDedupEnabled = true;
 }
