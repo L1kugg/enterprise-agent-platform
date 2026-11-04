@@ -25,7 +25,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        // 默认本地后端；联调生产/远端环境时设 VITE_PROXY_TARGET 覆盖（如 http://82.157.60.115:8088）
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (requestPath) => requestPath.replace(/^\/api/, '')
       }

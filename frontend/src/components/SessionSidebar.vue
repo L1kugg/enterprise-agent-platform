@@ -370,11 +370,11 @@ function clearSessionFilters(): void {
 .session-tools {
   border: 1px solid var(--ui-border);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 9px 10px;
   background: color-mix(in oklab, var(--ui-panel) 88%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .tool-row {
@@ -388,26 +388,30 @@ function clearSessionFilters(): void {
   min-width: 0;
 }
 
-/* 当前工作区行：左侧"当前"小标签区分它和上方"筛选"下拉（两个 select 长得一样是旧版最大的困惑点） */
+/* 当前工作区行：浅品牌底色把它与上方"筛选"下拉视觉分组（两个 select 长得一样是旧版最大的困惑点） */
 .ws-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
   align-items: center;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ui-accent) 6%, transparent);
 }
 
 .ws-label {
   flex-shrink: 0;
   font-size: 11px;
-  color: var(--ui-muted);
+  font-weight: 600;
+  color: color-mix(in oklab, var(--ui-accent-strong) 78%, var(--ui-text));
 }
 
-/* 分组标签：吸顶小标签（列表滚动时保持当前组名可见） */
+/* 分组标签：吸顶小标签（列表滚动时保持当前组名可见），与上一组卡片留出呼吸间距 */
 .session-group-label {
   position: sticky;
   top: 0;
   z-index: 1;
-  margin: 2px 2px 0;
+  margin: 6px 2px 2px;
   padding: 4px 2px;
   font-size: 11px;
   font-weight: 600;
@@ -416,9 +420,18 @@ function clearSessionFilters(): void {
   background: var(--ui-card);
 }
 
-/* 归档开关：内联文案 3-4 个汉字，放宽轨道避免截断 */
+/* 首个分组贴住面板头，不叠加额外上间距 */
+.session-group-label:first-child {
+  margin-top: 0;
+}
+
+/* 归档开关：内联文案 4 个汉字，轨道放宽 + 禁换行，否则文字挤压截断 */
 .tool-row :deep(.el-switch .el-switch__core) {
-  min-width: 58px;
+  min-width: 76px;
+}
+
+.tool-row :deep(.el-switch .el-switch__inner-wrapper span) {
+  white-space: nowrap;
 }
 
 /* 会话面板撑满会话栏剩余高度：列表内部滚动，会话再多也不挤压其它区域 */
@@ -449,6 +462,7 @@ function clearSessionFilters(): void {
 
 .session-item:hover {
   border-color: color-mix(in oklab, var(--ui-accent) 45%, transparent);
+  background: color-mix(in oklab, var(--ui-accent) 4%, var(--ui-card));
 }
 
 .session-item.active {
@@ -491,14 +505,13 @@ function clearSessionFilters(): void {
   display: flex;
   gap: 2px;
   flex-wrap: wrap;
-  /* 悬浮/聚焦时才出现：默认藏起来，会话卡片不再一排常驻按钮 */
+  /* 悬浮/聚焦时才出现：选中会话保持干净（不再常驻一排按钮），触屏端整栏本就隐藏 */
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
 .session-item:hover .session-actions,
-.session-item:focus-within .session-actions,
-.session-item.active .session-actions {
+.session-item:focus-within .session-actions {
   opacity: 1;
 }
 
