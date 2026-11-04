@@ -320,10 +320,26 @@ export function createAndSwitchSession(): void {
   persistState();
 }
 
-export function removeSession(sessionId: string): void {
+export async function removeSession(sessionId: string): Promise<void> {
   if (sessions.value.length <= 1) {
     ElMessage.warning('至少保留一个会话');
     return;
+  }
+
+  const target = getSession(sessionId);
+  try {
+    await ElMessageBox.confirm(
+      `确定删除会话「${target?.title ?? sessionId}」吗？删除后不可恢复。`,
+      '删除会话',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      },
+    );
+  } catch {
+    return; // 用户点了取消
   }
 
   syncCurrentSessionBranch();
@@ -381,7 +397,7 @@ export async function renameSession(sessionId: string): Promise<void> {
   if (!newName || newName === session.title) {
     return;
   }
-      session.title = newName;
+  session.title = newName;
   session.updatedAt = Date.now();
   persistState();
   if (canUseRemoteSync.value) {

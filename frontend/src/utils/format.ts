@@ -8,6 +8,33 @@ export function formatTime(value: number): string {
   });
 }
 
+/**
+ * 相对时间（会话列表等扫读场景）：刚刚 / N 分钟前 / 当天只看时分 /
+ * 昨天 HH:mm / N 天前 / 超过一周落到"M月D日"。时钟轻微漂移（未来时间）按"刚刚"处理。
+ */
+export function formatRelativeTime(value: number): string {
+  const now = Date.now();
+  const diff = now - value;
+  if (diff < 60_000) {
+    return '刚刚';
+  }
+  const shown = new Date(value);
+  const hhmm = `${String(shown.getHours()).padStart(2, '0')}:${String(shown.getMinutes()).padStart(2, '0')}`;
+  if (diff < 3_600_000) {
+    return `${Math.floor(diff / 60_000)} 分钟前`;
+  }
+  if (shown.toDateString() === new Date(now).toDateString()) {
+    return hhmm;
+  }
+  if (shown.toDateString() === new Date(now - 86_400_000).toDateString()) {
+    return `昨天 ${hhmm}`;
+  }
+  if (diff < 7 * 86_400_000) {
+    return `${Math.floor(diff / 86_400_000)} 天前`;
+  }
+  return `${shown.getMonth() + 1}月${shown.getDate()}日`;
+}
+
 export function shortId(id: string): string {
   return id.slice(0, 10);
 }
