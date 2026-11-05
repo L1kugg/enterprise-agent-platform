@@ -180,8 +180,10 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
                 StringUtils.hasText(serverConfig.getEndpoint()) ? serverConfig.getEndpoint() : "/mcp",
                 harnessProperties,
                 objectMapper,
-                5_000,
+                maxTimeoutMs,
                 toolTimeouts);
+        log.info("mcp client timeouts: server={}, default={}ms, perTool={}",
+                serverConfig.getBaseUrl(), maxTimeoutMs, toolTimeouts);
         return McpClient.sync(transport)
                 .clientInfo(new McpSchema.Implementation(CLIENT_NAME, CLIENT_VERSION))
                 .capabilities(new McpSchema.ClientCapabilities(null, null, null, null))
