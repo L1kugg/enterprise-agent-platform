@@ -34,7 +34,11 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
  *    画像提取是可选增强，不应挤占用户问答的预算名额）；
  * 4. 隔离会话 —— 提取调用使用独立的 memory-extract 会话 ID，避免提取轮次
  *    写进用户可见的对话历史；
- * 5. 双重去重 —— 与既有 long 记忆先做规范化包含比对，再做向量语义比对
+ * 5. 纠偏消解（冲突仲裁的写侧闭环）——提取器三分类 add/correct/none：
+ *    模型判定用户"纠正了既有画像"时，被纠正的旧画像软失效（INVALIDATE 事件
+ *    留痕、退出召回池）后再写入新画像，杜绝新旧矛盾画像共存；摘抄对不上
+ *    既有列表时保守退化为 add，绝不盲删。
+ * 6. 双重去重 —— 与既有 long 记忆先做规范化包含比对，再做向量语义比对
  *    （换措辞的重复画像不再入库；语义比对只消费已缓存向量的记录，存量
  *    无向量记录回退文本判重，避免每次提取重复 embedding 老数据）。
  */
@@ -43,23 +47,28 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 @RequiredArgsConstructor
 public class MemoryExtractionService {
 
-    /** 提取结果 JSON 的系统提示词，要求模型只输出严格 JSON。 */
+    /** 提取结果 JSON 的系统提示词：三分类（新增画像/纠正既有画像/都不是），要求模型只输出严格 JSON。 */
     private static final String SYSTEM_PROMPT = """
-            你是记忆分类器。判断下面这轮对话中是否出现"稳定的用户画像信息"：
-            用户长期有效的偏好、背景、身份、目标（例如：技术栈偏好、学习目标、
-            职业背景、沟通偏好）。
-            只输出 JSON，不要输出任何其他内容：
-            {"isProfile": true/false, "memory": "用第三人称一句话概括画像信息"}
+            你是记忆分类器。用户消息开头的"既有画像记忆"列出了该用户当前已沉淀的画像（可能已过时）。
+            判断这轮对话属于哪种情况，只输出 JSON，不要输出任何其他内容：
+            {"action": "add|correct|none", "memory": "用第三人称一句话概括", "supersedes": "被纠正的既有画像原文"}
             规则：
-            - 一次性的问题、临时需求、与用户本人无关的内容，isProfile 为 false；
-            - 不确定时 isProfile 为 false；
-            - memory 只在 isProfile 为 true 时填写。
+            - action=add：出现了新的稳定用户画像信息（长期有效的偏好、背景、身份、目标，
+              例如：技术栈偏好、学习目标、职业背景、沟通偏好）；
+            - action=correct：用户明确纠正或更新了"既有画像记忆"里列出的某一条
+              （如"不对，我早改用 xx 了""现在主要做 yy"）；
+            - action=none：一次性的问题、临时需求、与用户本人无关的内容、不确定；
+            - 不确定时一律 none（错误成本不对称：误存画像会污染上下文）；
+            - memory 只在 add/correct 时填写；
+            - supersedes 只在 correct 时填写，且必须逐字摘自"既有画像记忆"里的某一条。
             """;
 
     /** 画像记忆单条截断上限（字符）。 */
     private static final int MAX_MEMORY_CHARS = 200;
     /** 去重时回扫的既有 long 记忆条数上限。 */
     private static final int LONG_MEMORY_SCAN_LIMIT = 20;
+    /** 提示词里最多携带的既有画像条数（控 token，超过部分不参与 correct 匹配）。 */
+    private static final int MAX_EXISTING_IN_PROMPT = 20;
     /** 提取调用的端点标识（模型路由与成本记账共用）。 */
     private static final String EXTRACTION_ENDPOINT = "memory_extraction";
 
@@ -98,14 +107,17 @@ public class MemoryExtractionService {
 
     /**
      * 同步提取逻辑（包内可见，便于直接测试）：
-     * 模型判定 -> JSON 解析 -> 去重 -> 写入 long 记忆（user 键 = userKey）-> 记账。
+     * 取既有画像 -> 模型三分类（add/correct/none）-> JSON 解析 ->
+     * add 走双重去重后写入；correct 软失效被纠正的旧画像再写入新画像；
      * 全程 try/catch，任何一步失败都按"不升级"收场。
      */
     void extract(String tenantId, String userKey, String chatId, String prompt, String answer) {
         try {
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(
                     "economy", EXTRACTION_ENDPOINT, tenantId, chatId);
-            String userPrompt = buildUserPrompt(prompt, answer);
+            List<MemoryItemRecord> existingLongs =
+                    memoryService.queryLongMemory(tenantId, userKey, LONG_MEMORY_SCAN_LIMIT);
+            String userPrompt = buildUserPrompt(existingLongs, prompt, answer);
             long inputTokens = tenantCostService.estimateTokens(SYSTEM_PROMPT + userPrompt);
 
             String raw = chatClient.prompt()
@@ -125,26 +137,97 @@ public class MemoryExtractionService {
                     tenantCostService.estimateTokens(raw), EXTRACTION_ENDPOINT);
 
             ExtractionVerdict verdict = parseVerdict(raw);
-            if (verdict == null || !verdict.isProfile() || !StringUtils.hasText(verdict.memory())) {
-                // 解析失败或明确不是画像：默认不升级（错误成本不对称）
+            if (verdict == null || "none".equals(verdict.action()) || !StringUtils.hasText(verdict.memory())) {
+                // 解析失败或明确无关：默认不升级（错误成本不对称）
                 return;
             }
             String memory = truncate(verdict.memory(), MAX_MEMORY_CHARS);
-            List<MemoryItemRecord> existingLongs =
-                    memoryService.queryLongMemory(tenantId, userKey, LONG_MEMORY_SCAN_LIMIT);
-            if (isDuplicate(existingLongs, memory) || isSemanticDuplicate(existingLongs, memory)) {
+            if ("correct".equals(verdict.action())) {
+                applyCorrection(tenantId, userKey, chatId, existingLongs, memory, verdict.supersedes());
                 return;
             }
-            memoryService.saveLongMemory(tenantId, userKey, "画像: " + memory,
-                    "extract:chat:" + chatId);
+            saveProfileIfNew(tenantId, userKey, chatId, existingLongs, memory);
         } catch (Exception ex) {
             log.warn("画像提取失败（不影响对话）: chatId={}, reason={}", chatId, ex.toString());
         }
     }
 
-    /** 拼接提取用的用户消息：问答各截断 400 字符，回答为空时只送提问。 */
-    private String buildUserPrompt(String prompt, String answer) {
-        StringBuilder userPrompt = new StringBuilder("用户提问: ").append(truncate(prompt, 400));
+    /** add 路径：与既有画像先做规范化包含比对，再做向量语义比对，重复不落库。 */
+    private void saveProfileIfNew(String tenantId, String userKey, String chatId,
+                                  List<MemoryItemRecord> existingLongs, String memory) {
+        if (isDuplicate(existingLongs, memory) || isSemanticDuplicate(existingLongs, memory)) {
+            return;
+        }
+        memoryService.saveLongMemory(tenantId, userKey, "画像: " + memory,
+                "extract:chat:" + chatId);
+    }
+
+    /**
+     * correct 路径（冲突消解）：模型摘抄的"被纠正画像"与既有列表做规范化包含匹配——
+     * 命中则软失效旧画像（INVALIDATE 事件留痕、退出召回池）再写入新画像；
+     * 摘抄对不上号（模型幻觉/列表已变）时保守退化为 add 路径，绝不盲删。
+     */
+    private void applyCorrection(String tenantId, String userKey, String chatId,
+                                 List<MemoryItemRecord> existingLongs, String memory, String supersedes) {
+        MemoryItemRecord superseded = findSuperseded(existingLongs, supersedes);
+        if (superseded == null) {
+            log.warn("纠偏摘抄未命中既有画像（退化为新增）: chatId={}, supersedes={}",
+                    chatId, truncate(supersedes == null ? "" : supersedes, 80));
+            saveProfileIfNew(tenantId, userKey, chatId, existingLongs, memory);
+            return;
+        }
+        boolean invalidated = memoryService.softInvalidateMemory(tenantId, superseded.getMemoryId(),
+                "superseded by user correction: chat=" + chatId);
+        if (!invalidated) {
+            // 软失效失败（并发已失效/租户不符）：新画像仍写入，旧画像留存由后续纠偏兜底
+            log.warn("纠偏软失效未生效（新画像照常写入）: chatId={}, memoryId={}",
+                    chatId, superseded.getMemoryId());
+        }
+        memoryService.saveLongMemory(tenantId, userKey, "画像: " + memory,
+                "extract:chat:" + chatId);
+    }
+
+    /** 摘抄文本与既有画像做规范化互含匹配（都去掉空白后互为包含即视为同一条）。 */
+    private MemoryItemRecord findSuperseded(List<MemoryItemRecord> existingLongs, String supersedes) {
+        if (!StringUtils.hasText(supersedes) || existingLongs == null) {
+            return null;
+        }
+        String needle = normalize(supersedes);
+        for (MemoryItemRecord item : existingLongs) {
+            String content = normalize(item.getContent());
+            if (content.isEmpty()) {
+                continue;
+            }
+            if (content.contains(needle) || needle.contains(content)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /** 拼接提取用的用户消息：既有画像列表在前（模型据此判 correct），问答各截断 400 字符。 */
+    private String buildUserPrompt(List<MemoryItemRecord> existingLongs, String prompt, String answer) {
+        StringBuilder userPrompt = new StringBuilder("既有画像记忆：\n");
+        if (existingLongs == null || existingLongs.isEmpty()) {
+            userPrompt.append("（暂无）\n");
+        } else {
+            int shown = 0;
+            for (MemoryItemRecord item : existingLongs) {
+                if (shown >= MAX_EXISTING_IN_PROMPT) {
+                    break;
+                }
+                String content = item.getContent() == null ? "" : item.getContent();
+                if (!StringUtils.hasText(content)) {
+                    continue;
+                }
+                userPrompt.append("- ").append(truncate(content, 120)).append("\n");
+                shown++;
+            }
+            if (shown == 0) {
+                userPrompt.append("（暂无）\n");
+            }
+        }
+        userPrompt.append("\n用户提问: ").append(truncate(prompt, 400));
         if (StringUtils.hasText(answer)) {
             userPrompt.append("\n系统回答: ").append(truncate(answer, 400));
         }
@@ -152,8 +235,9 @@ public class MemoryExtractionService {
     }
 
     /**
-     * 解析模型输出。容忍 ```json 代码块包裹；任何解析失败返回 null，
-     * 调用方按"不升级"处理。
+     * 解析模型输出为三分类判定。容忍 ```json 代码块包裹；兼容旧格式
+     * （{"isProfile":bool,"memory":str} 映射为 add/none）；未知 action 归 none；
+     * 任何解析失败返回 null，调用方按"不升级"处理。
      */
     ExtractionVerdict parseVerdict(String raw) {
         if (!StringUtils.hasText(raw)) {
@@ -161,12 +245,21 @@ public class MemoryExtractionService {
         }
         try {
             JsonNode node = objectMapper.readTree(stripCodeFence(raw));
-            if (!node.has("isProfile")) {
-                return null;
+            String memory = node.path("memory").asText(null);
+            if (node.has("action")) {
+                String action = node.path("action").asText("");
+                return switch (action) {
+                    case "add", "correct", "none" ->
+                            new ExtractionVerdict(action, memory, node.path("supersedes").asText(null));
+                    default -> new ExtractionVerdict("none", memory, null);
+                };
             }
-            return new ExtractionVerdict(
-                    node.path("isProfile").asBoolean(false),
-                    node.path("memory").asText(null));
+            // 旧格式兼容：isProfile=true 视为 add
+            if (node.has("isProfile")) {
+                boolean isProfile = node.path("isProfile").asBoolean(false);
+                return new ExtractionVerdict(isProfile ? "add" : "none", memory, null);
+            }
+            return null;
         } catch (Exception ex) {
             return null;
         }
@@ -255,6 +348,7 @@ public class MemoryExtractionService {
     }
 
     /** 提取判定结果。 */
-    record ExtractionVerdict(boolean isProfile, String memory) {
+    /** 提取判定结果：action ∈ {add, correct, none}；correct 时 supersedes 为被纠正画像的摘抄原文。 */
+    record ExtractionVerdict(String action, String memory, String supersedes) {
     }
 }

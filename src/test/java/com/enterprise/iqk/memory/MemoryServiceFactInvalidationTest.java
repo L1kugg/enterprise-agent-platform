@@ -99,6 +99,69 @@ class MemoryServiceFactInvalidationTest {
     }
 
     @Test
+    void softInvalidateMarksStaleAndEmitsEvent() {
+        MemoryItemRecord item = MemoryItemRecord.builder()
+                .memoryId("mem-7").content("画像: 用户做 Java 服务端开发").stale(Boolean.FALSE).build();
+        when(itemMapper.findByTenantAndMemoryId("tenant-1", "mem-7")).thenReturn(item);
+        when(itemMapper.markMemoryStaleByMemoryId("tenant-1", "mem-7")).thenReturn(1);
+
+        boolean invalidated = service.softInvalidateMemory("tenant-1", "mem-7",
+                "superseded by user correction: chat=chat-9");
+
+        assertThat(invalidated).isTrue();
+        ArgumentCaptor<MemoryEventRecord> events = ArgumentCaptor.forClass(MemoryEventRecord.class);
+        verify(eventMapper).insert(events.capture());
+        assertThat(events.getValue().getAction()).isEqualTo("INVALIDATE");
+        assertThat(events.getValue().getMemoryId()).isEqualTo("mem-7");
+        assertThat(events.getValue().getReason()).contains("correction");
+    }
+
+    @Test
+    void softInvalidateIgnoresMissingStaleOrBlankMemory() {
+        when(itemMapper.findByTenantAndMemoryId("tenant-1", "mem-x")).thenReturn(null);
+        MemoryItemRecord stale = MemoryItemRecord.builder()
+                .memoryId("mem-stale").content("x").stale(Boolean.TRUE).build();
+        when(itemMapper.findByTenantAndMemoryId("tenant-1", "mem-stale")).thenReturn(stale);
+
+        assertThat(service.softInvalidateMemory("tenant-1", "mem-x", "r")).isFalse();
+        assertThat(service.softInvalidateMemory("tenant-1", "mem-stale", "r")).isFalse();
+        assertThat(service.softInvalidateMemory("tenant-1", "  ", "r")).isFalse();
+
+        verify(itemMapper, never()).markMemoryStaleByMemoryId(anyString(), anyString());
+        verify(eventMapper, never()).insert(any(MemoryEventRecord.class));
+    }
+
+    @Test
+    void contextSnapshotCarriesArbitrationHeader() {
+        MemoryItemRecord fact = MemoryItemRecord.builder()
+                .memoryId("mem-f").type("fact").content("住宿报销每晚上限 400 元")
+                .confidence(0.9).createdAt(java.time.LocalDateTime.now()).build();
+        when(itemMapper.findByTypeAndConfidence(anyString(), anyString(), anyDouble(), anyInt()))
+                .thenReturn(List.of(fact));
+        when(itemMapper.findByUserAndType(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of());
+
+        MemoryService.MemoryContextSnapshot snapshot = service.buildContext("tenant-1", "user-1", "报销", false);
+
+        // 冲突仲裁声明：有记忆注入时必须携带（三层消费路径统一生效）
+        assertThat(snapshot.contextText()).startsWith("（以下为历史沉淀的记忆");
+        assertThat(snapshot.contextText()).contains("以证据和最新对话为准");
+    }
+
+    @Test
+    void emptySelectionKeepsContextTextBlank() {
+        when(itemMapper.findByTypeAndConfidence(anyString(), anyString(), anyDouble(), anyInt()))
+                .thenReturn(List.of());
+        when(itemMapper.findByUserAndType(anyString(), anyString(), anyString(), anyInt()))
+                .thenReturn(List.of());
+
+        MemoryService.MemoryContextSnapshot snapshot = service.buildContext("tenant-1", "user-1", "q", false);
+
+        // 无记忆注入时保持空串：advisor/ReAct 段不会注入只剩声明头的空记忆
+        assertThat(snapshot.contextText()).isEmpty();
+    }
+
+    @Test
     void buildContextEmbedsQueryOnceAndConsumesCachedVectors() {
         MemoryEmbeddingHelper helper = mock(MemoryEmbeddingHelper.class);
         properties.setSemanticEnabled(true);

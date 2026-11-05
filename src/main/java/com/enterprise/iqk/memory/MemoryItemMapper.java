@@ -128,6 +128,33 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                             @Param("confidence") double confidence,
                             @Param("embeddingJson") String embeddingJson);
 
+    /** 近重复被更强证据取代：内容/来源/溯源锚点一并切到更强证据，置信度取调用方算好的合并值。 */
+    @Update("""
+            UPDATE memory_item
+            SET content = #{content}, source = #{source}, source_chat_id = #{sourceChatId},
+                confidence = #{confidence},
+                embedding_json = COALESCE(#{embeddingJson, jdbcType=VARCHAR}, embedding_json),
+                updated_at = NOW()
+            WHERE id = #{id}
+            """)
+    int mergeFactSupersede(@Param("id") Long id,
+                           @Param("content") String content,
+                           @Param("source") String source,
+                           @Param("sourceChatId") String sourceChatId,
+                           @Param("confidence") double confidence,
+                           @Param("embeddingJson") String embeddingJson);
+
+    /** 按业务 ID 软失效任意类型记忆（用户纠偏/治理动作）：幂等条件更新，返回失效行数。 */
+    @Update("""
+            UPDATE memory_item
+            SET stale = 1, updated_at = NOW()
+            WHERE tenant_id = #{tenantId}
+              AND memory_id = #{memoryId}
+              AND stale = 0
+            """)
+    int markMemoryStaleByMemoryId(@Param("tenantId") String tenantId,
+                                  @Param("memoryId") String memoryId);
+
     @Delete("DELETE FROM memory_item WHERE expires_at IS NOT NULL AND expires_at < NOW()")
     int deleteExpired();
 }

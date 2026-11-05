@@ -85,15 +85,16 @@ public class MemoryService {
     }
 
     /**
-     * fact 写入统一入口（带近重复合并）：fact 是唯一永久层，无 TTL 自然清退，
+     * fact 写入统一入口（带近重复合并 + 冲突消解）：fact 是唯一永久层，无 TTL 自然清退，
      * 同一事实被反复引用沉淀时若不查重，表将无界增长，且召回候选池按时间切
      * 30 条会被重复项挤占。命中既有条目（词面互含/bigram Jaccard，或向量
-     * 余弦达语义去重阈值）时合并：置信度取 max（更强证据支撑同一事实），
-     * 缺失向量补齐、已有向量保留，source/source_chat_id 不变（证据溯源锚点
-     * 保持首次写入），并记 UPDATE 事件留痕。
+     * 余弦达语义去重阈值）时合并，冲突消解语义按证据强弱分流：
+     * 新证据置信度严格更高 = 同一事实有了更强支撑的新说法（典型：政策条文修订）
+     * → 内容/来源/溯源锚点一并切到新证据；否则保持既有内容，只做置信度 max
+     * 与缺失向量补齐。两种路径都记 UPDATE 事件留痕。
      * 判重扫描异常或开关关闭时退化为直接写入——合并是治理增强，绝不阻塞证据沉淀。
      *
-     * @return 落库后的条目（新建，或合并后的既有条目）
+     * @return 落库后的条目（新建，或合并/接管后的既有条目）
      */
     public MemoryItemRecord upsertFactMemory(String tenantId, String chatId,
                                              String content, String source,
@@ -104,10 +105,27 @@ public class MemoryService {
                 if (existing != null) {
                     double oldConfidence = existing.getConfidence() == null ? 0 : existing.getConfidence();
                     double mergedConfidence = Math.max(oldConfidence, confidence);
-                    itemMapper.mergeFactConfidence(existing.getId(), mergedConfidence, embeddingJson);
-                    emitEvent(existing.getMemoryId(), "UPDATE", "near-duplicate fact merged: confidence "
-                            + oldConfidence + " -> " + mergedConfidence);
+                    // 冲突消解语义：新证据置信度严格更高 = "同一事实有了更强支撑的新说法"
+                    //（典型：政策条文修订）→ 内容/来源/溯源锚点一并切到新证据；
+                    // 否则保持既有内容，只做置信度 max 与缺失向量补齐（防"旧事实被弱证据加固"）。
+                    boolean superseded = confidence > oldConfidence;
+                    if (superseded) {
+                        itemMapper.mergeFactSupersede(existing.getId(), content, source,
+                                chatId, mergedConfidence, embeddingJson);
+                    } else {
+                        itemMapper.mergeFactConfidence(existing.getId(), mergedConfidence, embeddingJson);
+                    }
+                    emitEvent(existing.getMemoryId(), "UPDATE", superseded
+                            ? "near-duplicate fact superseded by stronger evidence: confidence "
+                                    + oldConfidence + " -> " + mergedConfidence
+                            : "near-duplicate fact merged: confidence "
+                                    + oldConfidence + " -> " + mergedConfidence);
                     existing.setConfidence(mergedConfidence);
+                    if (superseded) {
+                        existing.setContent(content);
+                        existing.setSource(source);
+                        existing.setSourceChatId(chatId);
+                    }
                     if (embeddingJson != null) {
                         existing.setEmbeddingJson(embeddingJson);
                     }
@@ -272,6 +290,13 @@ public class MemoryService {
         List<MemoryItemRecord> longMem = appendLayer(context, "用户长期记忆:", selectedLongMem, 1200);
         shortMem = appendLayer(context, "近期对话要点:", shortMem, 1000);
         List<MemoryItemRecord> facts = appendLayer(context, "可信事实:", selectedFacts, 1000);
+        // 冲突仲裁声明（三层记忆消费路径统一生效）：记忆是历史沉淀，可能过时——
+        // 与检索证据或用户最新表述冲突时，以证据和最新对话为准。有记忆才带声明，
+        // 空快照保持空串（advisor 不注入空记忆段）。
+        if (!longMem.isEmpty() || !shortMem.isEmpty() || !facts.isEmpty()) {
+            context.insert(0, "（以下为历史沉淀的记忆，仅供背景参考；"
+                    + "与检索证据或用户最新表述冲突时，以证据和最新对话为准）\n");
+        }
         List<MemoryItemRecord> recalled = new ArrayList<>(longMem);
         recalled.addAll(shortMem);
         recalled.addAll(facts);
@@ -394,6 +419,27 @@ public class MemoryService {
                 emitEvent(memoryId, "INVALIDATE", "source document deleted: chat=" + chatId));
         log.info("fact memories invalidated: tenant={}, chatId={}, rows={}", tenant, chatId, rows);
         return rows;
+    }
+
+    /**
+     * 按业务 ID 软失效任意类型记忆（用户纠偏/治理动作）：幂等（stale 条件更新），
+     * 逐条 INVALIDATE 事件留痕；记忆不存在、不属于该租户或已失效时返回 false。
+     * 纠偏流程用：用户明确更正既有画像时由提取服务调用，旧画像从此退出召回池。
+     */
+    public boolean softInvalidateMemory(String tenantId, String memoryId, String reason) {
+        if (!StringUtils.hasText(memoryId)) {
+            return false;
+        }
+        MemoryItemRecord item = itemMapper.findByTenantAndMemoryId(TenantContext.normalize(tenantId), memoryId);
+        if (item == null || Boolean.TRUE.equals(item.getStale())) {
+            return false;
+        }
+        int rows = itemMapper.markMemoryStaleByMemoryId(TenantContext.normalize(tenantId), memoryId);
+        if (rows <= 0) {
+            return false;
+        }
+        emitEvent(memoryId, "INVALIDATE", reason);
+        return true;
     }
 
     // ── 事件 ─────────────────────────────────────────────────────
