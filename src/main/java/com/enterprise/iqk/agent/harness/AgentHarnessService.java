@@ -19,48 +19,50 @@ public class AgentHarnessService {
     private final ActionPolicyGuard policyGuard;
     private final HarnessEventRecorder eventRecorder;
     private final HarnessPayloadSanitizer payloadSanitizer;
+    private final ActionInputNormalizer inputNormalizer;
 
     /**
-     * 执行一个动作的完整链路：守卫拒绝 → error("policy")；
+     * 执行一个动作的完整链路：输入归一化 → 守卫拒绝 → error("policy")；
      * 无 runtime 接手 → error("runtime")；执行抛异常 → 兜底转 error 观测；
      * 成功/失败的结果都要经载荷消毒并写事件后返回。
      */
     public AgentObservation execute(AgentAction action) {
         long startedNs = System.nanoTime();
-        ActionPolicyDecision decision = policyGuard.evaluate(action);
+        AgentAction normalized = inputNormalizer.normalize(action);
+        ActionPolicyDecision decision = policyGuard.evaluate(normalized);
         if (!decision.allowed()) {
             AgentObservation observation = AgentObservation.error(
                     "policy",
                     decision.message(),
                     elapsedMs(startedNs)
             );
-            eventRecorder.completed(action, observation);
+            eventRecorder.completed(normalized, observation);
             return observation;
         }
 
         AgentRuntime runtime = runtimes.stream()
-                .filter(candidate -> candidate.supports(action.action()))
+                .filter(candidate -> candidate.supports(normalized.action()))
                 .findFirst()
                 .orElse(null);
         if (runtime == null) {
             AgentObservation observation = AgentObservation.error(
                     "runtime",
-                    "no runtime for action: " + action.action(),
+                    "no runtime for action: " + normalized.action(),
                     elapsedMs(startedNs)
             );
-            eventRecorder.completed(action, observation);
+            eventRecorder.completed(normalized, observation);
             return observation;
         }
 
-        eventRecorder.started(action, runtime.source());
+        eventRecorder.started(normalized, runtime.source());
         AgentObservation observation;
         try {
-            observation = runtime.execute(action);
+            observation = runtime.execute(normalized);
         } catch (RuntimeException ex) {
             observation = AgentObservation.error(runtime.source(), "action failed: " + ex.getMessage(), elapsedMs(startedNs));
         }
         observation = payloadSanitizer.limitObservation(observation);
-        eventRecorder.completed(action, observation);
+        eventRecorder.completed(normalized, observation);
         return observation;
     }
 

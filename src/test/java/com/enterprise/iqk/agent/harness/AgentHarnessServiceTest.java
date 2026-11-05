@@ -1,6 +1,7 @@
 package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -36,7 +37,8 @@ class AgentHarnessServiceTest {
                 List.of(runtime),
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
                 recorder,
-                new HarnessPayloadSanitizer()
+                new HarnessPayloadSanitizer(),
+                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper())
         );
         AgentAction action = new AgentAction("create_task",
                 Map.of("title", "准备会议", "description", "整理议题"), "prompt",
@@ -58,7 +60,8 @@ class AgentHarnessServiceTest {
                 List.of(runtime),
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
                 recorder,
-                new HarnessPayloadSanitizer()
+                new HarnessPayloadSanitizer(),
+                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper())
         );
         AgentAction action = new AgentAction("run_shell", Map.of(), "prompt",
                 "tenant", "chat", "balanced", "task-1", "step-1");
