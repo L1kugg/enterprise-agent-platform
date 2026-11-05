@@ -275,7 +275,7 @@ app:
           tools:
             read_wiki_structure: { timeout-ms: 15000 }
             read_wiki_contents: { timeout-ms: 30000 }
-            ask_wiki_question: { timeout-ms: 60000 }
+            ask_wiki_question: { timeout-ms: 120000 }
         context7:
           base-url: https://mcp.context7.com
           endpoint: /mcp

@@ -105,9 +105,14 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
         this.defaultTimeoutMs = defaultTimeoutMs;
         this.toolTimeoutMs = toolTimeoutMs == null ? Map.of() : toolTimeoutMs;
         // 连接点 DNS 固定：解析出的地址即实际连接地址，消除"校验时公共 IP、连接时被改判"的重绑定窗口。
+        // 空闲连接治理（2026-11-05 生产实证）：DeepWiki/AWS 网关会静默关闭闲置 ~1-2 分钟的
+        // keep-alive 连接且不给 Keep-Alive 提示——启动期握手建立、用户几分钟后才首次调用，
+        // 复用僵尸连接的症状恰是"写出去石沉大海，干等满 responseTimeout"。TTL 30s 让池内
+        // 连接永远比服务端空闲阈值年轻，配合 sendWithRetry 的 IOException 退避重试自愈。
         this.httpClient = HttpClients.custom()
                 .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
                         .setDnsResolver(new McpSsrfGuard.PinningDnsResolver(mcpConfig::getAllowedInternalAddresses))
+                        .setConnectionTimeToLive(TimeValue.ofSeconds(30))
                         .build())
                 // 关闭 HC5 内建重试：瞬时故障重试统一由 sendWithRetry 按配置计数与退避
                 .setRetryStrategy(new DefaultHttpRequestRetryStrategy(0, TimeValue.ZERO_MILLISECONDS))
