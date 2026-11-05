@@ -246,7 +246,7 @@ app:
       # 匹配整段域）。命中白名单不豁免任何地址检查——解析到回环/私有网段的地址
       # 必须在 allowed-internal-addresses 中按"主机+端口+网段"逐条显式授权。
       # 默认为空 = 拒绝一切出站 MCP（fail-closed），接入 server 时显式配置。
-      allowed-hosts: ${APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS:}
+      allowed-hosts: ${APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS:mcp.deepwiki.com,mcp.context7.com}
       # 内部地址显式授权（无按环境一键放行的开关，生产同理需逐条声明）。
       # compose 内部 MCP 服务经 Docker 内置 DNS 解析到容器网段（默认 172.16.0.0/12），
       # 接入时按"服务名 + 端口 + 网段"逐条授权（对象列表不做环境变量占位，直接写 yml），示例：
@@ -265,7 +265,23 @@ app:
       #       tools:
       #         get_weather:
       #           timeout-ms: 8000
-      servers: {}
+      # 生产默认接入两个免鉴权的公共 server（2026-11-05 实测握手/发现均通）：
+      # DeepWiki——GitHub 仓库 AI 文档问答；Context7——框架/库最新文档（免 key 限速）。
+      # 需要鉴权头的 server 等配置支持 headers 后再接。
+      servers:
+        deepwiki:
+          base-url: https://mcp.deepwiki.com
+          endpoint: /mcp
+          tools:
+            read_wiki_structure: { timeout-ms: 15000 }
+            read_wiki_contents: { timeout-ms: 30000 }
+            ask_wiki_question: { timeout-ms: 60000 }
+        context7:
+          base-url: https://mcp.context7.com
+          endpoint: /mcp
+          tools:
+            resolve-library-id: { timeout-ms: 15000 }
+            get-library-docs: { timeout-ms: 30000 }
     # 主库只读查询动作（query_database）：模型生成 SQL，后端正则守卫 + 只读会话 + 超时/行数/单元格截断。
     # max-rows 与 HarnessPayloadSanitizer 的集合截断上限（30）对齐，配大只会被消毒器二次截断
     database-query:
