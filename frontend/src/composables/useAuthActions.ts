@@ -6,6 +6,7 @@
 import { ElMessage } from 'element-plus';
 
 import { authLogout, authMe, loginWithPassword, registerUser, setUnauthorizedHandler } from '../api/client';
+import { saveRememberedLogin } from '../utils/rememberedLogin';
 import { persistState } from './persistence';
 import {
   authLoading,
@@ -14,6 +15,7 @@ import {
   authUsername,
   canUseRemoteSync,
   loggedIn,
+  rememberLogin,
   role,
   tenantInput,
 } from './useAuthState';
@@ -70,7 +72,13 @@ export async function handlePasswordAuth(): Promise<void> {
     if (auth.tenantId) {
       tenantInput.value = auth.tenantId;
     }
-    authPassword.value = '';
+    // 记住账号恒存；勾选"记住密码"才存密码，未勾选即清掉旧密码。
+    // 表单密码同步保留/清空：退出后回到登录页时预填与存储一致
+    saveRememberedLogin(
+      auth.username ?? credentials.username,
+      rememberLogin.value ? credentials.password : null,
+    );
+    authPassword.value = rememberLogin.value ? credentials.password : '';
     ElMessage.success(authMode.value === 'login' ? '登录成功' : '注册成功，已自动登录');
     persistState();
     await loadSessionsFromCloud();

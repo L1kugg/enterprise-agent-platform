@@ -18,6 +18,8 @@ export const loggedIn = ref(Boolean(bootstrap.role));
 export const authMode = ref<'login' | 'register'>('login');
 export const authUsername = ref('');
 export const authPassword = ref('');
+// 登录表单"记住密码"勾选态（AuthGate 预填时按已存密码初始化，handlePasswordAuth 据此存/清）
+export const rememberLogin = ref(false);
 export const isAdmin = computed(() => role.value === 'ADMIN');
 export const authLoading = ref(false);
 export const canUseRemoteSync = computed(() => loggedIn.value);

@@ -25,6 +25,7 @@
         :placeholder="authMode === 'login' ? '密码' : '密码（至少 8 位）'"
         @keyup.enter="handlePasswordAuth"
       />
+      <el-checkbox v-model="rememberLogin" class="remember-row">记住密码（公用电脑勿勾选）</el-checkbox>
       <el-button
         type="primary"
         class="auth-submit"
@@ -37,17 +38,33 @@
 </template>
 
 <script setup lang="ts">
-// 登录/注册门闩：未登录（无 token）时整页显示登录/注册，登录后才渲染控制台。
-// API Key 前端登录入口已移除（2026-10-24）：程序化接入走 X-API-Key 直调后端，
-// 人的登录只有用户名密码一条路，杜绝"有 Key 无 JWT"的半登录态。
+// 登录/注册门闩：未登录（无服务端会话）时整页显示登录/注册，登录后才渲染控制台。
+// 程序化接入走 X-API-Key 直调后端，人的登录只有用户名密码一条路。
+// 上次登录账号恒预填（非敏感）；勾选"记住密码"时密码以 base64 混淆存
+// localStorage（便利级而非安全级，见 utils/rememberedLogin.ts 头注释）。
+import { onMounted } from 'vue';
 import {
   authLoading,
   authMode,
   authPassword,
   authUsername,
   canUseRemoteSync,
+  rememberLogin,
 } from '../composables/useAuthState';
 import { handlePasswordAuth } from '../composables/useAuthActions';
+import { loadRememberedLogin } from '../utils/rememberedLogin';
+
+// 登录页挂载即预填：上次登录的账号恒填；记住了密码则连密码一起回填并勾选
+onMounted(() => {
+  const remembered = loadRememberedLogin();
+  if (remembered.username) {
+    authUsername.value = remembered.username;
+  }
+  if (remembered.password) {
+    authPassword.value = remembered.password;
+    rememberLogin.value = true;
+  }
+});
 </script>
 
 <style scoped>
@@ -128,6 +145,16 @@ import { handlePasswordAuth } from '../composables/useAuthActions';
   width: 100%;
   --el-button-size: 40px;
   font-weight: 600;
+}
+
+.remember-row {
+  height: auto;
+  margin: -6px 0 -4px;
+  color: var(--ui-muted);
+}
+
+.remember-row :deep(.el-checkbox__label) {
+  font-size: 12.5px;
 }
 
 :deep(.el-tabs__nav-wrap::after) {
