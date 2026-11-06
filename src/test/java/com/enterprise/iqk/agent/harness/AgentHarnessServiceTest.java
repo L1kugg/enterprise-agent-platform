@@ -1,6 +1,8 @@
 package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
+import com.enterprise.iqk.domain.AuditLog;
+import com.enterprise.iqk.mapper.AuditLogMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -17,6 +20,7 @@ class AgentHarnessServiceTest {
     @Test
     void executeRoutesAllowedActionToRuntime() {
         HarnessEventRecorder recorder = mock(HarnessEventRecorder.class);
+        AuditLogMapper auditLogMapper = mock(AuditLogMapper.class);
         AgentRuntime runtime = new AgentRuntime() {
             @Override
             public String source() {
@@ -38,7 +42,9 @@ class AgentHarnessServiceTest {
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
                 recorder,
                 new HarnessPayloadSanitizer(),
-                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper())
+                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper()),
+                new HarnessAuditRecorder(auditLogMapper),
+                new ObjectMapper()
         );
         AgentAction action = new AgentAction("create_task",
                 Map.of("title", "准备会议", "description", "整理议题"), "prompt",
@@ -47,6 +53,8 @@ class AgentHarnessServiceTest {
         AgentObservation observation = service.execute(action);
 
         assertThat(observation.toMap()).containsEntry("result", "ok");
+        // 每个动作结局统一落一行动作审计（audit_log），无论哪个 runtime
+        verify(auditLogMapper).insert(any(AuditLog.class));
         verify(recorder).started(action, "fake");
         verify(recorder).completed(action, observation);
         verifyNoMoreInteractions(recorder);
@@ -61,7 +69,9 @@ class AgentHarnessServiceTest {
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
                 recorder,
                 new HarnessPayloadSanitizer(),
-                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper())
+                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper()),
+                new HarnessAuditRecorder(mock(AuditLogMapper.class)),
+                new ObjectMapper()
         );
         AgentAction action = new AgentAction("run_shell", Map.of(), "prompt",
                 "tenant", "chat", "balanced", "task-1", "step-1");

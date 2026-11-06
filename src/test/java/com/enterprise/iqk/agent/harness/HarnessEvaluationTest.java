@@ -1,6 +1,7 @@
 package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
+import com.enterprise.iqk.mapper.AuditLogMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -26,7 +27,9 @@ class HarnessEvaluationTest {
                 new ActionPolicyGuard(new ActionSchemaRegistry(), new AgentHarnessProperties()),
                 mock(HarnessEventRecorder.class),
                 new HarnessPayloadSanitizer(),
-                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper())
+                new ActionInputNormalizer(new ActionSchemaRegistry(), new ObjectMapper()),
+                new HarnessAuditRecorder(mock(AuditLogMapper.class)),
+                new ObjectMapper()
         );
 
         AgentObservation builtin = service.execute(action("create_task",

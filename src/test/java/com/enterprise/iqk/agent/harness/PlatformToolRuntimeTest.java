@@ -4,7 +4,6 @@ import com.enterprise.iqk.domain.AgentToolConfirmationRecord;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.mapper.AgentBindingMapper;
 import com.enterprise.iqk.mapper.AgentToolConfirmationMapper;
-import com.enterprise.iqk.mapper.AuditLogMapper;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
 import com.enterprise.iqk.service.platform.PlatformToolInvoker;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,9 +37,6 @@ class PlatformToolRuntimeTest {
     private AgentBindingMapper bindingMapper;
 
     @Mock
-    private AuditLogMapper auditLogMapper;
-
-    @Mock
     private AgentToolConfirmationMapper confirmationMapper;
 
     /** 真实服务实例的 spy：parseToolConfig 走真实逻辑，仅 stub invoke（不发真实 HTTP/SQL/沙箱）。 */
@@ -57,7 +53,7 @@ class PlatformToolRuntimeTest {
                 new com.enterprise.iqk.service.platform.PlatformToolConfirmationService(
                         confirmationMapper, invoker, invocation, new ObjectMapper(),
                         event -> { });
-        return new PlatformToolRuntime(invoker, invocation, confirmationService, auditLogMapper,
+        return new PlatformToolRuntime(invoker, invocation, confirmationService,
                 new SimpleMeterRegistry());
     }
 
