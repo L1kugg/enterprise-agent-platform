@@ -39,6 +39,10 @@ public class SecurityConfiguration {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // CSRF 保持关闭的依据：人类登录凭证是 SameSite=Strict 的 HttpOnly Session Cookie
+        // （UserSessionService），浏览器不会在跨站请求中携带它；平台是同源 SPA，
+        // 无任何跨站提交场景。程序化通道（Bearer JWT / X-API-Key）走请求头，天然不受 CSRF 影响。
+        // STATELESS 不变：会话由 user_session 表自管，不使用容器 JSESSIONID。
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
@@ -61,7 +65,8 @@ public class SecurityConfiguration {
                     .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                     .requestMatchers("/actuator/prometheus").hasAnyAuthority("PERM_METRICS_READ", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.GET, "/audit/logs").hasAnyAuthority("PERM_AUDIT_READ", "ROLE_ADMIN", "ROLE_OPS")
-                    .requestMatchers(HttpMethod.POST, "/auth/token", "/auth/refresh", "/auth/login", "/auth/register").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/token", "/auth/login", "/auth/register", "/auth/logout").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/auth/me").permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/api-keys/**").hasAnyAuthority("PERM_AUTH_KEY_MANAGE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/chat", "/ai/chat/stream", "/ai/service").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")

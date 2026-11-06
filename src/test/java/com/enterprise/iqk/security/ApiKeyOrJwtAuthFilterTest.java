@@ -7,24 +7,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ApiKeyOrJwtAuthFilterTest {
 
-    @Test
-    void shouldReturn401WithoutCredentials() throws ServletException, IOException {
+    private static SecurityProperties enabledProps() {
         SecurityProperties props = new SecurityProperties();
         props.setEnabled(true);
-        ApiKeyAuthService apiKeyAuthService = mock(ApiKeyAuthService.class);
-        JwtService jwtService = mock(JwtService.class);
-        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService, mock(UserAccountMapper.class));
+        return props;
+    }
+
+    @Test
+    void shouldReturn401WithoutCredentials() throws ServletException, IOException {
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(enabledProps(), mock(ApiKeyAuthService.class),
+                mock(JwtService.class), mock(UserAccountMapper.class), mock(UserSessionService.class));
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -35,11 +42,39 @@ class ApiKeyOrJwtAuthFilterTest {
     }
 
     @Test
-    void shouldPassWithApiKey() throws ServletException, IOException {
-        SecurityProperties props = new SecurityProperties();
-        props.setEnabled(true);
+    void sessionCookieIdentityTakesPriorityOverOtherChannels() throws ServletException, IOException {
         ApiKeyAuthService apiKeyAuthService = mock(ApiKeyAuthService.class);
         JwtService jwtService = mock(JwtService.class);
+        UserSessionService sessionService = mock(UserSessionService.class);
+        when(sessionService.rawSessionIdOf(any())).thenReturn("raw-session");
+        when(sessionService.resolve("raw-session")).thenReturn(AuthIdentity.builder()
+                .principal("alice")
+                .roles(List.of("USER"))
+                .permissions(List.of("chat:write"))
+                .tenantId("public")
+                .source("session")
+                .build());
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(enabledProps(), apiKeyAuthService,
+                jwtService, mock(UserAccountMapper.class), sessionService);
+
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
+        req.addHeader("X-API-Key", "should-not-be-consulted");
+        MockHttpServletResponse resp = new MockHttpServletResponse();
+        filter.doFilter(req, resp, (request, response) -> {
+            assertEquals("public", request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+            // 会话身份与其余通道产出同一套 ROLE_/PERM_ 权限
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            assertEquals("alice", auth.getName());
+            assertEquals(true, auth.getAuthorities().stream()
+                    .anyMatch(a -> "PERM_CHAT_WRITE".equals(a.getAuthority())));
+        });
+        assertEquals(200, resp.getStatus());
+        verify(apiKeyAuthService, never()).authenticate(any());
+    }
+
+    @Test
+    void shouldPassWithApiKey() throws ServletException, IOException {
+        ApiKeyAuthService apiKeyAuthService = mock(ApiKeyAuthService.class);
         when(apiKeyAuthService.authenticate("ak")).thenReturn(AuthIdentity.builder()
                 .principal("tester")
                 .roles(List.of("ADMIN"))
@@ -47,7 +82,8 @@ class ApiKeyOrJwtAuthFilterTest {
                 .tenantId("tenant-a")
                 .source("api_key")
                 .build());
-        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService, mock(UserAccountMapper.class));
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(enabledProps(), apiKeyAuthService,
+                mock(JwtService.class), mock(UserAccountMapper.class), mock(UserSessionService.class));
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
         req.addHeader("X-API-Key", "ak");
@@ -62,13 +98,11 @@ class ApiKeyOrJwtAuthFilterTest {
     }
 
     @Test
-    void shouldPassRegisterAndLoginWithoutCredentials() throws ServletException, IOException {
-        SecurityProperties props = new SecurityProperties();
-        props.setEnabled(true);
-        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props,
-                mock(ApiKeyAuthService.class), mock(JwtService.class), mock(UserAccountMapper.class));
+    void shouldPassPublicAuthEndpointsWithoutCredentials() throws ServletException, IOException {
+        ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(enabledProps(), mock(ApiKeyAuthService.class),
+                mock(JwtService.class), mock(UserAccountMapper.class), mock(UserSessionService.class));
 
-        for (String path : List.of("/auth/register", "/auth/login")) {
+        for (String path : List.of("/auth/register", "/auth/login", "/auth/me", "/auth/logout")) {
             MockHttpServletRequest req = new MockHttpServletRequest("POST", path);
             MockHttpServletResponse resp = new MockHttpServletResponse();
             filter.doFilter(req, resp, new MockFilterChain());

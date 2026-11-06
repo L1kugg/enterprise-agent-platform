@@ -42,7 +42,9 @@ class JavaApiContractTest {
         }
 
         assertSupports(endpoints, "POST", "/auth/token");
-        assertSupports(endpoints, "POST", "/auth/refresh");
+        assertSupports(endpoints, "POST", "/auth/login");
+        assertSupports(endpoints, "GET", "/auth/me");
+        assertSupports(endpoints, "POST", "/auth/logout");
         assertSupports(endpoints, "POST", "/auth/api-keys");
         assertSupports(endpoints, "POST", "/ai/chat");
         assertSupports(endpoints, "POST", "/ai/chat/stream");

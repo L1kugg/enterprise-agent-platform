@@ -10,16 +10,15 @@ import com.enterprise.iqk.security.ApiKeyLifecycleService;
 import com.enterprise.iqk.security.AuthIdentity;
 import com.enterprise.iqk.security.JwtService;
 import com.enterprise.iqk.security.PermissionService;
-import com.enterprise.iqk.security.RefreshTokenService;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.security.UserAuthService;
-import jakarta.servlet.http.Cookie;
+import com.enterprise.iqk.security.UserSessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -27,38 +26,33 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 认证入口。人类通道走服务端会话：login/register 建立会话并下发 HttpOnly Session
+ * Cookie，/me 探测当前身份，/logout 吊销会话。程序化通道保留：/token 用 API Key
+ * 换短周期 JWT，/api-keys 管理 API Key。
+ */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    private static final long REFRESH_EXPIRE_SOON_DAYS = 2L;
-    /** 存放长效 refresh token 的 HttpOnly cookie 的名称。 */
-    public static final String REFRESH_COOKIE = "kops_refresh";
 
     private final ApiKeyAuthService apiKeyAuthService;
     private final ApiKeyLifecycleService apiKeyLifecycleService;
     private final JwtService jwtService;
-    private final RefreshTokenService refreshTokenService;
     private final PermissionService permissionService;
     private final SecurityProperties securityProperties;
     private final UserAuthService userAuthService;
+    private final UserSessionService userSessionService;
 
     /**
-     * 为 true（默认值）时，refresh token cookie 会标记 Secure 并使用
-     * SameSite=Strict 策略。在本地开发中通过纯 HTTP 提供服务的操作员
-     * 应设置 {@code app.security.refresh-cookie-secure=false}，以便
-     * localhost 浏览器能够使用该 cookie。
+     * 程序化通道（API Key → JWT）：脚本/CI 用 API Key 换一个短周期 JWT 后以
+     * Bearer 方式调用。人类登录不走这里——走 /auth/login 的 Session Cookie。
      */
-    @Value("${app.security.refresh-cookie-secure:true}")
-    private boolean refreshCookieSecure;
-
     @PostMapping("/token")
     public AuthTokenVO token(@RequestHeader("X-API-Key") String apiKey,
-                             @RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantHeader,
-                             HttpServletResponse response) {
+                             @RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantHeader) {
         AuthIdentity identity = apiKeyAuthService.authenticate(apiKey);
         if (identity == null) {
             return AuthTokenVO.builder().ok(0).msg("API Key 不正确").build();
@@ -69,37 +63,17 @@ public class AuthController {
         }
         List<String> permissions = permissionService.permissionsForRoles(identity.getRoles());
         String token = jwtService.issueToken(identity.getPrincipal(), identity.getRoles(), permissions, identityTenant);
-        RefreshTokenService.RefreshTokenIssueResult refreshIssue =
-                refreshTokenService.issue(identity.getPrincipal(), identity.getRoles(), identityTenant);
-        // Refresh token 以 HttpOnly cookie 下发，这样前端即使发生 XSS
-        // 也无法窃取这份长效凭据。响应体中仍会携带一份副本，
-        // 供尚未切换到 credentials: 'include' 的现有 App.vue 使用。
-        // 等配套的 PR（PR B）合入且 App.vue 弃用 localStorage 后，
-        // 即可移除响应体中的该字段，且不会在升级过程中破坏旧客户端。
-        setRefreshCookie(response, refreshIssue);
-        return buildTokenResponse(token, identityTenant, refreshIssue, firstRole(identity.getRoles()));
+        return AuthTokenVO.builder()
+                .ok(1)
+                .msg("ok")
+                .token(token)
+                .tenantId(identityTenant)
+                .role(firstRole(identity.getRoles()))
+                .expiresInSeconds(securityProperties.getJwtExpireMinutes() * 60L)
+                .build();
     }
 
-    @PostMapping("/refresh")
-    public AuthTokenVO refresh(@RequestHeader(value = "X-Refresh-Token", required = false) String refreshTokenHeader,
-                              @CookieValue(value = REFRESH_COOKIE, required = false) String refreshCookie) {
-        // 接受来自旧版 X-Refresh-Token 请求头或 /auth/token 所设置
-        // HttpOnly cookie 的 refresh token。请求头优先，这样旧客户端
-        // （或测试脚本）仍可覆盖 cookie 中的值。
-        String refreshToken = StringUtils.hasText(refreshTokenHeader) ? refreshTokenHeader : refreshCookie;
-        AuthIdentity identity = refreshTokenService.consume(refreshToken);
-        if (identity == null) {
-            return AuthTokenVO.builder().ok(0).msg("登录已过期，请重新登录").build();
-        }
-        String tenantId = TenantContext.normalize(identity.getTenantId());
-        List<String> permissions = permissionService.permissionsForRoles(identity.getRoles());
-        String token = jwtService.issueToken(identity.getPrincipal(), identity.getRoles(), permissions, tenantId);
-        RefreshTokenService.RefreshTokenIssueResult refreshIssue =
-                refreshTokenService.issue(identity.getPrincipal(), identity.getRoles(), tenantId);
-        return buildTokenResponse(token, tenantId, refreshIssue, firstRole(identity.getRoles()));
-    }
-
-    /** 开放注册：用户名 + 密码 → 建号（USER 角色、私有租户）并直接签发会话。 */
+    /** 开放注册：用户名 + 密码 → 建号（USER 角色、公司租户 public）并直接建立会话。 */
     @PostMapping("/register")
     public AuthTokenVO register(@RequestBody(required = false) AuthCredentialsVO request,
                                 HttpServletResponse response) {
@@ -114,10 +88,10 @@ public class AuthController {
             // 与 /auth/token 的 invalid api key 同一契约：HTTP 200 + ok=0 + msg
             return AuthTokenVO.builder().ok(0).msg(ex.getMessage()).build();
         }
-        return issuePasswordSession(user, response);
+        return issueSession(user, response);
     }
 
-    /** 密码登录：校验通过即签发会话；失败统一返回"用户名或密码不正确"，防用户名枚举。 */
+    /** 密码登录：校验通过即建立服务端会话；失败统一返回"用户名或密码不正确"，防用户名枚举。 */
     @PostMapping("/login")
     public AuthTokenVO login(@RequestBody(required = false) AuthCredentialsVO request,
                              HttpServletResponse response) {
@@ -129,57 +103,37 @@ public class AuthController {
         if (user == null) {
             return AuthTokenVO.builder().ok(0).msg("用户名或密码不正确").build();
         }
-        return issuePasswordSession(user, response);
+        return issueSession(user, response);
     }
 
-    /** 注册 / 密码登录共用的会话签发：JWT + 一次性旋转 refresh + HttpOnly cookie。 */
-    private AuthTokenVO issuePasswordSession(UserAccount user, HttpServletResponse response) {
-        List<String> roles = userAuthService.roleNamesOf(user);
-        List<String> permissions = permissionService.permissionsForRoles(roles);
-        String tenantId = TenantContext.normalize(user.getTenantId());
-        String token = jwtService.issueToken(user.getUsername(), roles, permissions, tenantId);
-        RefreshTokenService.RefreshTokenIssueResult refreshIssue =
-                refreshTokenService.issue(user.getUsername(), roles, tenantId);
-        setRefreshCookie(response, refreshIssue);
-        return buildTokenResponse(token, tenantId, refreshIssue, firstRole(roles));
-    }
-
-    /** 取首个非空角色作为前端显隐管理员 UI 的依据；无角色返回空串。 */
-    private String firstRole(List<String> roles) {
-        if (roles == null) {
-            return "";
+    /**
+     * 当前身份探测（Session Cookie 通道）：前端启动时调用以校正登录态与角色。
+     * 未登录返回 ok=0（HTTP 200，前端按"未登录"处理而非报错）。
+     */
+    @GetMapping("/me")
+    public AuthTokenVO me(HttpServletRequest request) {
+        AuthIdentity identity = userSessionService.resolve(userSessionService.rawSessionIdOf(request));
+        if (identity == null) {
+            return AuthTokenVO.builder().ok(0).msg("未登录").build();
         }
-        return roles.stream().filter(StringUtils::hasText).findFirst().orElse("");
+        return AuthTokenVO.builder()
+                .ok(1)
+                .msg("ok")
+                .username(identity.getPrincipal())
+                .tenantId(identity.getTenantId())
+                .role(firstRole(identity.getRoles()))
+                .build();
     }
 
-    private void setRefreshCookie(HttpServletResponse response, RefreshTokenService.RefreshTokenIssueResult refreshIssue) {
-        long maxAge = Math.max(0L,
-                java.time.Duration.between(
-                        java.time.Instant.now(),
-                        refreshIssue.expiresAt().atZone(java.time.ZoneOffset.UTC).toInstant()
-                ).getSeconds());
-        // Servlet Cookie API 没有 SameSite 的设置方法，因此需要手工
-        // 拼接 Set-Cookie 头。开发环境配置（refresh-cookie-secure=false）
-        // 下省略 Secure 标志，因为 Secure cookie 不会随纯 HTTP 请求发送，
-        // 而开发前端正是通过纯 HTTP 访问开发后端的。
-        String secureAttr = refreshCookieSecure ? "; Secure" : "";
-        String cookieValue = String.format(
-                "%s=%s; Path=/auth; Max-Age=%d; HttpOnly%s; SameSite=Strict",
-                REFRESH_COOKIE,
-                refreshIssue.rawToken(),
-                Math.min(maxAge, Integer.MAX_VALUE),
-                secureAttr);
-        Cookie cookie = new Cookie(REFRESH_COOKIE, refreshIssue.rawToken());
-        cookie.setHttpOnly(true);
-        cookie.setSecure(refreshCookieSecure);
-        cookie.setPath("/auth");
-        cookie.setMaxAge((int) Math.min(maxAge, Integer.MAX_VALUE));
-        response.addCookie(cookie);
-        // 标准 Cookie API 不支持 SameSite；追加第二个 Set-Cookie 头
-        // （带 SameSite 属性），使容器在序列化时必须合并。第一个
-        // Set-Cookie（来自 addCookie）与第二个（来自 addHeader）的
-        // 值和属性完全相同；按照 RFC 7234，下游缓存会保留其中一个。
-        response.addHeader("Set-Cookie", cookieValue);
+    /**
+     * 登出：吊销当前会话（幂等）并清除 Cookie。未登录时调用同样清 Cookie 并返回 ok=1
+     * ——语义即"已处于登出态"，前端无需区分。
+     */
+    @PostMapping("/logout")
+    public AuthTokenVO logout(HttpServletRequest request, HttpServletResponse response) {
+        boolean revoked = userSessionService.revoke(userSessionService.rawSessionIdOf(request));
+        userSessionService.clearSessionCookie(response);
+        return AuthTokenVO.builder().ok(1).msg(revoked ? "logged out" : "no active session").build();
     }
 
     @PostMapping("/api-keys")
@@ -228,23 +182,27 @@ public class AuthController {
                 .build();
     }
 
-    private AuthTokenVO buildTokenResponse(String token,
-                                           String tenantId,
-                                           RefreshTokenService.RefreshTokenIssueResult refreshIssue,
-                                           String role) {
-        LocalDateTime refreshExpiresAt = refreshIssue.expiresAt();
-        boolean refreshWillExpireSoon = refreshExpiresAt != null
-                && refreshExpiresAt.isBefore(LocalDateTime.now().plusDays(REFRESH_EXPIRE_SOON_DAYS));
+    /** 注册 / 密码登录共用：建立服务端会话 + 下发 HttpOnly Session Cookie（响应体不含任何令牌）。 */
+    private AuthTokenVO issueSession(UserAccount user, HttpServletResponse response) {
+        List<String> roles = userAuthService.roleNamesOf(user);
+        String tenantId = TenantContext.normalize(user.getTenantId());
+        UserSessionService.SessionIssue session =
+                userSessionService.create(user.getUsername(), roles, tenantId);
+        userSessionService.writeSessionCookie(response, session.rawSessionId(), session.expiresAt());
         return AuthTokenVO.builder()
                 .ok(1)
                 .msg("ok")
-                .token(token)
-                .refreshToken(refreshIssue.rawToken())
+                .username(user.getUsername())
                 .tenantId(tenantId)
-                .role(role)
-                .expiresInSeconds(securityProperties.getJwtExpireMinutes() * 60L)
-                .refreshExpiresAt(refreshExpiresAt)
-                .refreshWillExpireSoon(refreshWillExpireSoon)
+                .role(firstRole(roles))
                 .build();
+    }
+
+    /** 取首个非空角色作为前端显隐管理员 UI 的依据；无角色返回空串。 */
+    private String firstRole(List<String> roles) {
+        if (roles == null) {
+            return "";
+        }
+        return roles.stream().filter(StringUtils::hasText).findFirst().orElse("");
     }
 }

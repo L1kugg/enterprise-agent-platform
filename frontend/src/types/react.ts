@@ -2,12 +2,11 @@ export interface AuthTokenResponse {
   ok: number;
   msg: string;
   token?: string;
-  refreshToken?: string;
   tenantId?: string;
+  /** 登录用户名（/auth/login、/auth/me 返回） */
+  username?: string;
   /** 首个角色（ADMIN / USER），用于显隐管理员 UI（如删除文档按钮）。 */
   role?: string;
-  expiresInSeconds?: number;
-  refreshWillExpireSoon?: boolean;
 }
 
 export interface ReactChatRequest {
@@ -88,9 +87,9 @@ export interface ReactErrorEvent {
 
 export type ReactStreamEvent = 'trace' | 'token' | 'done' | 'error';
 
-/** 前端认证上下文：只有 JWT 一条路；API Key 是程序化接入通道（X-API-Key 直调后端），不经前端。 */
+/** 前端认证上下文：会话凭据在 HttpOnly Cookie 里由浏览器自动携带，这里只剩租户提示；
+ * API Key 是程序化接入通道（X-API-Key 直调后端），不经前端。 */
 export interface AuthContext {
-  token?: string;
   tenantId?: string;
 }
 

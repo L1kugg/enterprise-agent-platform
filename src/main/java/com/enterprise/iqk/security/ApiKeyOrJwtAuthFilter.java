@@ -31,6 +31,7 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
     private final ApiKeyAuthService apiKeyAuthService;
     private final JwtService jwtService;
     private final UserAccountMapper userAccountMapper;
+    private final UserSessionService userSessionService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -79,7 +80,15 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * 三通道身份解析，优先级：Session Cookie（人类登录）→ Bearer JWT（/auth/token 换取的
+     * 程序化令牌）→ X-API-Key。三条通道产出同一种 AuthIdentity，下游权限构造与租户注入一致。
+     */
     private AuthIdentity resolveIdentity(HttpServletRequest request) {
+        AuthIdentity sessionIdentity = userSessionService.resolve(userSessionService.rawSessionIdOf(request));
+        if (sessionIdentity != null) {
+            return sessionIdentity;
+        }
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {
             String token = authorization.substring("Bearer ".length()).trim();
@@ -106,9 +115,10 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
                 || uri.startsWith("/v3/api-docs")
                 || uri.startsWith("/swagger-ui")
                 || uri.startsWith("/auth/token")
-                || uri.startsWith("/auth/refresh")
                 || uri.startsWith("/auth/login")
                 || uri.startsWith("/auth/register")
+                || uri.startsWith("/auth/me")
+                || uri.startsWith("/auth/logout")
                 || uri.startsWith("/error");
     }
 

@@ -44,11 +44,9 @@ function resolveApi(path: string): string {
   return `${API_BASE}${path}`;
 }
 
+/** 请求头：会话凭据走 HttpOnly Cookie（credentials:'include' 自动携带），这里只附租户提示。 */
 function buildAuthHeaders(auth?: AuthContext): HeadersInit {
   const headers: Record<string, string> = {};
-  if (auth?.token) {
-    headers.Authorization = `Bearer ${auth.token}`;
-  }
   if (auth?.tenantId) {
     headers['X-Tenant-ID'] = auth.tenantId;
   }
@@ -107,19 +105,25 @@ function withQuery(
   return `${path}?${query}`;
 }
 
-export async function refreshJwt(refreshToken: string): Promise<AuthTokenResponse> {
-  const response = await fetch(resolveApi('/auth/refresh'), {
+/** 当前身份探测：Session Cookie 有效返回 ok=1 + 用户名/角色/租户；未登录返回 ok=0（不抛错）。 */
+export async function authMe(): Promise<AuthTokenResponse> {
+  const response = await fetch(resolveApi('/auth/me'), {
     credentials: 'include',
-    method: 'POST',
-    headers: {
-      'X-Refresh-Token': refreshToken,
-    },
+    method: 'GET',
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
-  if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? '登录刷新失败');
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, payload?.msg ?? '身份校验失败');
   }
   return payload;
+}
+
+/** 登出：服务端吊销当前会话并清 Cookie（幂等，未登录调用同样成功）。 */
+export async function authLogout(): Promise<void> {
+  await fetch(resolveApi('/auth/logout'), {
+    credentials: 'include',
+    method: 'POST',
+  });
 }
 
 /** 注册 / 密码登录共用：POST JSON 凭据，成功即返回会话。 */

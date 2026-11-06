@@ -13,8 +13,10 @@
               <el-tag v-if="role" size="small" :type="isAdmin ? 'danger' : 'info'">{{ role }}</el-tag>
             </p>
             <p class="identity-line">
-              <span class="identity-key">访问令牌</span>
-              <span class="identity-value" :class="tokenToneClass">{{ tokenStatusText }}</span>
+              <span class="identity-key">登录状态</span>
+              <span class="identity-value" :class="loggedIn ? 'tone-ok' : 'tone-danger'">{{
+                loggedIn ? '已登录（服务端会话）' : '未登录'
+              }}</span>
             </p>
           </div>
         </div>
@@ -64,15 +66,8 @@
         </div>
       </section>
 
-      <!-- 底部操作：令牌续期与退出分开，退出是危险操作 -->
+      <!-- 底部操作：退出是危险操作 -->
       <div class="settings-footer">
-        <el-button
-          size="small"
-          :disabled="!refreshToken"
-          :loading="refreshing"
-          @click="handleRefresh(false)"
-          >刷新访问令牌</el-button
-        >
         <el-button size="small" type="danger" plain @click="logout">退出登录</el-button>
       </div>
     </div>
@@ -81,21 +76,12 @@
 
 <script setup lang="ts">
 // 设置弹窗：当前身份卡片 + 带说明的对话偏好。
-// 令牌倒计时只在弹窗打开时计时，关闭即停，不常驻后台定时器。
-// API Key 登录区块已移除（2026-10-24）：人的登录只有密码一条路。
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+// 登录走服务端会话（HttpOnly Cookie，2026-11-05 起）：前端不持有令牌，
+// 原"访问令牌倒计时 / 手动刷新"随之下线，身份卡只展示登录状态。
 import { darkMode, opsDialogVisible } from '../composables/useGlobalUi';
 import { agentEngine, modelProfile, streaming } from '../composables/useChatState';
-import {
-  isAdmin,
-  refreshToken,
-  refreshing,
-  role,
-  tenantInput,
-  token,
-  tokenExpiresAt,
-} from '../composables/useAuthState';
-import { handleRefresh, logout } from '../composables/useAuthActions';
+import { isAdmin, loggedIn, role, tenantInput } from '../composables/useAuthState';
+import { logout } from '../composables/useAuthActions';
 
 const PROFILE_HINTS: Record<string, string> = {
   economy: '经济档 · qwen-turbo：速度最快、成本最低，适合日常问答',
@@ -110,48 +96,6 @@ const ENGINE_HINTS: Record<string, string> = {
   standard: '标准 ReAct：主聊天默认引擎，带会话记忆。',
   workflow: '工作流引擎：每一步全留痕可回放、轨迹逐轮实时推送；但不读写会话记忆。',
 };
-
-// 令牌剩余时间：弹窗打开期间每 30 秒刷新一次显示
-const nowMs = ref(Date.now());
-let tokenTimer: number | undefined;
-
-watch(opsDialogVisible, (open) => {
-  if (open) {
-    nowMs.value = Date.now();
-    tokenTimer = window.setInterval(() => {
-      nowMs.value = Date.now();
-    }, 30_000);
-  } else if (tokenTimer !== undefined) {
-    window.clearInterval(tokenTimer);
-    tokenTimer = undefined;
-  }
-});
-
-onBeforeUnmount(() => {
-  if (tokenTimer !== undefined) window.clearInterval(tokenTimer);
-});
-
-const tokenRemainingMs = computed(() =>
-  tokenExpiresAt.value > 0 ? tokenExpiresAt.value - nowMs.value : 0,
-);
-
-const tokenStatusText = computed(() => {
-  if (!token.value) return '未登录';
-  if (tokenRemainingMs.value <= 0) return '已过期，请刷新';
-  const minutes = Math.floor(tokenRemainingMs.value / 60_000);
-  if (minutes < 1) return '即将过期（不足 1 分钟）';
-  if (minutes < 60) return `${minutes} 分钟后过期`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours} 小时 ${minutes % 60} 分后过期`;
-});
-
-const tokenToneClass = computed(() =>
-  !token.value || tokenRemainingMs.value <= 0
-    ? 'tone-danger'
-    : tokenRemainingMs.value < 5 * 60_000
-      ? 'tone-warn'
-      : 'tone-ok',
-);
 </script>
 
 <style scoped>
@@ -241,10 +185,6 @@ const tokenToneClass = computed(() =>
   color: var(--ui-accent-strong);
 }
 
-.tone-warn {
-  color: #b45309;
-}
-
 .tone-danger {
   color: #dc2626;
 }
@@ -271,7 +211,7 @@ const tokenToneClass = computed(() =>
 /* 底部操作 */
 .settings-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   border-top: 1px solid var(--ui-border);
   padding-top: 14px;
