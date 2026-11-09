@@ -56,11 +56,20 @@ public class RagFactMemoryRecorder {
                 .map(item -> "事实: " + truncate(item.getSnippet(), MAX_SNIPPET_CHARS))
                 .toList();
         List<String> embeddings = embeddingHelper.embedAllToJson(contents);
+        // 知识库作用域：证据带 KB 归属时，fact 也带同一作用域（召回时按会话圈定过滤）
+        List<Long> kbIds = qualified.stream()
+                .map(EvidenceItem::getKnowledgeBaseId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        String kbIdsJson = kbIds.isEmpty() ? null
+                : kbIds.stream().map(String::valueOf)
+                        .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         for (int i = 0; i < qualified.size(); i++) {
             EvidenceItem item = qualified.get(i);
             try {
                 memoryService.upsertFactMemory(tenantId, chatId, contents.get(i),
-                        factSource(item), item.getScore(), embeddings.get(i));
+                        factSource(item), item.getScore(), embeddings.get(i), kbIdsJson);
             } catch (Exception ex) {
                 log.warn("fact memory persistence failed: title={}, reason={}",
                         item.getTitle(), ex.toString());

@@ -21,19 +21,10 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 /**
- * 记忆子系统统一入口：short / long / task / fact 四层记忆的写入、
- * 按层查询、召回快照构建与事件留痕。
- *
- * 设计要点 —— 写入时机决定层级：
- * 1. short：对话轮次完成写入，24 小时过期；
- * 2. task：工作流到达 DONE 写入结论，绑定 taskId，30 天过期；
- * 3. fact：RAG 证据置信度达标（>= 0.7）写入，永久、按租户共享，
- *    且记录证据源 chatId，文档删除/同名替换退役时级联软失效
- *    （见 invalidateFactsForChat）；写入走 upsertFactMemory 近重复合并，
- *    同一事实反复沉淀只刷新置信度不新增行；
- * 4. long：异步画像提取命中写入，永久。
- * 查询一律过滤已过期（expires_at 为空视为永久）与软失效（stale=1）条目；
- * 写入失败由调用方（各 Recorder）以 best-effort 方式兜底，不阻塞主链路。
+ * 记忆子系统统一入口：四层记忆的写入、查询、召回快照构建与事件留痕。
+ * 写入时机决定层级：short 对话轮次 24h / task DONE 30d /
+ * fact 证据≥0.7 永久+级联失效+upsert 合并 / long 画像提取永久。
+ * 查询一律过滤已过期与软失效条目；写入失败由各 Recorder best-effort 兜底。
  */
 public class MemoryService {
 
@@ -55,20 +46,20 @@ public class MemoryService {
     public MemoryItemRecord saveShortMemory(String tenantId, String userId,
                                              String content, String source) {
         return save(tenantId, userId, "short", content, source, null, null, 0.9,
-                LocalDateTime.now().plusHours(24), null);
+                LocalDateTime.now().plusHours(24), null, null);
     }
 
     /** 保存用户画像 long 记忆：永久有效；内容为空白时返回 null 不落库。向量在落库前缓存（失败留空回退词面）。 */
     public MemoryItemRecord saveLongMemory(String tenantId, String userId,
                                             String content, String source) {
-        return save(tenantId, userId, "long", content, source, null, null, 0.85, null, null);
+        return save(tenantId, userId, "long", content, source, null, null, 0.85, null, null, null);
     }
 
     /** 保存任务结论 task 记忆：绑定 taskId、30 天过期，source 记为 task:{taskId}。 */
     public MemoryItemRecord saveTaskMemory(String tenantId, String userId,
                                             String content, String taskId) {
         return save(tenantId, userId, "task", content, "task:" + taskId, null, taskId, 0.9,
-                LocalDateTime.now().plusDays(30), null);
+                LocalDateTime.now().plusDays(30), null, null);
     }
 
     /**
@@ -81,24 +72,21 @@ public class MemoryService {
                                             String content, String source,
                                             double confidence, String embeddingJson) {
         return save(tenantId, null, "fact", content, source, chatId, null,
-                confidence, null, embeddingJson);
+                confidence, null, embeddingJson, null);
     }
 
-    /**
-     * fact 写入统一入口（带近重复合并 + 冲突消解）：fact 是唯一永久层，无 TTL 自然清退，
-     * 同一事实被反复引用沉淀时若不查重，表将无界增长，且召回候选池按时间切
-     * 30 条会被重复项挤占。命中既有条目（词面互含/bigram Jaccard，或向量
-     * 余弦达语义去重阈值）时合并，冲突消解语义按证据强弱分流：
-     * 新证据置信度严格更高 = 同一事实有了更强支撑的新说法（典型：政策条文修订）
-     * → 内容/来源/溯源锚点一并切到新证据；否则保持既有内容，只做置信度 max
-     * 与缺失向量补齐。两种路径都记 UPDATE 事件留痕。
-     * 判重扫描异常或开关关闭时退化为直接写入——合并是治理增强，绝不阻塞证据沉淀。
-     *
-     * @return 落库后的条目（新建，或合并/接管后的既有条目）
-     */
+    /** fact 写入统一入口（带近重复合并 + 冲突消解 + KB 作用域标记）。 */
+    /** 向后兼容重载：不指定 KB 作用域（全局事实）。 */
     public MemoryItemRecord upsertFactMemory(String tenantId, String chatId,
                                              String content, String source,
                                              double confidence, String embeddingJson) {
+        return upsertFactMemory(tenantId, chatId, content, source, confidence, embeddingJson, null);
+    }
+
+    public MemoryItemRecord upsertFactMemory(String tenantId, String chatId,
+                                             String content, String source,
+                                             double confidence, String embeddingJson,
+                                             String kbIdsJson) {
         if (memoryProperties.isFactWriteDedupEnabled() && StringUtils.hasText(content)) {
             try {
                 MemoryItemRecord existing = findFactDuplicate(tenantId, content, embeddingJson);
@@ -106,14 +94,17 @@ public class MemoryService {
                     double oldConfidence = existing.getConfidence() == null ? 0 : existing.getConfidence();
                     double mergedConfidence = Math.max(oldConfidence, confidence);
                     // 冲突消解语义：新证据置信度严格更高 = "同一事实有了更强支撑的新说法"
-                    //（典型：政策条文修订）→ 内容/来源/溯源锚点一并切到新证据；
+                    //（典型：政策条文修订）→ 内容/来源/溯源锚点/KB 作用域一并切到新证据；
                     // 否则保持既有内容，只做置信度 max 与缺失向量补齐（防"旧事实被弱证据加固"）。
                     boolean superseded = confidence > oldConfidence;
                     if (superseded) {
                         itemMapper.mergeFactSupersede(existing.getId(), content, source,
-                                chatId, mergedConfidence, embeddingJson);
+                                chatId, mergedConfidence, embeddingJson, kbIdsJson);
                     } else {
                         itemMapper.mergeFactConfidence(existing.getId(), mergedConfidence, embeddingJson);
+                        if (kbIdsJson != null && !kbIdsJson.equals(existing.getKnowledgeBaseIds())) {
+                            itemMapper.updateKnowledgeBaseIds(existing.getId(), kbIdsJson);
+                        }
                     }
                     emitEvent(existing.getMemoryId(), "UPDATE", superseded
                             ? "near-duplicate fact superseded by stronger evidence: confidence "
@@ -125,6 +116,7 @@ public class MemoryService {
                         existing.setContent(content);
                         existing.setSource(source);
                         existing.setSourceChatId(chatId);
+                        existing.setKnowledgeBaseIds(kbIdsJson);
                     }
                     if (embeddingJson != null) {
                         existing.setEmbeddingJson(embeddingJson);
@@ -138,7 +130,7 @@ public class MemoryService {
             }
         }
         return save(tenantId, null, "fact", content, source, chatId, null,
-                confidence, null, embeddingJson);
+                confidence, null, embeddingJson, kbIdsJson);
     }
 
     /**
@@ -177,7 +169,8 @@ public class MemoryService {
     private MemoryItemRecord save(String tenantId, String userId, String type,
                                    String content, String source, String sourceChatId,
                                    String sourceTaskId, double confidence,
-                                   LocalDateTime expiresAt, String embeddingJson) {
+                                   LocalDateTime expiresAt, String embeddingJson,
+                                   String kbIdsJson) {
         if (!StringUtils.hasText(content)) return null;
         String normalizedContent = content.trim();
         if (embeddingJson == null && memoryProperties.isSemanticEnabled()
@@ -198,6 +191,7 @@ public class MemoryService {
                 .stale(Boolean.FALSE)
                 .confidence(confidence)
                 .embeddingJson(embeddingJson)
+                .knowledgeBaseIds(kbIdsJson)
                 .expiresAt(expiresAt)
                 .createdAt(now)
                 .updatedAt(now)
@@ -446,6 +440,13 @@ public class MemoryService {
 
     // ── 事件 ─────────────────────────────────────────────────────
 
+    // ── 事件 ─────────────────────────────────────────────────────
+
+    /**
+     * 利用率汇总（闭环的"消费"侧）：USE 事件聚合出每条记忆的召回次数与最近召回时间，
+     * 汇总各层活跃量、被召回过/从未被召回的条数与 Top 召回榜。
+     * 数据全部来自既有的 memory_event 留痕——不新增采集，只消费。
+     */
     /** 写入一条记忆事件（CREATE / USE / DELETE 等，best-effort）：失败只记日志，绝不影响主流程。 */
     private void emitEvent(String memoryId, String action, String reason) {
         try {

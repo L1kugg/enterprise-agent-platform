@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.Map;
+
 import java.util.List;
 
 /**
@@ -128,10 +130,11 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                             @Param("confidence") double confidence,
                             @Param("embeddingJson") String embeddingJson);
 
-    /** 近重复被更强证据取代：内容/来源/溯源锚点一并切到更强证据，置信度取调用方算好的合并值。 */
+    /** 近重复被更强证据取代：内容/来源/溯源锚点/KB 作用域一并切到更强证据，置信度取调用方算好的合并值。 */
     @Update("""
             UPDATE memory_item
             SET content = #{content}, source = #{source}, source_chat_id = #{sourceChatId},
+                knowledge_base_ids = #{kbIdsJson, jdbcType=VARCHAR},
                 confidence = #{confidence},
                 embedding_json = COALESCE(#{embeddingJson, jdbcType=VARCHAR}, embedding_json),
                 updated_at = NOW()
@@ -142,7 +145,12 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                            @Param("source") String source,
                            @Param("sourceChatId") String sourceChatId,
                            @Param("confidence") double confidence,
-                           @Param("embeddingJson") String embeddingJson);
+                           @Param("embeddingJson") String embeddingJson,
+                           @Param("kbIdsJson") String kbIdsJson);
+
+    /** 仅更新 KB 作用域标记（弱证据合并路径：KB 归属切到新来源）。 */
+    @Update("UPDATE memory_item SET knowledge_base_ids = #{kbIdsJson, jdbcType=VARCHAR}, updated_at = NOW() WHERE id = #{id}")
+    int updateKnowledgeBaseIds(@Param("id") Long id, @Param("kbIdsJson") String kbIdsJson);
 
     /** 按业务 ID 软失效任意类型记忆（用户纠偏/治理动作）：幂等条件更新，返回失效行数。 */
     @Update("""
@@ -157,4 +165,18 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
 
     @Delete("DELETE FROM memory_item WHERE expires_at IS NOT NULL AND expires_at < NOW()")
     int deleteExpired();
+
+    /** 租户内全部记忆的 USE 聚合（利用率闭环）：每条记忆的召回次数与最近召回时间。 */
+    @Select("""
+            SELECT i.memory_id AS memoryId, i.type AS type,
+                   COUNT(e.id) AS useCount, MAX(e.created_at) AS lastUsedAt
+            FROM memory_item i
+            LEFT JOIN memory_event e
+              ON e.memory_id = i.memory_id AND e.action = 'USE'
+            WHERE i.tenant_id = #{tenantId}
+              AND i.stale = 0
+              AND (i.expires_at IS NULL OR i.expires_at > NOW())
+            GROUP BY i.memory_id, i.type
+            """)
+    List<Map<String, Object>> findUseStatsByTenant(@Param("tenantId") String tenantId);
 }

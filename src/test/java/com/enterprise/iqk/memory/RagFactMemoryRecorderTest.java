@@ -25,6 +25,7 @@ class RagFactMemoryRecorderTest {
                 .title(title)
                 .score(score)
                 .snippet(snippet)
+                .knowledgeBaseId(12L)
                 .build();
     }
 
@@ -47,8 +48,7 @@ class RagFactMemoryRecorderTest {
 
         ArgumentCaptor<Double> confidence = ArgumentCaptor.forClass(Double.class);
         verify(memoryService, times(2)).upsertFactMemory(anyString(), anyString(), anyString(),
-                anyString(), confidence.capture(), anyString());
-        // 0.42 的低置信证据永远进不了记忆；两条达阈值的继承各自分数
+                anyString(), confidence.capture(), anyString(), anyString());
         assertThat(confidence.getAllValues()).containsExactly(0.92, 0.70);
     }
 
@@ -66,7 +66,7 @@ class RagFactMemoryRecorderTest {
                 evidence("e.pdf", 0.9, "fact 4")));
 
         verify(memoryService, times(3)).upsertFactMemory(anyString(), anyString(), anyString(),
-                anyString(), anyDouble(), anyString());
+                anyString(), anyDouble(), anyString(), anyString());
     }
 
     @Test
@@ -80,12 +80,14 @@ class RagFactMemoryRecorderTest {
         ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> source = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> embedding = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> kbIds = ArgumentCaptor.forClass(String.class);
         verify(memoryService).upsertFactMemory(anyString(), anyString(), content.capture(),
-                source.capture(), anyDouble(), embedding.capture());
+                source.capture(), anyDouble(), embedding.capture(), kbIds.capture());
         assertThat(content.getValue()).isEqualTo("事实: 图灵测试的定义");
         assertThat(source.getValue()).isEqualTo("rag:vector:untitled");
-        // 批量预计算的向量透传落库；chatId 记录证据源供文档删除时级联失效
         assertThat(embedding.getValue()).isEqualTo("[0.5,0.5]");
+        // 证据带 KB 归属时 fact 也带同一作用域（JSON 数字数组）
+        assertThat(kbIds.getValue()).isEqualTo("[12]");
     }
 
     @Test
@@ -96,16 +98,15 @@ class RagFactMemoryRecorderTest {
 
         recorder.recordFacts("tenant-1", "chat-7", List.of(evidence("a.pdf", 0.9, "fact 1")));
 
-        // embedding 失败不拦写入：向量留空，召回侧回退纯词面
         verify(memoryService).upsertFactMemory(anyString(), anyString(), anyString(),
-                anyString(), anyDouble(), isNull());
+                anyString(), anyDouble(), isNull(), anyString());
     }
 
     @Test
     void oneFailingFactDoesNotBlockTheRest() {
         MemoryService memoryService = mock(MemoryService.class);
         when(memoryService.upsertFactMemory(anyString(), anyString(), anyString(), anyString(),
-                anyDouble(), anyString()))
+                anyDouble(), anyString(), anyString()))
                 .thenThrow(new RuntimeException("db down"))
                 .thenReturn(null);
         RagFactMemoryRecorder recorder = new RagFactMemoryRecorder(memoryService,
@@ -116,7 +117,7 @@ class RagFactMemoryRecorderTest {
                 evidence("b.pdf", 0.9, "fact 2")));
 
         verify(memoryService, times(2)).upsertFactMemory(anyString(), anyString(), anyString(),
-                anyString(), anyDouble(), anyString());
+                anyString(), anyDouble(), anyString(), anyString());
     }
 
     @Test
@@ -129,6 +130,6 @@ class RagFactMemoryRecorderTest {
         recorder.recordFacts("tenant-1", "chat-9", List.of());
 
         verify(memoryService, never()).upsertFactMemory(anyString(), anyString(), anyString(),
-                anyString(), anyDouble(), anyString());
+                anyString(), anyDouble(), anyString(), anyString());
     }
 }

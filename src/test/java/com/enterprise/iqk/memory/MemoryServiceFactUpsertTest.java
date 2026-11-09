@@ -16,6 +16,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,7 +67,7 @@ class MemoryServiceFactUpsertTest {
         verify(itemMapper, never()).insert(any(MemoryItemRecord.class));
         // 政策修订类冲突：更强证据（0.95 > 0.8）接管内容/来源/溯源锚点，置信度合并
         verify(itemMapper).mergeFactSupersede(eq(7L), eq("事实: 住宿报销每晚上限 500 元"),
-                eq("rag:vector:新政策.pdf"), eq("chat-9"), eq(0.95), eq("[0.3,0.4]"));
+                eq("rag:vector:新政策.pdf"), eq("chat-9"), eq(0.95), eq("[0.3,0.4]"), isNull());
         verify(itemMapper, never()).mergeFactConfidence(anyLong(), anyDouble(), anyString());
         ArgumentCaptor<MemoryEventRecord> events = ArgumentCaptor.forClass(MemoryEventRecord.class);
         verify(eventMapper).insert(events.capture());
@@ -90,7 +91,7 @@ class MemoryServiceFactUpsertTest {
         // 弱证据不接管内容（防"旧事实被弱证据改写"），只做置信度 max 与缺失向量补齐
         verify(itemMapper).mergeFactConfidence(eq(7L), eq(0.95), eq("[0.5,0.5]"));
         verify(itemMapper, never()).mergeFactSupersede(anyLong(), anyString(), anyString(),
-                anyString(), anyDouble(), anyString());
+                anyString(), anyDouble(), anyString(), any());
         assertThat(result.getConfidence()).isEqualTo(0.95);
         assertThat(result.getSourceChatId()).isEqualTo("chat-1");
     }
@@ -106,7 +107,7 @@ class MemoryServiceFactUpsertTest {
                 "事实: 住宿费报销标准是每晚 400 元", "rag:vector:policy.pdf", 0.9, "[1.0,0.0]");
 
         verify(itemMapper).mergeFactSupersede(eq(3L), anyString(), anyString(),
-                eq("chat-9"), eq(0.9), eq("[1.0,0.0]"));
+                eq("chat-9"), eq(0.9), eq("[1.0,0.0]"), isNull());
         verify(itemMapper, never()).insert(any(MemoryItemRecord.class));
     }
 
@@ -120,7 +121,7 @@ class MemoryServiceFactUpsertTest {
 
         verify(itemMapper, never()).mergeFactConfidence(anyLong(), anyDouble(), anyString());
         verify(itemMapper, never()).mergeFactSupersede(anyLong(), anyString(), anyString(),
-                anyString(), anyDouble(), anyString());
+                anyString(), anyDouble(), anyString(), any());
         ArgumentCaptor<MemoryItemRecord> inserted = ArgumentCaptor.forClass(MemoryItemRecord.class);
         verify(itemMapper).insert(inserted.capture());
         assertThat(inserted.getValue().getSourceChatId()).isEqualTo("chat-9");

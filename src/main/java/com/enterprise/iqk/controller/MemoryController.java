@@ -3,6 +3,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.memory.MemoryEventRecord;
 import com.enterprise.iqk.memory.MemoryItemRecord;
 import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.memory.MemoryUtilizationService;
 import com.enterprise.iqk.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 记忆查询与管理端点（补齐 README 承诺的 /ai/memory 接口）。
@@ -32,6 +34,7 @@ public class MemoryController {
     private static final double DEFAULT_FACT_MIN_CONFIDENCE = 0.7;
 
     private final MemoryService memoryService;
+    private final MemoryUtilizationService memoryUtilizationService;
 
     /**
      * 查询记忆：不传 type 返回三类聚合；传 type 只返回该类。
@@ -56,7 +59,23 @@ public class MemoryController {
             response.setFacts(memoryService.queryFactMemory(tenantId,
                     DEFAULT_FACT_MIN_CONFIDENCE, limit));
         }
+        // 利用率透出：每条记忆的召回次数与最近召回时间（USE 事件聚合）
+        List<MemoryItemRecord> all = new java.util.ArrayList<>();
+        if (response.getShortMemories() != null) all.addAll(response.getShortMemories());
+        if (response.getLongMemories() != null) all.addAll(response.getLongMemories());
+        if (response.getFacts() != null) all.addAll(response.getFacts());
+        memoryUtilizationService.attachUseStats(tenantId, all);
         return response;
+    }
+
+    /**
+     * 利用率汇总（管理员）：各层活跃/被召回/从未被召回计数 + Top 召回榜。
+     * 这是记忆闭环的消费侧——USE 留痕在此变为可运营数据。
+     */
+    @GetMapping("/utilization")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> utilization() {
+        return memoryUtilizationService.utilizationSummary(TenantContext.currentTenantId());
     }
 
     /**

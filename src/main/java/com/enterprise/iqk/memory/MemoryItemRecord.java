@@ -47,8 +47,18 @@ public class MemoryItemRecord {
     private String metadataJson;
     /** 写入时缓存的记忆向量（JSON float 数组，V27 起 long/fact 层写入）：召回时与查询向量做语义精排，空值回退纯词面 */
     private String embeddingJson;
+    /** 仅 fact 层：证据来源的知识库 ID 数组（JSON 数字数组，V39 起）。null = 全局事实（无作用域）。召回圈定：绑定 KB 的会话可见 全局 + 交集 */
+    private String knowledgeBaseIds;
     /** 过期时间：short=+24h、task=+30d；long/fact 为空表示永久。每天凌晨 3 点定时清理 */
     private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // ==== 非表字段：利用率闭环透出（USE 事件聚合，utilization/query 响应专用） ====
+    /** 该记忆被召回注入的总次数（memory_event USE 聚合） */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private Long useCount;
+    /** 最近一次被召回注入的时间 */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private LocalDateTime lastUsedAt;
 }

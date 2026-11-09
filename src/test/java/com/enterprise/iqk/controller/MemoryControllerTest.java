@@ -3,6 +3,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.memory.MemoryEventRecord;
 import com.enterprise.iqk.memory.MemoryItemRecord;
 import com.enterprise.iqk.memory.MemoryService;
+import com.enterprise.iqk.memory.MemoryUtilizationService;
 import com.enterprise.iqk.security.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,12 +27,14 @@ import static org.mockito.Mockito.when;
 class MemoryControllerTest {
 
     private MemoryService memoryService;
+    private MemoryUtilizationService utilizationService;
     private MemoryController controller;
 
     @BeforeEach
     void setUp() {
         memoryService = mock(MemoryService.class);
-        controller = new MemoryController(memoryService);
+        utilizationService = mock(MemoryUtilizationService.class);
+        controller = new MemoryController(memoryService, utilizationService);
         // 模拟鉴权过滤器写入的租户上下文
         MDC.put(TenantContext.TENANT_REQUEST_ATTRIBUTE, "tenant-1");
     }
