@@ -228,11 +228,12 @@ public class SecretCipher {
         }
     }
 
-    /** 敏感字段名词表（与 PlatformAssetService 响应掩码 isSecret 同规则）。 */
+    /** 敏感字段名词表（与 PlatformAssetService 响应掩码 isSecret 同规则；authorization 覆盖 MCP 鉴权头）。 */
     static boolean isSecretField(String fieldName) {
-        String normalized = fieldName == null ? "" : fieldName.toLowerCase(Locale.ROOT);
+        String normalized = fieldName == null ? "" : fieldName.toLowerCase(Locale.ROOT).replace("-", "_");
         return normalized.contains("apikey") || normalized.contains("api_key")
                 || normalized.contains("secret") || normalized.contains("password")
-                || normalized.contains("credential") || normalized.contains("token");
+                || normalized.contains("credential") || normalized.contains("token")
+                || normalized.contains("authorization");
     }
 }

@@ -271,10 +271,12 @@ public class MemoryService {
     public MemoryContextSnapshot buildContext(String tenantId, String userId,
                                                String query, boolean includeShort, int shortLimit) {
         String tenant = TenantContext.normalize(tenantId);
+        // 候选池 2026-11-09 扩池（召回天花板评审演进 A）：语义精排是池内重排，
+        // 池子切大才能让老记忆进入候选；打分纯内存计算，扩池无额外成本
         List<MemoryItemRecord> shortPool = includeShort && shortLimit > 0
-                ? queryShortMemory(tenant, userId, 30) : List.of();
-        List<MemoryItemRecord> longPool = queryLongMemory(tenant, userId, 40);
-        List<MemoryItemRecord> factPool = queryFactMemory(tenant, 0.7, 30);
+                ? queryShortMemory(tenant, userId, 50) : List.of();
+        List<MemoryItemRecord> longPool = queryLongMemory(tenant, userId, 200);
+        List<MemoryItemRecord> factPool = queryFactMemory(tenant, 0.7, 100);
 
         MemoryRelevanceScorer.SemanticContext semantic =
                 buildSemanticContext(query, shortPool, longPool, factPool);

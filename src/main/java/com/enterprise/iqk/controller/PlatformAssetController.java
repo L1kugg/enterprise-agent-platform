@@ -75,7 +75,7 @@ public class PlatformAssetController {
     public record WorkflowTestRunRequest(Map<String, Object> input) {}
     public record ToolTestRequest(Map<String, Object> params) {}
     public record SafetyGuardTestRequest(String text) {}
-    public record McpProbeRequest(String baseUrl, String endpoint) {}
+    public record McpProbeRequest(String baseUrl, String endpoint, Map<String, String> headers) {}
     public record AgentDebugRequest(@NotBlank(message = "message is required") String message, String chatId) {}
     public record RoleUpsertRequest(@NotBlank(message = "name is required") String name, String code,
                                     String description, List<String> permissions) {}
@@ -124,7 +124,8 @@ public class PlatformAssetController {
         AgentHarnessProperties.Mcp probeConfig = mcpServerRegistry.probeConfig(request.baseUrl());
         try {
             StandardMcpToolAdapter.McpProbeResult result =
-                    mcpToolAdapter.probeDraft(request.baseUrl(), request.endpoint(), probeConfig);
+                    mcpToolAdapter.probeDraft(request.baseUrl(), request.endpoint(),
+                            request.headers(), probeConfig);
             return Map.of("ok", 1, "tools", result.tools(), "latencyMs", result.latencyMs());
         } catch (Exception ex) {
             return Map.of("ok", 0, "error", ex.getMessage() == null ? ex.toString() : ex.getMessage());

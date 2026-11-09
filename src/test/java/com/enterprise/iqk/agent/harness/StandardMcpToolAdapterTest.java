@@ -200,7 +200,8 @@ class StandardMcpToolAdapterTest {
         mcpTuner.accept(properties.getMcp());
         // 注册表以 yml 视图为基础构建（资产 mapper 返回空列表）
         McpServerRegistry registry = new McpServerRegistry(properties,
-                mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class), MAPPER);
+                mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class), MAPPER,
+                new com.enterprise.iqk.security.SecretCipher("", MAPPER));
         registry.refresh();
         return new TestContext(mcpServer, httpServer, new StandardMcpToolAdapter(registry, MAPPER));
     }

@@ -78,6 +78,8 @@ public class AgentHarnessProperties {
         private String baseUrl = "";
         /** Streamable HTTP 单端点路径（标准 MCP server 通常为 /mcp）。 */
         private String endpoint = "/mcp";
+        /** 每请求附加的自定义请求头（如 Authorization），与会话/协议头共存。 */
+        private Map<String, String> headers = new LinkedHashMap<>();
         private Map<String, McpTool> tools = new LinkedHashMap<>();
     }
 

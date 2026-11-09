@@ -41,7 +41,7 @@ class McpServerRegistryTest {
 
     @Test
     void emptyAssetsFallBackToYmlServers() {
-        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper());
+        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper(), new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         registry.refresh();
 
         assertThat(registry.view()).containsOnlyKeys("demo");
@@ -53,7 +53,7 @@ class McpServerRegistryTest {
     void assetOverridesSameNameYmlServerAndMergesItsHost() {
         when(assetMapper.selectList(any())).thenReturn(List.of(asset("demo",
                 "{\"baseUrl\":\"https://demo.example.com\",\"tools\":{\"ask\":{\"timeoutMs\":120000}}}")));
-        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper());
+        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper(), new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         registry.refresh();
 
         McpServerRegistry.ResolvedServer resolved = registry.find("demo").orElseThrow();
@@ -69,7 +69,7 @@ class McpServerRegistryTest {
     void disabledAssetRemovesSameNameEntry() {
         when(assetMapper.selectList(any())).thenReturn(List.of(asset("demo",
                 "{\"baseUrl\":\"https://demo.example.com\",\"enabled\":false}")));
-        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper());
+        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper(), new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         registry.refresh();
 
         assertThat(registry.view()).doesNotContainKey("demo");
@@ -80,7 +80,7 @@ class McpServerRegistryTest {
         when(assetMapper.selectList(any())).thenReturn(List.of(asset("verify-mcp",
                 "{\"baseUrl\":\"https://mcp.deepwiki.com\",\"endpoint\":\"/mcp\","
                         + "\"tools\":{\"ask_wiki_question\":{\"timeoutMs\":120000},\"read\":{}}}")));
-        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper());
+        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper(), new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         registry.refresh();
 
         assertThat(registry.view()).containsKeys("demo", "verify-mcp");
@@ -93,7 +93,7 @@ class McpServerRegistryTest {
     @Test
     void malformedAssetConfigIsSkipped() {
         when(assetMapper.selectList(any())).thenReturn(List.of(asset("broken", "not-json")));
-        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper());
+        registry = new McpServerRegistry(properties, assetMapper, new ObjectMapper(), new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         registry.refresh();
 
         assertThat(registry.view()).containsOnlyKeys("demo");

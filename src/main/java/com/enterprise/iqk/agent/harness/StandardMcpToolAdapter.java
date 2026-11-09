@@ -151,10 +151,12 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
      * @return 发现的工具列表（name/description/inputSchema）与耗时毫秒
      */
     public McpProbeResult probeDraft(String baseUrl, String endpoint,
+                                     Map<String, String> headers,
                                      AgentHarnessProperties.Mcp mcpConfig) {
         long started = System.nanoTime();
         Hc5StreamableHttpTransport transport = new Hc5StreamableHttpTransport(baseUrl,
-                StringUtils.hasText(endpoint) ? endpoint : "/mcp", mcpConfig, objectMapper, 10_000, Map.of());
+                StringUtils.hasText(endpoint) ? endpoint : "/mcp", mcpConfig, objectMapper, 15_000, Map.of(),
+                headers == null ? Map.of() : headers);
         try (McpSyncClient client = McpClient.sync(transport)
                 .clientInfo(new McpSchema.Implementation(CLIENT_NAME, CLIENT_VERSION))
                 .capabilities(new McpSchema.ClientCapabilities(null, null, null, null))
@@ -221,7 +223,8 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
                 resolved.mcpConfig(),
                 objectMapper,
                 maxTimeoutMs,
-                toolTimeouts);
+                toolTimeouts,
+                resolved.headers());
         log.info("mcp client timeouts: server={}, default={}ms, perTool={}",
                 resolved.baseUrl(), maxTimeoutMs, toolTimeouts);
         return McpClient.sync(transport)

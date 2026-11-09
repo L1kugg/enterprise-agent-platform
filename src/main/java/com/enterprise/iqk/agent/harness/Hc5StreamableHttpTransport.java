@@ -25,6 +25,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.io.BufferedReader;
@@ -79,6 +80,8 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
     private final String endpoint;
     private final int defaultTimeoutMs;
     private final Map<String, Integer> toolTimeoutMs;
+    /** 配置的自定义请求头（如鉴权头），随每个请求附加；会话/协议头不受覆盖。 */
+    private final Map<String, String> customHeaders;
     private final CloseableHttpClient httpClient;
 
     /** connect() 时由客户端注入的入站消息处理器：收到的 JSON-RPC 消息经它回流（按 id 关联 pending 请求）。 */
@@ -96,7 +99,8 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
                                AgentHarnessProperties.Mcp mcpConfig,
                                ObjectMapper objectMapper,
                                int defaultTimeoutMs,
-                               Map<String, Integer> toolTimeoutMs) {
+                               Map<String, Integer> toolTimeoutMs,
+                               Map<String, String> customHeaders) {
         this.mcpConfig = mcpConfig;
         this.objectMapper = objectMapper;
         this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
@@ -104,6 +108,7 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
         this.endpoint = endpoint.startsWith("/") ? endpoint : "/" + endpoint;
         this.defaultTimeoutMs = defaultTimeoutMs;
         this.toolTimeoutMs = toolTimeoutMs == null ? Map.of() : toolTimeoutMs;
+        this.customHeaders = customHeaders == null ? Map.of() : customHeaders;
         // 连接点 DNS 固定：解析出的地址即实际连接地址，消除"校验时公共 IP、连接时被改判"的重绑定窗口。
         // 空闲连接治理（2026-11-05 生产实证）：DeepWiki/AWS 网关会静默关闭闲置 ~1-2 分钟的
         // keep-alive 连接且不给 Keep-Alive 提示——启动期握手建立、用户几分钟后才首次调用，
@@ -345,10 +350,21 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
         return builder.build();
     }
 
-    /** 请求通用头：会话与协议版本（如已建立/协商）。 */
+    /** 请求通用头：会话与协议版本（如已建立/协商）+ 配置的自定义头（鉴权等，核心协议头不受覆盖）。 */
     private void decorate(ClassicRequestBuilder builder) {
         builder.setHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
         builder.setHeader("Cache-Control", "no-cache");
+        customHeaders.forEach((key, value) -> {
+            String normalized = key == null ? "" : key.trim();
+            if (!StringUtils.hasText(normalized) || !StringUtils.hasText(value)) {
+                return;
+            }
+            boolean reserved = SESSION_ID_HEADER.equalsIgnoreCase(normalized)
+                    || PROTOCOL_VERSION_HEADER.equalsIgnoreCase(normalized);
+            if (!reserved) {
+                builder.setHeader(normalized, value);
+            }
+        });
         if (sessionId != null) {
             builder.setHeader(SESSION_ID_HEADER, sessionId);
         }

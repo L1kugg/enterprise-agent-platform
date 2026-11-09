@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.mapper.PlatformAssetMapper;
+import com.enterprise.iqk.security.SecretCipher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -44,6 +45,8 @@ public class McpServerRegistry {
     private final AgentHarnessProperties harnessProperties;
     private final PlatformAssetMapper assetMapper;
     private final ObjectMapper objectMapper;
+    /** 资产 headers 里鉴权类字段的加解密（落库 ENC1 密文，注册表解析时还原明文） */
+    private final SecretCipher secretCipher;
 
     private final Map<String, ResolvedServer> servers = new LinkedHashMap<>();
 
@@ -51,6 +54,7 @@ public class McpServerRegistry {
     public record ResolvedServer(String name, String source, Long assetId,
                                  String baseUrl, String endpoint,
                                  Map<String, Integer> toolTimeouts,
+                                 Map<String, String> headers,
                                  AgentHarnessProperties.Mcp mcpConfig) {
     }
 
@@ -65,7 +69,7 @@ public class McpServerRegistry {
         harnessProperties.getMcp().getServers().forEach((name, config) ->
                 merged.put(name, new ResolvedServer(name, "yml", null,
                         config.getBaseUrl(), defaultEndpoint(config.getEndpoint()),
-                        enabledToolTimeouts(config), harnessProperties.getMcp())));
+                        enabledToolTimeouts(config), config.getHeaders(), harnessProperties.getMcp())));
 
         int assetCount = 0;
         for (PlatformAsset asset : assetMapper.selectList(new LambdaQueryWrapper<PlatformAsset>()
@@ -105,6 +109,11 @@ public class McpServerRegistry {
         return mcpConfigWithAssetHost(baseUrl);
     }
 
+    /** 探测请求头（草稿）：调用方直接给出的明文头，仅本次请求生效、不落库。 */
+    public Map<String, String> probeHeaders(Map<String, String> draftHeaders) {
+        return draftHeaders == null ? Map.of() : draftHeaders;
+    }
+
     private ResolvedServer resolveAsset(PlatformAsset asset, JsonNode config, String baseUrl) {
         String endpoint = defaultEndpoint(config.path("endpoint").asText("/mcp"));
         Map<String, Integer> toolTimeouts = new LinkedHashMap<>();
@@ -118,8 +127,19 @@ public class McpServerRegistry {
                 }
             });
         }
+        // headers 里的鉴权类字段在落库时已是 ENC1 密文——解密回明文供传输层使用
+        JsonNode decrypted = secretCipher.transformFields(
+                config.path("headers").isObject() ? config.path("headers")
+                        : objectMapper.createObjectNode(), false);
+        Map<String, String> headers = new LinkedHashMap<>();
+        decrypted.fields().forEachRemaining(entry -> {
+            String value = entry.getValue().asText("");
+            if (StringUtils.hasText(entry.getKey()) && StringUtils.hasText(value)) {
+                headers.put(entry.getKey(), value);
+            }
+        });
         return new ResolvedServer(asset.getName(), "asset", asset.getId(),
-                baseUrl, endpoint, toolTimeouts, mcpConfigWithAssetHost(baseUrl));
+                baseUrl, endpoint, toolTimeouts, headers, mcpConfigWithAssetHost(baseUrl));
     }
 
     /** 静态 Mcp 配置副本：allowedHosts 并入资产 baseUrl 的主机（其余授权/重试语义不变）。 */
