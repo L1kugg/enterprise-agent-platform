@@ -13,11 +13,11 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 标准 MCP 协议工具适配器：按 app.agent-harness.mcp 配置为每个 server 维护一个
@@ -43,12 +43,12 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
     /** tools/list 翻页上限：防御性上限，正常 server 一页就够。 */
     private static final int MAX_LIST_PAGES = 10;
 
-    private final AgentHarnessProperties harnessProperties;
+    private final McpServerRegistry serverRegistry;
     private final ObjectMapper objectMapper;
     private final Map<String, McpSyncClient> clients = new ConcurrentHashMap<>();
 
-    public StandardMcpToolAdapter(AgentHarnessProperties harnessProperties, ObjectMapper objectMapper) {
-        this.harnessProperties = harnessProperties;
+    public StandardMcpToolAdapter(McpServerRegistry serverRegistry, ObjectMapper objectMapper) {
+        this.serverRegistry = serverRegistry;
         this.objectMapper = objectMapper;
     }
 
@@ -62,16 +62,14 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
         return "configured-standard";
     }
 
-    /** 五重校验：配置存在、server 启用、baseUrl 非空且安全（SSRF 预检）、tool 配置存在、tool 启用 */
+    /** 四重校验：注册表存在该 server、baseUrl 非空且安全（SSRF 预检）、tool 配置存在 */
     @Override
     public boolean supports(String server, String tool) {
-        AgentHarnessProperties.McpServer serverConfig = harnessProperties.getMcp().getServers().get(server);
-        return serverConfig != null
-                && serverConfig.isEnabled()
-                && StringUtils.hasText(serverConfig.getBaseUrl())
-                && McpSsrfGuard.isSafeBaseUrl(serverConfig.getBaseUrl(), harnessProperties.getMcp())
-                && serverConfig.getTools().containsKey(tool)
-                && serverConfig.getTools().get(tool).isEnabled();
+        McpServerRegistry.ResolvedServer resolved = serverRegistry.find(server).orElse(null);
+        return resolved != null
+                && StringUtils.hasText(resolved.baseUrl())
+                && McpSsrfGuard.isSafeBaseUrl(resolved.baseUrl(), resolved.mcpConfig())
+                && resolved.toolTimeouts().containsKey(tool);
     }
 
     /** 标准 tools/call：懒建客户端（含 initialize 握手）→ 调用 → 结果转观测 Map；失败关客户端待重建，不抛异常。 */
@@ -113,31 +111,75 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
     @Override
     @SuppressWarnings("PMD.CloseResource") // 客户端按 server 缓存复用，由 shutdown()/invalidate() 关闭
     public List<Map<String, Object>> listTools(String server) {
-        AgentHarnessProperties.McpServer serverConfig = harnessProperties.getMcp().getServers().get(server);
-        if (serverConfig == null || !serverConfig.isEnabled() || !StringUtils.hasText(serverConfig.getBaseUrl())) {
+        McpServerRegistry.ResolvedServer resolved = serverRegistry.find(server).orElse(null);
+        if (resolved == null || !StringUtils.hasText(resolved.baseUrl())) {
             return List.of();
         }
         try {
             McpSyncClient client = clientFor(server);
-            List<Map<String, Object>> discovered = new ArrayList<>();
-            String cursor = null;
-            for (int page = 0; page < MAX_LIST_PAGES; page++) {
-                McpSchema.ListToolsResult result = client.listTools(cursor);
-                if (result != null && result.tools() != null) {
-                    result.tools().forEach(t -> discovered.add(toDiscoveredTool(t)));
-                }
-                cursor = result == null ? null : result.nextCursor();
-                if (!StringUtils.hasText(cursor)) {
-                    return discovered;
-                }
-            }
-            log.warn("MCP tools/list 翻页超过 {} 页，截断: server={}", MAX_LIST_PAGES, server);
-            return discovered;
+            return listToolsFrom(client);
         } catch (Exception ex) {
             invalidate(server);
             log.warn("MCP tools/list 失败（客户端已重置待重建）: server={}, reason={}", server, ex.getMessage());
             return List.of();
         }
+    }
+
+    /** 翻页拉全工具列表（跟随 nextCursor，防御性上限）。 */
+    private List<Map<String, Object>> listToolsFrom(McpSyncClient client) {
+        List<Map<String, Object>> discovered = new ArrayList<>();
+        String cursor = null;
+        for (int page = 0; page < MAX_LIST_PAGES; page++) {
+            McpSchema.ListToolsResult result = client.listTools(cursor);
+            if (result != null && result.tools() != null) {
+                result.tools().forEach(t -> discovered.add(toDiscoveredTool(t)));
+            }
+            cursor = result == null ? null : result.nextCursor();
+            if (!StringUtils.hasText(cursor)) {
+                return discovered;
+            }
+        }
+            log.warn("MCP tools/list 翻页超过上限，截断");
+            return discovered;
+    }
+
+    /**
+     * 草稿探测（未保存配置）：用临时客户端对 baseUrl 直连握手 + 工具发现，
+     * 不触碰正式客户端缓存；完成后即关闭。探测走同一套 SSRF 校验（mcpConfig
+     * 由调用方并入资产主机白名单）。任何失败向上抛出，由探测端点转错误响应。
+     *
+     * @return 发现的工具列表（name/description/inputSchema）与耗时毫秒
+     */
+    public McpProbeResult probeDraft(String baseUrl, String endpoint,
+                                     AgentHarnessProperties.Mcp mcpConfig) {
+        long started = System.nanoTime();
+        Hc5StreamableHttpTransport transport = new Hc5StreamableHttpTransport(baseUrl,
+                StringUtils.hasText(endpoint) ? endpoint : "/mcp", mcpConfig, objectMapper, 10_000, Map.of());
+        try (McpSyncClient client = McpClient.sync(transport)
+                .clientInfo(new McpSchema.Implementation(CLIENT_NAME, CLIENT_VERSION))
+                .capabilities(new McpSchema.ClientCapabilities(null, null, null, null))
+                .requestTimeout(Duration.ofSeconds(15))
+                .build()) {
+            client.initialize();
+            List<Map<String, Object>> tools = listToolsFrom(client);
+            return new McpProbeResult(tools, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+        }
+    }
+
+    /** 探测结果：发现的工具 + 耗时毫秒。 */
+    public record McpProbeResult(List<Map<String, Object>> tools, long latencyMs) {
+    }
+
+    /** 全量失效：注册表重建（资产增删改）后调用，所有 server 的客户端缓存作废待重建。 */
+    public void invalidateAll() {
+        clients.forEach((server, client) -> {
+            try {
+                client.close();
+            } catch (Exception ex) {
+                log.warn("MCP 客户端关闭失败（全量失效）: server={}, reason={}", server, ex.getMessage());
+            }
+        });
+        clients.clear();
     }
 
     @PreDestroy
@@ -158,32 +200,30 @@ public class StandardMcpToolAdapter implements McpToolAdapter {
             if (existing != null) {
                 return existing;
             }
-            AgentHarnessProperties.McpServer serverConfig = harnessProperties.getMcp().getServers().get(name);
-            McpSyncClient created = buildClient(serverConfig);
+            McpServerRegistry.ResolvedServer resolved = serverRegistry.find(name)
+                    .orElseThrow(() -> new IllegalStateException("mcp server not in registry: " + name));
+            McpSyncClient created = buildClient(resolved);
             created.initialize(); // 标准 initialize 握手（含 notifications/initialized 由 SDK 发出）
             return created;
         });
     }
 
     /** 组装一个 server 的客户端：HC5 自定义传输 + 官方同步客户端（请求超时取配置最大值加缓冲兜底）。 */
-    private McpSyncClient buildClient(AgentHarnessProperties.McpServer serverConfig) {
-        Map<String, Integer> toolTimeouts = new HashMap<>();
-        int maxTimeoutMs = 5_000;
-        for (Map.Entry<String, AgentHarnessProperties.McpTool> entry : serverConfig.getTools().entrySet()) {
-            if (entry.getValue() != null && entry.getValue().getTimeoutMs() > 0) {
-                toolTimeouts.put(entry.getKey(), entry.getValue().getTimeoutMs());
-                maxTimeoutMs = Math.max(maxTimeoutMs, entry.getValue().getTimeoutMs());
-            }
+    private McpSyncClient buildClient(McpServerRegistry.ResolvedServer resolved) {
+        Map<String, Integer> toolTimeouts = resolved.toolTimeouts();
+        int maxTimeoutMs = toolTimeouts.values().stream().max(Integer::compare).orElse(5_000);
+        if (maxTimeoutMs < 5_000) {
+            maxTimeoutMs = 5_000;
         }
         Hc5StreamableHttpTransport transport = new Hc5StreamableHttpTransport(
-                serverConfig.getBaseUrl(),
-                StringUtils.hasText(serverConfig.getEndpoint()) ? serverConfig.getEndpoint() : "/mcp",
-                harnessProperties,
+                resolved.baseUrl(),
+                resolved.endpoint(),
+                resolved.mcpConfig(),
                 objectMapper,
                 maxTimeoutMs,
                 toolTimeouts);
         log.info("mcp client timeouts: server={}, default={}ms, perTool={}",
-                serverConfig.getBaseUrl(), maxTimeoutMs, toolTimeouts);
+                resolved.baseUrl(), maxTimeoutMs, toolTimeouts);
         return McpClient.sync(transport)
                 .clientInfo(new McpSchema.Implementation(CLIENT_NAME, CLIENT_VERSION))
                 .capabilities(new McpSchema.ClientCapabilities(null, null, null, null))

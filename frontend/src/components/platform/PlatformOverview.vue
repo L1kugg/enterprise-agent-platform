@@ -82,6 +82,7 @@ const labels: Record<PlatformAssetType, string> = {
   'safety-guards': '安全防护',
   'model-services': '模型服务',
   databases: '数据库',
+      'mcp-servers': 'MCP 服务',
 };
 
 const formatTime = (value?: string) => (value ? value.replace('T', ' ').slice(0, 19) : '-');

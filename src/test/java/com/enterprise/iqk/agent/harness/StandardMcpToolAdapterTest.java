@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * 标准 MCP 协议适配器测试：对内建的最小合规 Streamable HTTP server（JDK HttpServer，
@@ -197,7 +198,11 @@ class StandardMcpToolAdapterTest {
                 List.of(grant("localhost", null, "127.0.0.1/32", "::1/128")));
         properties.getMcp().setRetryBackoffMs(1); // 测试不真等退避
         mcpTuner.accept(properties.getMcp());
-        return new TestContext(mcpServer, httpServer, new StandardMcpToolAdapter(properties, MAPPER));
+        // 注册表以 yml 视图为基础构建（资产 mapper 返回空列表）
+        McpServerRegistry registry = new McpServerRegistry(properties,
+                mock(com.enterprise.iqk.mapper.PlatformAssetMapper.class), MAPPER);
+        registry.refresh();
+        return new TestContext(mcpServer, httpServer, new StandardMcpToolAdapter(registry, MAPPER));
     }
 
     /** 最小合规 Streamable HTTP MCP server：initialize/通知/tools-list/tools-call，支持故障注入与 SSE 帧响应。 */

@@ -1,10 +1,10 @@
 package com.enterprise.iqk.agent.harness;
 
-import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -23,14 +23,14 @@ import java.util.Map;
 @Component
 public class McpToolCatalog implements ApplicationRunner {
 
-    private final AgentHarnessProperties harnessProperties;
+    private final McpServerRegistry serverRegistry;
     private final List<McpToolAdapter> adapters;
 
     /** server → 该 server 的已发现工具列表 */
     private final Map<String, List<DiscoveredTool>> catalog = new LinkedHashMap<>();
 
-    public McpToolCatalog(AgentHarnessProperties harnessProperties, List<McpToolAdapter> adapters) {
-        this.harnessProperties = harnessProperties;
+    public McpToolCatalog(McpServerRegistry serverRegistry, List<McpToolAdapter> adapters) {
+        this.serverRegistry = serverRegistry;
         this.adapters = adapters;
     }
 
@@ -39,11 +39,11 @@ public class McpToolCatalog implements ApplicationRunner {
         refresh();
     }
 
-    /** 重新发现所有已配置 server 的工具 */
+    /** 重新发现所有已配置 server 的工具（server 清单来自注册表合并视图） */
     public void refresh() {
         catalog.clear();
-        harnessProperties.getMcp().getServers().forEach((serverName, serverConfig) -> {
-            if (!serverConfig.isEnabled() || serverConfig.getBaseUrl() == null || serverConfig.getBaseUrl().isBlank()) {
+        serverRegistry.view().forEach((serverName, resolved) -> {
+            if (!StringUtils.hasText(resolved.baseUrl())) {
                 return;
             }
             List<DiscoveredTool> tools = discoverServerTools(serverName);

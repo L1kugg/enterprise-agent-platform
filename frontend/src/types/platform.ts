@@ -7,7 +7,8 @@ export type PlatformAssetType =
   | 'knowledge-files'
   | 'safety-guards'
   | 'model-services'
-  | 'databases';
+  | 'databases'
+  | 'mcp-servers';
 
 export interface PlatformAsset {
   id: number;

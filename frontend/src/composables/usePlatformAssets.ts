@@ -99,6 +99,7 @@ function configTemplate(type: PlatformAssetType): string {
     'safety-guards': { blockedTopics: [], blockMessage: '该主题不允许讨论。' },
     'model-services': { category: 'LLM', provider: '', apiUrl: '', apiKey: '', modelParams: {} },
     databases: { databaseType: 'MYSQL', jdbcUrl: '', username: '', password: '' },
+    'mcp-servers': { baseUrl: '', endpoint: '/mcp', enabled: true, tools: {} },
   };
   return `${JSON.stringify(templates[type], null, 2)}\n`;
 }

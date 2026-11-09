@@ -35,7 +35,7 @@ class PlatformAssetServiceTest {
             PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
             PlatformAsset created = service.create("model-services", "qwen", null,
                     "{\"apiUrl\":\"https://model.local\",\"apiKey\":\"sk-secret\"}", null, "tester");
@@ -55,7 +55,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         assertThatThrownBy(() -> service.create("unknown", "x", "{}", null, null, "tester"))
                 .isInstanceOf(ResponseStatusException.class)
@@ -67,7 +67,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         assertThatThrownBy(() -> service.create("agents", "x", null, "{bad", null, "tester"))
                 .isInstanceOf(ResponseStatusException.class)
@@ -80,7 +80,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         assertThatThrownBy(() -> service.get("agents", 12L))
@@ -106,7 +106,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         PlatformAsset updated = service.update("model-services", 9L, null, null,
@@ -123,7 +123,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                     mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                     mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                    mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                     new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         // 六类业务资产不允许系统共享（白名单外直接 400）
         assertThatThrownBy(() -> service.create("agents", "x", null, "{}", null, "tester", "SYSTEM"))
@@ -141,7 +141,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         PlatformAsset created = service.create("model-services", "shared-model", null,
@@ -160,7 +160,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         service.list("model-services", null, 1, 20);
@@ -181,7 +181,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         assertThatThrownBy(() -> service.update("model-services", 9L, "new-name", null, null, null, null))
@@ -194,7 +194,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         assertThatThrownBy(() -> service.testModelDraft("   "))
@@ -207,7 +207,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
                 new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0), 0);
@@ -230,7 +230,7 @@ class PlatformAssetServiceTest {
         PlatformAssetService service = new PlatformAssetService(mapper, new ObjectMapper(),
                 mock(AgentBindingSyncService.class), mock(PlatformChatModelRegistry.class),
                 mock(com.enterprise.iqk.mapper.IngestionJobMapper.class),
-                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class),
+                mock(com.enterprise.iqk.retrieval.KeywordIndexStore.class), mock(com.enterprise.iqk.agent.harness.McpRuntimeRefresher.class),
                 new com.enterprise.iqk.security.SecretCipher("", new ObjectMapper()));
 
         // 端口 1（tcpmux）通常无人监听：连接立即被拒，探测返回不可用且不抛异常

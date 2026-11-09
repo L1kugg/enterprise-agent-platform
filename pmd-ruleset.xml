@@ -32,8 +32,9 @@
     <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
     <rule ref="category/java/errorprone.xml/CloseResource">
         <properties>
-            <!-- Process is AutoCloseable-less; destroy()/destroyForcibly() release it. -->
-            <property name="closeTargets" value="close,closeQuietly,quit,dispose,destroy,destroyForcibly"/>
+            <!-- Process is AutoCloseable-less; destroy()/destroyForcibly() release it.
+                 closeGracefully: McpSyncClient 的优雅关闭（等在途请求收尾），语义同 close。 -->
+            <property name="closeTargets" value="close,closeQuietly,quit,dispose,destroy,destroyForcibly,closeGracefully"/>
         </properties>
     </rule>
 

@@ -291,6 +291,53 @@ export function testPlatformTool(
   });
 }
 
+// ---------- MCP 工具（外部 server 注册与发现） ----------
+
+/** 注册表 + 已发现工具的合并视图条目。 */
+export interface McpServerView {
+  name: string;
+  source: 'yml' | 'asset';
+  assetId?: number | null;
+  baseUrl: string;
+  endpoint: string;
+  enabled: boolean;
+  toolTimeouts?: Record<string, number>;
+  discoveredTools: { name: string; description: string }[];
+}
+
+export interface McpProbeResult {
+  ok: number;
+  error?: string;
+  latencyMs?: number;
+  tools?: { name: string; description?: string }[];
+}
+
+export function fetchDiscoveredMcpServers(auth: AuthContext | undefined) {
+  return requestPlatform<McpServerView[]>('/platform/mcp-servers/discovered', auth, {
+    method: 'GET',
+    action: 'MCP 工具列表',
+  });
+}
+
+export function probeMcpServer(
+  baseUrl: string,
+  endpoint: string | undefined,
+  auth: AuthContext | undefined,
+) {
+  return requestPlatform<McpProbeResult>('/platform/mcp-servers/probe', auth, {
+    method: 'POST',
+    body: JSON.stringify({ baseUrl, endpoint }),
+    action: 'MCP 连通探测',
+  });
+}
+
+export function refreshMcpRuntime(auth: AuthContext | undefined) {
+  return requestPlatform<{ ok: number; servers: number }>('/platform/mcp-servers/refresh', auth, {
+    method: 'POST',
+    action: 'MCP 重新发现',
+  });
+}
+
 // ---------- 安全防护测试（R4） ----------
 
 export function testPlatformSafetyGuard(

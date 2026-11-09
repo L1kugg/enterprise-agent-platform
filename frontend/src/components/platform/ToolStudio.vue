@@ -1,5 +1,16 @@
 <template>
-  <section class="tool-studio">
+  <section class="tool-studio" :class="{ 'mcp-mode': studioMode === 'mcp' }">
+    <!-- 模式切换：平台工具（自建表单/代码/SQL）与 MCP 工具（外部 server 注册）两套体系 -->
+    <div class="studio-mode-row">
+      <el-radio-group v-model="studioMode" size="small">
+        <el-radio-button value="tools">平台工具</el-radio-button>
+        <el-radio-button value="mcp">MCP 工具</el-radio-button>
+      </el-radio-group>
+    </div>
+    <template v-if="studioMode === 'mcp'">
+      <McpServerPanel />
+    </template>
+    <template v-else>
     <!-- 左侧：工具列表 -->
     <aside class="tool-list panel">
       <div class="panel-head list-head">
@@ -425,12 +436,14 @@
         >
       </template>
     </el-drawer>
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import McpServerPanel from './McpServerPanel.vue';
 import {
   createPlatformAsset,
   deletePlatformAsset,
@@ -455,6 +468,9 @@ interface ParamRow {
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const PARAM_TYPES: ToolParamType[] = ['STRING', 'NUMBER', 'BOOLEAN', 'OBJECT', 'ARRAY'];
+
+// 工具管理双模式：平台工具（自建）与 MCP 工具（外部 server 注册与发现）
+const studioMode = ref<'tools' | 'mcp'>('tools');
 
 const steps = [
   { key: 'basic', label: '基本信息', description: '名称、类型与执行确认' },
@@ -934,6 +950,15 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
   gap: 12px;
+}
+
+.studio-mode-row {
+  grid-column: 1 / -1;
+}
+
+/* MCP 模式：单列布局（无左侧工具列表） */
+.tool-studio.mcp-mode {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel {

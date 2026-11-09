@@ -93,11 +93,11 @@ final class Hc5StreamableHttpTransport implements McpClientTransport {
 
     Hc5StreamableHttpTransport(String baseUrl,
                                String endpoint,
-                               AgentHarnessProperties harnessProperties,
+                               AgentHarnessProperties.Mcp mcpConfig,
                                ObjectMapper objectMapper,
                                int defaultTimeoutMs,
                                Map<String, Integer> toolTimeoutMs) {
-        this.mcpConfig = harnessProperties.getMcp();
+        this.mcpConfig = mcpConfig;
         this.objectMapper = objectMapper;
         this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
         this.baseUrl = baseUrl;

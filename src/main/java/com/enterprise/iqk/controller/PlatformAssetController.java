@@ -1,5 +1,9 @@
 package com.enterprise.iqk.controller;
 
+import com.enterprise.iqk.agent.harness.McpRuntimeRefresher;
+import com.enterprise.iqk.agent.harness.McpServerRegistry;
+import com.enterprise.iqk.agent.harness.StandardMcpToolAdapter;
+import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import com.enterprise.iqk.domain.platform.PlatformAsset;
 import com.enterprise.iqk.domain.platform.PlatformRoleRecord;
 import com.enterprise.iqk.domain.platform.PlatformUserRecord;
@@ -19,6 +23,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,7 +35,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,6 +51,10 @@ public class PlatformAssetController {
     private final PlatformWorkflowService workflowService;
     private final PlatformToolTestService toolTestService;
     private final PlatformSafetyGuardService safetyGuardService;
+    private final McpServerRegistry mcpServerRegistry;
+    private final McpRuntimeRefresher mcpRuntimeRefresher;
+    private final StandardMcpToolAdapter mcpToolAdapter;
+    private final com.enterprise.iqk.agent.harness.McpToolCatalog mcpToolCatalog;
     private final PlatformSqlTestService sqlTestService;
     private final PlatformAdminService adminService;
     private final AgentDebugService agentDebugService;
@@ -63,6 +75,7 @@ public class PlatformAssetController {
     public record WorkflowTestRunRequest(Map<String, Object> input) {}
     public record ToolTestRequest(Map<String, Object> params) {}
     public record SafetyGuardTestRequest(String text) {}
+    public record McpProbeRequest(String baseUrl, String endpoint) {}
     public record AgentDebugRequest(@NotBlank(message = "message is required") String message, String chatId) {}
     public record RoleUpsertRequest(@NotBlank(message = "name is required") String name, String code,
                                     String description, List<String> permissions) {}
@@ -74,6 +87,56 @@ public class PlatformAssetController {
     public PlatformAsset create(@PathVariable String assetType, @Valid @RequestBody AssetUpsertRequest request) {
         return service.create(assetType, request.name(), request.description(), request.configJson(),
                 request.parentId(), UserContext.currentUserId(null), request.scope());
+    }
+
+    /** MCP 注册表 + 已发现工具的合并视图（工具管理页 MCP 面板数据源）。 */
+    @GetMapping("/mcp-servers/discovered")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<Map<String, Object>> discoveredMcpServers() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        mcpServerRegistry.view().forEach((name, resolved) -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", name);
+            entry.put("source", resolved.source());
+            entry.put("assetId", resolved.assetId());
+            entry.put("baseUrl", resolved.baseUrl());
+            entry.put("endpoint", resolved.endpoint());
+            entry.put("enabled", true);
+            entry.put("toolTimeouts", resolved.toolTimeouts());
+            List<Map<String, Object>> tools = new ArrayList<>();
+            mcpToolCatalog.tools(name).forEach(tool -> tools.add(Map.of(
+                    "name", tool.name(),
+                    "description", tool.description() == null ? "" : tool.description())));
+            entry.put("discoveredTools", tools);
+            result.add(entry);
+        });
+        return result;
+    }
+
+    /** MCP server 草稿探测（未保存配置）：直连握手 + 工具发现，返回工具列表与耗时。 */
+    @PostMapping("/mcp-servers/probe")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> probeMcpServer(@Valid @RequestBody McpProbeRequest request) {
+        if (!StringUtils.hasText(request.baseUrl())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "baseUrl 不能为空");
+        }
+        // 探测配置 = 静态白名单 ∪ 草稿主机（与保存后的运行时授权同语义，内网地址仍需逐条授权）
+        AgentHarnessProperties.Mcp probeConfig = mcpServerRegistry.probeConfig(request.baseUrl());
+        try {
+            StandardMcpToolAdapter.McpProbeResult result =
+                    mcpToolAdapter.probeDraft(request.baseUrl(), request.endpoint(), probeConfig);
+            return Map.of("ok", 1, "tools", result.tools(), "latencyMs", result.latencyMs());
+        } catch (Exception ex) {
+            return Map.of("ok", 0, "error", ex.getMessage() == null ? ex.toString() : ex.getMessage());
+        }
+    }
+
+    /** MCP 运行时手动刷新：注册表重建 + 客户端失效 + 工具重发现。 */
+    @PostMapping("/mcp-servers/refresh")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> refreshMcpServers() {
+        mcpRuntimeRefresher.refreshAll();
+        return Map.of("ok", 1, "servers", mcpServerRegistry.view().size());
     }
 
     // 列表/详情仅管理员：config_json 含系统提示词与密钥类配置，不对普通用户开放

@@ -34,7 +34,7 @@ import java.util.Set;
 public class PlatformAssetService {
     public static final Set<String> ASSET_TYPES = Set.of(
             "agents", "workflows", "tools", "knowledge-bases", "knowledge-files",
-            "safety-guards", "model-services", "databases");
+            "safety-guards", "model-services", "databases", "mcp-servers");
 
     private static final Map<String, String> TYPE_STATUS = Map.of(
             "agents", "DRAFT",
@@ -44,7 +44,8 @@ public class PlatformAssetService {
             "knowledge-files", "PENDING",
             "safety-guards", "ENABLED",
             "model-services", "UNTESTED",
-            "databases", "UNTESTED");
+            "databases", "UNTESTED",
+            "mcp-servers", "ENABLED");
 
     /** 允许 scope=SYSTEM（系统共享）的资产类型白名单：凭据型基础设施，其余六类业务资产强制租户隔离。 */
     private static final Set<String> SYSTEM_SCOPED_TYPES = Set.of("model-services", "databases");
@@ -59,6 +60,8 @@ public class PlatformAssetService {
     private final com.enterprise.iqk.mapper.IngestionJobMapper ingestionJobMapper;
     /** 知识库删除时解绑关键词索引切片（FR-R5-01 删除策略） */
     private final com.enterprise.iqk.retrieval.KeywordIndexStore keywordIndexStore;
+    /** mcp-servers 增删改后刷新 MCP 运行时（注册表重建 + 客户端失效 + 目录重发现） */
+    private final com.enterprise.iqk.agent.harness.McpRuntimeRefresher mcpRuntimeRefresher;
     /** 凭据字段级加密（FR-R12-01）：create/update 落库前加密敏感字段 */
     private final com.enterprise.iqk.security.SecretCipher secretCipher;
 
@@ -126,6 +129,9 @@ public class PlatformAssetService {
             if ("agents".equals(type)) {
                 agentBindingSyncService.syncFromConfig(asset.getTenantId(), asset.getId(), asset.getConfigJson());
             }
+            if ("mcp-servers".equals(type)) {
+                mcpRuntimeRefresher.refreshAll();
+            }
             return sanitize(asset);
         } catch (DuplicateKeyException ex) {
             throw duplicate(type, name);
@@ -160,6 +166,9 @@ public class PlatformAssetService {
             if ("model-services".equals(existing.getAssetType())) {
                 chatModelRegistry.evict(existing.getId());
             }
+            if ("mcp-servers".equals(existing.getAssetType())) {
+                mcpRuntimeRefresher.refreshAll();
+            }
             return sanitize(existing);
         } catch (DuplicateKeyException ex) {
             throw duplicate(assetType, name);
@@ -176,6 +185,9 @@ public class PlatformAssetService {
         }
         if ("model-services".equals(asset.getAssetType())) {
             chatModelRegistry.evict(asset.getId());
+        }
+        if ("mcp-servers".equals(asset.getAssetType())) {
+            mcpRuntimeRefresher.refreshAll();
         }
         if ("knowledge-bases".equals(asset.getAssetType())) {
             mapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PlatformAsset>()
