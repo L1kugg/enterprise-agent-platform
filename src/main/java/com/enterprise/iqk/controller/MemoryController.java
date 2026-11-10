@@ -57,7 +57,7 @@ public class MemoryController {
         }
         if (!StringUtils.hasText(type) || "fact".equals(type)) {
             response.setFacts(memoryService.queryFactMemory(tenantId,
-                    DEFAULT_FACT_MIN_CONFIDENCE, limit));
+                    DEFAULT_FACT_MIN_CONFIDENCE, limit, null));
         }
         // 利用率透出：每条记忆的召回次数与最近召回时间（USE 事件聚合）
         List<MemoryItemRecord> all = new java.util.ArrayList<>();

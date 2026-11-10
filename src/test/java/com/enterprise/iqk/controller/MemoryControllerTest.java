@@ -50,7 +50,7 @@ class MemoryControllerTest {
                 MemoryItemRecord.builder().memoryId("mem-s").type("short").build()));
         when(memoryService.queryLongMemory("tenant-1", "chat-1", 20)).thenReturn(List.of(
                 MemoryItemRecord.builder().memoryId("mem-l").type("long").build()));
-        when(memoryService.queryFactMemory(eq("tenant-1"), anyDouble(), anyInt())).thenReturn(List.of(
+        when(memoryService.queryFactMemory(eq("tenant-1"), anyDouble(), anyInt(), isNull())).thenReturn(List.of(
                 MemoryItemRecord.builder().memoryId("mem-f").type("fact").build()));
 
         MemoryController.MemoryQueryResponse response = controller.query("chat-1", null, 20);
@@ -68,7 +68,7 @@ class MemoryControllerTest {
 
         assertThat(response.getShortMemories()).isEmpty();
         verify(memoryService, never()).queryLongMemory(anyString(), anyString(), anyInt());
-        verify(memoryService, never()).queryFactMemory(anyString(), anyDouble(), anyInt());
+        verify(memoryService, never()).queryFactMemory(anyString(), anyDouble(), anyInt(), isNull());
     }
 
     @Test

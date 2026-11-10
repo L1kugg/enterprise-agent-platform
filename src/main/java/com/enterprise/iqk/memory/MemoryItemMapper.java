@@ -71,6 +71,24 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                                                     @Param("minConfidence") double minConfidence,
                                                     @Param("limit") int limit);
 
+    /** KB 圈定版：只召回无标记全局事实或知识库 ID 数组与圈定有交集的事实。 */
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND type = #{type}
+              AND confidence >= #{minConfidence}
+              AND stale = 0
+              AND (expires_at IS NULL OR expires_at > NOW())
+              AND (knowledge_base_ids IS NULL OR JSON_OVERLAPS(knowledge_base_ids, CAST(#{kbJson} AS JSON)))
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
+    List<MemoryItemRecord> findByTypeAndConfidenceScoped(@Param("tenantId") String tenantId,
+                                                          @Param("type") String type,
+                                                          @Param("minConfidence") double minConfidence,
+                                                          @Param("limit") int limit,
+                                                          @Param("kbJson") String kbJson);
+
     /** 详情/事件链查询不过滤 stale：软失效的记忆仍可在 memory_event 里追溯一生。 */
     @Select("""
             SELECT * FROM memory_item

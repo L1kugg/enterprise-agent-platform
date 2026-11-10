@@ -224,8 +224,14 @@ public class MemoryService {
                 TenantContext.normalize(tenantId), "task", 0.7, limit);
     }
 
-    /** 查询租户内置信度不低于 minConfidence 的未过期 fact 记忆（召回侧复验门槛 0.7）。 */
-    public List<MemoryItemRecord> queryFactMemory(String tenantId, double minConfidence, int limit) {
+    /** 查询 fact 记忆（kbScope 非空走 JSON_OVERLAPS 圈定）。 */
+    public List<MemoryItemRecord> queryFactMemory(String tenantId, double minConfidence, int limit, List<Long> kbScope) {
+        if (kbScope != null && !kbScope.isEmpty()) {
+            String kbJson = kbScope.stream().map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+            return itemMapper.findByTypeAndConfidenceScoped(
+                    TenantContext.normalize(tenantId), "fact", minConfidence, limit, kbJson);
+        }
         return itemMapper.findByTypeAndConfidence(
                 TenantContext.normalize(tenantId), "fact", minConfidence, limit);
     }
@@ -254,23 +260,24 @@ public class MemoryService {
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId,
                                                String query, boolean includeShort) {
-        return buildContext(tenantId, userId, query, includeShort, DEFAULT_SHORT_LIMIT);
+        return buildContext(tenantId, userId, query, includeShort, DEFAULT_SHORT_LIMIT, null);
     }
 
     /**
      * 智能体路径重载：short 层按智能体 memoryTurns 裁剪（一条 short 记忆 = 一轮问答，
      * 见 ChatTurnMemoryRecorder），shortLimit ≤ 0 表示不注入 short 层；
      * long/fact 层预算不受影响，会话库仍保留完整历史。
+     * kbScope：智能体绑定的知识库 ID 列表——非空时 fact 召回按 KB 圈定
+     * （只召回无标记全局事实或标记与圈定有交集的事实）；null/空 = 可见全部。
      */
     public MemoryContextSnapshot buildContext(String tenantId, String userId,
-                                               String query, boolean includeShort, int shortLimit) {
+                                               String query, boolean includeShort, int shortLimit,
+                                               List<Long> kbScope) {
         String tenant = TenantContext.normalize(tenantId);
-        // 候选池 2026-11-09 扩池（召回天花板评审演进 A）：语义精排是池内重排，
-        // 池子切大才能让老记忆进入候选；打分纯内存计算，扩池无额外成本
         List<MemoryItemRecord> shortPool = includeShort && shortLimit > 0
                 ? queryShortMemory(tenant, userId, 50) : List.of();
         List<MemoryItemRecord> longPool = queryLongMemory(tenant, userId, 200);
-        List<MemoryItemRecord> factPool = queryFactMemory(tenant, 0.7, 100);
+        List<MemoryItemRecord> factPool = queryFactMemory(tenant, 0.7, 100, kbScope);
 
         MemoryRelevanceScorer.SemanticContext semantic =
                 buildSemanticContext(query, shortPool, longPool, factPool);

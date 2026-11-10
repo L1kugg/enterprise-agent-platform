@@ -40,7 +40,8 @@ public class ReActSupport {
         return UserContext.currentUserId(chatId);
     }
 
-    /** 记忆召回：未绑定智能体走全量注入；智能体路径 short 层按 memoryTurns 裁剪（FR-R1-05）。
+    /** 记忆召回：未绑定智能体走全量注入；智能体路径 short 层按 memoryTurns 裁剪
+     *  且 fact 层按绑定 KB 圈定（null/空 KB = 可见全部）。
      *  任何失败返回 null，按"无记忆可用"降级，绝不中断 ReAct 主链路。 */
     public MemoryService.MemoryContextSnapshot recallMemory(String tenantId, String userKey,
                                                             String query, AgentChatRuntime.RunState runState) {
@@ -48,7 +49,8 @@ public class ReActSupport {
             if (runState == null) {
                 return memoryService.buildContext(tenantId, userKey, query);
             }
-            return memoryService.buildContext(tenantId, userKey, query, true, runState.config().memoryTurns());
+            return memoryService.buildContext(tenantId, userKey, query, true,
+                    runState.config().memoryTurns(), runState.config().knowledgeBaseIds());
         } catch (Exception ex) {
             return null;
         }
