@@ -949,6 +949,8 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
+  /* 模式切换行 auto + 内容行撑满剩余 */
+  grid-template-rows: auto 1fr;
   gap: 12px;
 }
 

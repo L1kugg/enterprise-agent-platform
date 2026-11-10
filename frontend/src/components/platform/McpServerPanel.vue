@@ -338,10 +338,11 @@ onMounted(loadServers);
 }
 
 .mcp-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 120px;
 }
 
 .mcp-server-card {
