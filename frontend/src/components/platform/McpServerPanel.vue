@@ -305,6 +305,8 @@ onMounted(loadServers);
 
 <style scoped>
 .mcp-panel {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;

@@ -956,9 +956,10 @@ onBeforeUnmount(() => {
   grid-column: 1 / -1;
 }
 
-/* MCP 模式：单列布局（无左侧工具列表） */
+/* MCP 模式：单列布局，面板撑满剩余高度 */
 .tool-studio.mcp-mode {
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
 }
 
 .panel {
