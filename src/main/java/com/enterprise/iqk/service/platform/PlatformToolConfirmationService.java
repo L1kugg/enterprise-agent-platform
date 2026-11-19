@@ -67,6 +67,8 @@ public class PlatformToolConfirmationService {
         LocalDateTime now = LocalDateTime.now();
         AgentToolConfirmationRecord record = AgentToolConfirmationRecord.builder()
                 .tenantId(tenantId)
+                // agent_id 列 NOT NULL 无默认值：工作流审批无发起智能体，固定 0（与"默认助手无智能体"约定一致）
+                .agentId(0L)
                 .chatId(chatId)
                 .taskId(taskId)
                 .stepId(stepId)

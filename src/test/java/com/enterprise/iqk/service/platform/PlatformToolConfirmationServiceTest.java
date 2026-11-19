@@ -65,6 +65,26 @@ class PlatformToolConfirmationServiceTest {
     }
 
     @Test
+    void createForWorkflowSetsAgentIdZeroAndDayLongTtl() {
+        when(confirmationMapper.insert(any(AgentToolConfirmationRecord.class))).thenReturn(1);
+        PlatformToolConfirmationService service = service(null);
+
+        service.createForWorkflow("t-1", "chat-9", "task-1", "step-3", "人工复核", "请审批");
+
+        ArgumentCaptor<AgentToolConfirmationRecord> captor =
+                ArgumentCaptor.forClass(AgentToolConfirmationRecord.class);
+        org.mockito.Mockito.verify(confirmationMapper).insert(captor.capture());
+        AgentToolConfirmationRecord record = captor.getValue();
+        // agent_id 列 NOT NULL 无默认值：工作流审批无发起智能体，必须显式落 0，否则插库失败
+        assertThat(record.getAgentId()).isZero();
+        assertThat(record.getTaskId()).isEqualTo("task-1");
+        assertThat(record.getStepId()).isEqualTo("step-3");
+        assertThat(record.getToolName()).isEqualTo("人工复核");
+        // 工作流审批是异步的（主管可能几小时后批），TTL 拉长为 24 小时而非会话的 10 分钟
+        assertThat(record.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
+    }
+
+    @Test
     void approveExecutesToolAndFinishesAsExecuted() throws Exception {
         when(confirmationMapper.findByIdAndTenant(55L, "t-1")).thenReturn(pending());
         when(confirmationMapper.casApprove(eq(55L), eq("t-1"), any(LocalDateTime.class))).thenReturn(1);
